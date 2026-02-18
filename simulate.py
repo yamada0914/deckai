@@ -6,7 +6,7 @@
 import random
 import sys
 from game import MAX_TURNS, setup_game, run_game_auto
-DECK_NAMES = ["オタチデッキ", "ワニデッキ", "カエルデッキ"]
+DECK_NAMES = ["オタチデッキ", "ワニデッキ", "カエルデッキ", "ワルビアルデッキ", "ジバコイルデッキ"]
 
 
 def run_simulation(
@@ -18,7 +18,7 @@ def run_simulation(
     log_when_deck_loses: int | None = None,
 ) -> dict:
     """
-    n_games 回対戦し、結果を返す。deck0 / deck1 で使用デッキを指定（0=A, 1=B, 2=C）。
+    n_games 回対戦し、結果を返す。deck0 / deck1 で使用デッキを指定（0=A, 1=B, 2=C, 3=D, 4=E）。
     log_when_deck_loses にデッキ番号を指定すると、そのデッキが負けた最初の 1 試合のログを表示する。
     """
     if seed is not None:
@@ -70,29 +70,30 @@ def run_simulation(
 
 def main() -> None:
     n = 1000
-    deck0 = 0  # 0=オタチ, 1=ワニ, 2=カエル
+    deck0 = 0  # 0=A, 1=B, 2=C, 3=D, 4=E
     deck1 = 1
     if len(sys.argv) > 1:
         try:
             n = int(sys.argv[1])
         except ValueError:
             pass
+    max_deck = len(DECK_NAMES) - 1
     if len(sys.argv) > 2:
         try:
             deck0 = int(sys.argv[2])
-            deck0 = max(0, min(2, deck0))
+            deck0 = max(0, min(max_deck, deck0))
         except ValueError:
             pass
     if len(sys.argv) > 3:
         try:
             deck1 = int(sys.argv[3])
-            deck1 = max(0, min(2, deck1))
+            deck1 = max(0, min(max_deck, deck1))
         except ValueError:
             pass
     if "--help" in sys.argv or "-h" in sys.argv:
         print("使い方: python simulate.py [対戦数] [デッキ0] [デッキ1]")
-        print("  デッキ: 0=オタチ, 1=ワニ, 2=カエル")
-        print("  例: python simulate.py 1000 1 2  → 1000 回、ワニ vs カエル")
+        print("  デッキ: 0=オタチ, 1=ワニ, 2=カエル, 3=ワルビアル, 4=ジバコイル")
+        print("  例: python simulate.py 1000 3 4  → 1000 回、ワルビアル vs ジバコイル")
         return
     if deck0 == deck1:
         print(f"{DECK_NAMES[deck0]}どうし、{n} 回シミュレートします。")
