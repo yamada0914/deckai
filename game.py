@@ -6,10 +6,11 @@
 - 相手のポケモンを 3 回きぜつさせたら勝ち。プレイヤーは先行・後攻の 2 人。
 """
 import random
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Callable, Literal
 
-from card import PokemonCard, is_energy, is_item, is_pokemon
+from card import PokemonCard, is_energy, is_item, is_pokemon, is_support
 from deck import STARTING_HAND_SIZE, create_deck, format_deck_recipe
 
 BENCH_SIZE = 5
@@ -22,6 +23,8 @@ class BattlePokemon:
     """バトル場／ベンチに出すポケモン（HP と付いているエネルギーを管理）"""
     card: PokemonCard
     attached_energy: int = 0
+    # 付いているエネルギーをタイプごとに（1 つずつ）。長さは attached_energy と一致。無色＝任意として消費可能。
+    attached_energy_types: list = field(default_factory=list)
 
     @property
     def hp(self) -> int:
@@ -60,12 +63,36 @@ def _card_label(card) -> str:
     return getattr(card, "name", card.__class__.__name__)
 
 
+def _can_pay_energy_cost(
+    attached_count: int,
+    attached_types: list,
+    cost_total: int,
+    cost_typed: list | None,
+) -> bool:
+    """
+    付与エネルギーで技コストを支払えるか。
+    cost_typed が None のときは cost_total 以上の個数があれば可。
+    cost_typed があるときは、各タイプが必要数あり、無色は任意で埋める。
+    """
+    if cost_typed is None:
+        return attached_count >= cost_total
+    if attached_count < len(cost_typed):
+        return False
+    # タイプ別必要数（無色以外）
+    need = Counter(t for t in cost_typed if t != "colorless")
+    have = Counter(attached_types)
+    for typ, n in need.items():
+        if have.get(typ, 0) < n:
+            return False
+    return True
+
+
 def _player_name(state: "GameState", i: int) -> str:
     """使用デッキに応じたプレイヤー名を返す。同じデッキ同士のときはデッキ1/デッキ2、それ以外はオタチ/ワニ/カエルデッキ。"""
     d0, d1 = state.deck_indices[0], state.deck_indices[1]
     if d0 == d1:
         return f"デッキ{i + 1}"
-    names = ["オタチデッキ", "ワニデッキ", "カエルデッキ"]
+    names = ["オタチデッキ", "ワニデッキ", "カエルデッキ", "ワルビアルデッキ", "ジバコイルデッキ"]
     idx = state.deck_indices[i] if i < len(state.deck_indices) else i
     return names[idx] if idx < len(names) else f"プレイヤー{i}"
 
@@ -87,6 +114,7 @@ class GameState:
     log_fn: Callable[[str], None] | None = None
     deck_indices: tuple = (0, 1)
     shippegaeshi_120_used: bool = False
+    support_used_this_turn: bool = False
 
     def log(self, msg: str) -> None:
         if self.log_fn:
@@ -225,7 +253,8 @@ def _check_game_end(state: GameState) -> bool:
 
 
 def start_turn(state: GameState) -> None:
-    """ターン開始：ドロー 1 枚（先行もドローあり）。ドローできなければデッキ切れ負け。"""
+    """ターン開始：ドロー 1 枚（先行もドローあり）。サポート未使用にリセット。"""
+    state.support_used_this_turn = False
     p = state.active_player_state()
     turn_label = _turn_label(state)
     state.log(f"---------- {turn_label} ---------- {state.player_name(state.current_player)} のターン")
@@ -243,8 +272,12 @@ def _opponent_max_damage(state: GameState) -> int:
     if not opp.active or not opp.active.card.attacks:
         return 0
     max_dmg = 0
+    types = getattr(opp.active, "attached_energy_types", [])
     for atk in opp.active.card.attacks:
-        if opp.active.attached_energy >= atk.energy_cost:
+        if _can_pay_energy_cost(
+            opp.active.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
             dmg = atk.damage
             if atk.name == "しっぺがえし" and state.active_player_state().knockouts_suffered == 2:
                 dmg += 90
@@ -259,8 +292,12 @@ def _our_max_damage(state: GameState) -> int:
     if not p.active or not p.active.card.attacks:
         return 0
     max_dmg = 0
+    types = getattr(p.active, "attached_energy_types", [])
     for atk in p.active.card.attacks:
-        if p.active.attached_energy >= atk.energy_cost:
+        if _can_pay_energy_cost(
+            p.active.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
             dmg = atk.damage
             if atk.name == "しっぺがえし" and opp.knockouts_suffered == 2:
                 dmg += 90
@@ -278,6 +315,12 @@ def retreat(state: GameState, bench_index: int) -> bool:
     if old_active.attached_energy < cost:
         return False
     old_active.attached_energy -= cost
+    # 付与タイプリストからも末尾を削除（にげるコストは個数のみなのでタイプは問わない）
+    types = getattr(old_active, "attached_energy_types", [])
+    if len(types) >= cost:
+        old_active.attached_energy_types = types[:-cost]
+    else:
+        old_active.attached_energy_types = []
     if cost > 0:
         state.log(
             f"{state.player_name(state.current_player)}: 逃げるために {old_active.card.name} のエネルギーを {cost} 個捨てる"
@@ -298,11 +341,16 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
         return False
     if not is_energy(p.hand[hand_index]):
         return False
+    energy_card = p.hand[hand_index]
+    energy_type = getattr(energy_card, "energy_type", None)
+    slot_type = energy_type if energy_type else "colorless"
+
     if bench_index is not None:
         if bench_index < 0 or bench_index >= len(p.bench):
             return False
         target = p.bench[bench_index]
         target.attached_energy += 1
+        target.attached_energy_types.append(slot_type)
         p.hand.pop(hand_index)
         state.log(
             f"{state.player_name(state.current_player)}: エネルギーを 1 つ付与（ベンチの {target.card.name}、エネルギー {target.attached_energy} 個）"
@@ -311,6 +359,7 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
     if not p.active:
         return False
     p.active.attached_energy += 1
+    p.active.attached_energy_types.append(slot_type)
     p.hand.pop(hand_index)
     state.log(f"{state.player_name(state.current_player)}: エネルギーを 1 つ付与（バトル場のエネルギー {p.active.attached_energy} 個）")
     return True
@@ -332,6 +381,40 @@ def use_potion(state: GameState, hand_index: int) -> bool:
     return True
 
 
+def _is_first_player_first_turn(state: GameState) -> bool:
+    """先行の 1 ターン目か（サポートは原則使用不可）。"""
+    return state.turn_count == 0 and state.current_player == state.first_player
+
+
+def use_support(state: GameState, hand_index: int) -> bool:
+    """
+    サポートカードを使用。1 ターンに 1 枚まで。先行の 1 ターン目は使用不可。
+    ネモ: デッキから 3 枚引く。
+    """
+    p = state.active_player_state()
+    if hand_index < 0 or hand_index >= len(p.hand):
+        return False
+    card = p.hand[hand_index]
+    if not is_support(card):
+        return False
+    if state.support_used_this_turn:
+        return False
+    if _is_first_player_first_turn(state):
+        return False
+    effect = getattr(card, "effect", "")
+    if effect == "draw_3":
+        n = getattr(card, "draw_count", 3)
+        drawn = p.draw(n)
+        p.hand.extend(drawn)
+        p.hand.pop(hand_index)
+        state.support_used_this_turn = True
+        state.log(
+            f"{state.player_name(state.current_player)}: ネモを使用 → デッキから {len(drawn)} 枚ドロー（手札 {len(p.hand)} 枚、デッキ {len(p.deck)} 枚）"
+        )
+        return True
+    return False
+
+
 def _apply_evolution(
     target: BattlePokemon,
     evolution_card: PokemonCard,
@@ -343,12 +426,14 @@ def _apply_evolution(
     old_hp = target.hp
     old_max_hp = target.card.max_hp
     old_energy = target.attached_energy
+    old_energy_types = getattr(target, "attached_energy_types", [])
     damage_taken = old_max_hp - old_hp
     evolved = evolution_card.copy()
     target.card = evolved
     target.card.max_hp = evolved.max_hp
     target.card.hp = max(0, min(evolved.max_hp, evolved.max_hp - damage_taken))
     target.attached_energy = old_energy
+    target.attached_energy_types = list(old_energy_types)
     state.log(f"{log_prefix}{old_name} を {evolved.name} に進化（HP {target.hp}/{target.max_hp}）")
 
 
@@ -403,23 +488,46 @@ def attack(
     if attack_index < 0 or attack_index >= len(pokemon_card.attacks):
         return False
     atk = pokemon_card.attacks[attack_index]
-    if p.active.attached_energy < atk.energy_cost:
+    types = getattr(p.active, "attached_energy_types", [])
+    if not _can_pay_energy_cost(
+        p.active.attached_energy, types,
+        atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+    ):
         return False
     opp_before = opp.active.hp
     damage = atk.damage
+    # 弱点：守備側の弱点タイプと攻撃側ポケモンのタイプが一致するとダメージ 2 倍
+    defender_card = opp.active.card
+    attacker_card = pokemon_card
+    if (
+        getattr(defender_card, "weakness", None)
+        and getattr(attacker_card, "pokemon_type", None)
+        and defender_card.weakness == attacker_card.pokemon_type
+    ):
+        damage *= 2
+        state.log(f"{state.player_name(state.current_player)}: 弱点一致！ダメージが 2 倍（{damage // 2} → {damage}）")
+    # 抵抗力：守備側の抵抗力タイプと攻撃側ポケモンのタイプが一致するとダメージ -30（0 未満なら 0）
+    if (
+        getattr(defender_card, "resistance", None)
+        and getattr(attacker_card, "pokemon_type", None)
+        and defender_card.resistance == attacker_card.pokemon_type
+    ):
+        before_r = damage
+        damage = max(0, damage - 30)
+        state.log(f"{state.player_name(state.current_player)}: 抵抗力一致！ダメージが -30（{before_r} → {damage}）")
     if atk.name == "しっぺがえし" and opp.knockouts_suffered == 2:
         damage += 90
         state.shippegaeshi_120_used = True
-        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手あと1きぜつで負けのため 90 ダメージ追加、相手 HP {opp_before} → {opp_before - damage}）")
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手あと1きぜつで負けのため 90 ダメージ追加、相手 HP {opp_before} → {max(0, opp_before - damage)}）")
     else:
-        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手 HP {opp_before} → {opp_before - damage}）")
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手 HP {opp_before} → {max(0, opp_before - damage)}）")
     opp.active.hp -= damage
     bench_dmg = getattr(atk, "bench_damage", 0)
     if bench_dmg > 0 and opp.bench:
         bench_target = opp.bench[0]
         bench_before = bench_target.hp
         bench_target.hp -= bench_dmg
-        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手のベンチの {bench_target.card.name} に {bench_dmg} ダメージ（HP {bench_before} → {bench_target.hp}）")
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手のベンチの {bench_target.card.name} に {bench_dmg} ダメージ（HP {bench_before} → {max(0, bench_target.hp)}）")
         if bench_target.hp <= 0:
             state.log(f"{state.player_name(state.opponent())} のベンチの {bench_target.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
             opp.bench.pop(0)
@@ -430,7 +538,7 @@ def attack(
     if self_dmg > 0 and p.active:
         self_before = p.active.hp
         p.active.hp -= self_dmg
-        state.log(f"{state.player_name(state.current_player)}: 反動で自分に {self_dmg} ダメージ（自分 HP {self_before} → {p.active.hp}）")
+        state.log(f"{state.player_name(state.current_player)}: 反動で自分に {self_dmg} ダメージ（自分 HP {self_before} → {max(0, p.active.hp)}）")
 
     if opp.active and opp.active.hp <= 0:
         state.log(f"{state.player_name(state.opponent())} のバトル場のポケモンがきぜつ！（{opp.knockouts_suffered + 1} 回目）")
@@ -451,8 +559,12 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
         return None
     best_idx = None
     best_dmg = -1
+    types = getattr(p.active, "attached_energy_types", [])
     for idx, atk in enumerate(p.active.card.attacks):
-        if p.active.attached_energy < atk.energy_cost:
+        if not _can_pay_energy_cost(
+            p.active.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
             continue
         dmg = atk.damage
         if atk.name == "しっぺがえし" and opp.knockouts_suffered == 2:
@@ -467,16 +579,23 @@ def _should_attach_for_evolution(p: PlayerState) -> bool:
     """バトル場のポケモンが手札の進化で必要エネルギーに足りていなければ True。"""
     if not p.active:
         return False
+    types = getattr(p.active, "attached_energy_types", [])
     for c in p.hand:
         if not (is_pokemon(c) and getattr(c, "evolves_from", None) == p.active.card.id):
             continue
-        evolved_max_cost = max((a.energy_cost for a in c.attacks), default=0)
-        return p.active.attached_energy < evolved_max_cost
+        # 進化後のいずれかの技を出せるなら付与不要
+        for a in c.attacks:
+            if _can_pay_energy_cost(
+                p.active.attached_energy, types,
+                a.energy_cost, getattr(a, "energy_cost_typed", None),
+            ):
+                return False
+        return True
     return False
 
 
 def _energy_needed_for_active(p: PlayerState) -> int:
-    """バトル場（＋手札の進化）に必要なエネルギーコストを返す。"""
+    """バトル場（＋手札の進化）に必要なエネルギーコスト合計を返す。"""
     if not p.active:
         return 0
     need = max((a.energy_cost for a in p.active.card.attacks), default=0)
@@ -486,6 +605,20 @@ def _energy_needed_for_active(p: PlayerState) -> int:
         need = max(need, max((a.energy_cost for a in c.attacks), default=0))
         break
     return need
+
+
+def _can_active_use_any_attack(p: PlayerState) -> bool:
+    """バトル場のポケモンがどれか 1 つでも技を出せるか（タイプ指定込みで判定）。"""
+    if not p.active or not p.active.card.attacks:
+        return False
+    types = getattr(p.active, "attached_energy_types", [])
+    for atk in p.active.card.attacks:
+        if _can_pay_energy_cost(
+            p.active.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
+            return True
+    return False
 
 
 def _try_attach_energy_auto(state: GameState) -> bool:
@@ -504,7 +637,7 @@ def _try_attach_energy_auto(state: GameState) -> bool:
         return True
 
     energy_needed_active = _energy_needed_for_active(p)
-    if p.active.attached_energy >= energy_needed_active and p.bench:
+    if _can_active_use_any_attack(p) and p.bench:
         bench_candidates = [
             (bi, b.attached_energy, b.card.attacks)
             for bi, b in enumerate(p.bench)
@@ -518,7 +651,7 @@ def _try_attach_energy_auto(state: GameState) -> bool:
         if best_bench and best_bench[1] > 0:
             attach_energy(state, energy_hand_idx, bench_index=best_bench[0])
             return True
-    if p.active.attached_energy < energy_needed_active or not p.bench:
+    if not _can_active_use_any_attack(p) or not p.bench:
         attach_energy(state, energy_hand_idx)
         return True
     if p.bench:
@@ -565,6 +698,15 @@ def run_turn_auto(state: GameState) -> bool:
         if best is not None and retreat(state, best):
             acted = True
             p = state.active_player_state()
+
+    # サポート（1 ターン 1 枚、先行 1 ターン目は不可）: ネモなど
+    if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
+        for i, c in enumerate(p.hand):
+            if is_support(c) and getattr(c, "effect", None) == "draw_3":
+                if use_support(state, i):
+                    acted = True
+                    p = state.active_player_state()
+                break
 
     if p.active and p.active.hp < p.active.max_hp:
         for i, c in enumerate(p.hand):
