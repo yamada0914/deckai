@@ -11,10 +11,10 @@ DECK_RECIPE_A = {"otachi": 3, "ootachi": 2, "mototokage": 2, "basic-energy": 6, 
 DECK_RECIPE_B = {"meguroko": 3, "warubiru": 2, "mototokage": 2, "basic-energy": 6, "potion": 1}
 # デッキ C（15 枚）: ズピカ 3、ハラバリー 2、モトトカゲ 2、無色 4・雷 2、きずぐすり 1
 DECK_RECIPE_C = {"zupika": 3, "harabarii": 2, "mototokage": 2, "basic-energy": 4, "basic-energy-lightning": 2, "potion": 1, "nemo": 4}
-# デッキ D（24 枚）: メグロコ 3、ワルビル 2、ワルビアル 2、リククラゲ 2、ノノクラゲ 3、ガケガニ 2、エネルギー 10
-DECK_RECIPE_D = {"meguroko-svd-062": 3, "warubiru-svd-063": 2, "warubiaru-svd-064": 2, "rikukurage-svd-066": 2, "nonokurage-svd-065": 3, "gakegani-svd-067": 2, "basic-energy-fighting": 10, "nemo": 4}
-# デッキ E（24 枚）: ジバコイル 2, レアコイル 2, コイル 3, ズピカ 3、ハラバリー 2、 カラミンゴ 2、 エネルギー 10
-DECK_RECIPE_E = {"jibakoil-svd-038": 2, "rarecoil-svd-037": 2, "coil-svd-036": 3, "zupika": 3, "harabarii": 2, "karamingo-svg-029": 2, "basic-energy-lightning": 10, "nemo": 4}
+# デッキ D（26 枚）: メグロコ 3、ワルビル 2、ワルビアル 2、リククラゲ 2、ノノクラゲ 3、ガケガニ 2、エネルギー 10、ポケモンいれかえ 2
+DECK_RECIPE_D = {"meguroko-svd-062": 3, "warubiru-svd-063": 2, "warubiaru-svd-064": 2, "rikukurage-svd-066": 2, "nonokurage-svd-065": 3, "gakegani-svd-067": 2, "basic-energy-fighting": 8, "nemo": 4, "potion": 2, "pokemon_irekae": 2}
+# デッキ E（26 枚）: ジバコイル 2, レアコイル 2, コイル 3, ズピカ 3、ハラバリー 2、 カラミンゴ 2、 エネルギー 10、ポケモンいれかえ 2
+DECK_RECIPE_E = {"jibakoil-svd-038": 2, "rarecoil-svd-037": 2, "coil-svd-036": 3, "zupika": 3, "harabarii": 2, "karamingo-svg-029": 2, "basic-energy-lightning": 8, "nemo": 4, "potion": 2, "pokemon_irekae": 2}
 
 DECK_RECIPES = [DECK_RECIPE_A, DECK_RECIPE_B, DECK_RECIPE_C, DECK_RECIPE_D, DECK_RECIPE_E]
 DECK_SIZE = 13  # 最大デッキ枚数（デッキにより 12 または 13）
