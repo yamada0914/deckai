@@ -5,7 +5,7 @@
 """
 import random
 import sys
-from game import MAX_TURNS, setup_game, run_game_auto
+from game import setup_game, run_game_auto
 DECK_NAMES = ["オタチデッキ", "ワニデッキ", "カエルデッキ", "ワルビアルデッキ", "ジバコイルデッキ"]
 
 
@@ -26,7 +26,6 @@ def run_simulation(
     first_win = 0
     second_win = 0
     wins = [0, 0]  # wins[0] = deck0 の勝ち, wins[1] = deck1 の勝ち
-    draw = 0
     shippegaeshi_120_games = 0
     logged_loss = False
     for game_idx in range(n_games):
@@ -42,14 +41,13 @@ def run_simulation(
         winner = run_game_auto(state)
         if state.shippegaeshi_120_used:
             shippegaeshi_120_games += 1
-        if winner is None:
-            draw += 1
-        else:
+        if winner is not None:
             wins[winner] += 1
             if winner == first_player:
                 first_win += 1
             else:
                 second_win += 1
+        # デッキ切れ等で必ず決着するため winner is None は発生しない想定
         if log_when_deck_loses is not None and not logged_loss and winner is not None:
             deck_lost = (deck0 == log_when_deck_loses and winner == 1) or (deck1 == log_when_deck_loses and winner == 0)
             if deck_lost:
@@ -61,7 +59,6 @@ def run_simulation(
         "first_win": first_win,
         "second_win": second_win,
         "wins": wins,
-        "draw": draw,
         "deck0": deck0,
         "deck1": deck1,
         "shippegaeshi_120_games": shippegaeshi_120_games,
@@ -111,14 +108,12 @@ def main() -> None:
     first_win = results["first_win"]
     second_win = results["second_win"]
     wins = results["wins"]
-    draw = results["draw"]
     d0, d1 = results["deck0"], results["deck1"]
     print(f"先手の勝ち: {first_win} 回 ({100 * first_win / n:.1f} %)")
     print(f"後手の勝ち: {second_win} 回 ({100 * second_win / n:.1f} %)")
     if d0 != d1:
         print(f"{DECK_NAMES[d0]}の勝ち: {wins[0]} 回 ({100 * wins[0] / n:.1f} %)")
         print(f"{DECK_NAMES[d1]}の勝ち: {wins[1]} 回 ({100 * wins[1] / n:.1f} %)")
-    print(f"未決着（最大ターン {MAX_TURNS} ターン）: {draw} 回 ({100 * draw / n:.1f} %)")
 
 
 if __name__ == "__main__":
