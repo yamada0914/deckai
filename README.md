@@ -10,8 +10,8 @@
 カード画像（フォルダ）
     ↓ read_cards.py（OpenAI Vision API で解析）
 read_cards_result.json
-    ↓ update_cards_from_json.py（Python 定義を生成・マージ）
-card/data.py
+    ↓ update_cards_from_json.py（マーカー内ブロックを置換）
+card/data.py が更新される
 ```
 
 ### 1. 準備
@@ -40,18 +40,21 @@ python read_cards.py --folder ./card_images -o read_cards_result.json
 
 ### 3. data.py を更新する（update_cards_from_json.py）
 
+**実行すると card/data.py の「JSON から生成」マーカーで囲まれたブロックが、read_cards_result.json の内容で置き換わります。** 手でコピーする必要はありません。
+
 ```bash
-# デフォルトで read_cards_result.json を読み、card/data.py を更新
+# data.py を更新する（既定）
 python update_cards_from_json.py
 
-# 入力 JSON と data.py を指定する場合
-python update_cards_from_json.py --json read_cards_result.json --data card/data.py
+# 更新せず、内容だけ確認する
+python update_cards_from_json.py --dry-run
+
+# data.py は触らず、生成コードだけファイルに出力する
+python update_cards_from_json.py -o card/data_generated.py
 ```
 
-- **JSON にあるカード**: 同じ `id` が既にあればその定義を置き換え、なければ `# 基本エネルギー` の直前に追加する。
-- **JSON にないポケモン**（オタチ・オオタチなど）は既存の定義をそのまま残す。
-- **エネルギー・アイテム**（BASIC_ENERGY, POTION 等）は変更しない。
-- `CARD_ID_TO_NAME` と `_CARD_REGISTRY` に、JSON にあってレジストリに無い `id` を追加する。
+- **更新される箇所**: カード定義（PokemonCard）、`CARD_ID_TO_NAME`、`_CARD_REGISTRY` のうち、data.py 内で「# ----- JSON から生成 -----」で囲まれた部分だけ。
+- **こんらんなど**: 説明文に「こんらん」と「このポケモン」が含まれる技は、自動で `status_effect='confusion'`, `status_effect_target='self'` が付きます。
 
 ### まとめ
 
