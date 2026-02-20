@@ -107,85 +107,8 @@ HARABARII = PokemonCard(
     weakness="fighting",
 )
 
-# ズピカ（svD 041/139）
-ZUPIKA_SVD_041 = PokemonCard(
-    id='zupika-svd-041',
-    name='ズピカ',
-    hp=60,
-    max_hp=60,
-    attacks=[
-        Attack('でんげき', 2, 40, 10, 0, 'このポケモンにも10ダメージ。', energy_cost_typed=['lightning', 'colorless']),
-    ],
-    evolves_from=None,
-    retreat_cost=1,
-    pokemon_type='lightning',
-    weakness='fighting',
-)
-
-# ワルビル（SVD 063/139）
-WARUBIRU_SVD_063 = PokemonCard(
-    id='warubiru-svd-063',
-    name='ワルビル',
-    hp=100,
-    max_hp=100,
-    attacks=[
-        Attack('しっぺがえし', 1, 30, 0, 0, '相手のサイドの残り枚数が1枚なら、90ダメージ追加。', energy_cost_typed=['fighting']),
-        Attack('どつく', 2, 60, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
-    ],
-    evolves_from='meguroko',
-    retreat_cost=2,
-    pokemon_type='fighting',
-    weakness='grass',
-)
-
-# ハラバリー（svD 042/139）
-HARABARII_SVD_042 = PokemonCard(
-    id='harabarii-svd-042',
-    name='ハラバリー',
-    hp=130,
-    max_hp=130,
-    attacks=[
-        Attack('エレキバレット', 2, 70, 0, 30, '相手のベンチポケモン1匹にも、30ダメージ。[ベンチは弱点・抵抗力を計算しない。]', energy_cost_typed=['lightning', 'colorless']),
-    ],
-    evolves_from='zupika',
-    retreat_cost=2,
-    pokemon_type='lightning',
-    weakness='fighting',
-)
-
-# メグロコ（SVD 062/139）
-MEGUROKO_SVD_062 = PokemonCard(
-    id='meguroko-svd-062',
-    name='メグロコ',
-    hp=70,
-    max_hp=70,
-    attacks=[
-        Attack('かじる', 1, 10, 0, 0, '', energy_cost_typed=['fighting']),
-        Attack('ぶつかる', 2, 30, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
-    ],
-    evolves_from=None,
-    retreat_cost=2,
-    pokemon_type='fighting',
-    weakness='grass',
-)
-
-# モトトカゲ（MC 627/742）
-MOTOTOKAGE_MC_627 = PokemonCard(
-    id='mototokage-mc-627',
-    name='モトトカゲ',
-    hp=110,
-    max_hp=110,
-    attacks=[
-        Attack('しっぽのムチ', 1, 10, 0, 0, ''),
-        Attack('スピードアタック', 2, 50, 0, 0, ''),
-    ],
-    evolves_from=None,
-    retreat_cost=1,
-    pokemon_type='colorless',
-    weakness='fighting',
-)
-
-# カラミンゴ（svG 029/049）
+# ----- 以下 JSON から生成（update_cards_from_json.py で上書き） -----
+# カラミンゴ（karamingo-svg-029）
 KARAMINGO_SVG_029 = PokemonCard(
     id='karamingo-svg-029',
     name='カラミンゴ',
@@ -202,7 +125,7 @@ KARAMINGO_SVG_029 = PokemonCard(
     resistance='fighting',
 )
 
-# ガケガニ（svD 067/139）
+# ガケガニ（gakegani-svd-067）
 GAKEGANI_SVD_067 = PokemonCard(
     id='gakegani-svd-067',
     name='ガケガニ',
@@ -210,7 +133,7 @@ GAKEGANI_SVD_067 = PokemonCard(
     max_hp=130,
     attacks=[
         Attack('はさむ', 2, 50, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
-        Attack('アドレナハンマー', 3, 130, 0, 0, 'このポケモンをこんらんにする。', energy_cost_typed=['fighting', 'fighting', 'fighting']),
+        Attack('アドレナハンマー', 3, 130, 0, 0, 'このポケモンをこんらんにする。', energy_cost_typed=['fighting', 'fighting', 'fighting'], status_effect='confusion', status_effect_target='self'),
     ],
     evolves_from=None,
     retreat_cost=3,
@@ -218,7 +141,7 @@ GAKEGANI_SVD_067 = PokemonCard(
     weakness='grass',
 )
 
-# コイル（SVD 036/139）
+# コイル（coil-svd-036）
 COIL_SVD_036 = PokemonCard(
     id='coil-svd-036',
     name='コイル',
@@ -234,7 +157,7 @@ COIL_SVD_036 = PokemonCard(
     weakness='fighting',
 )
 
-# ジバコイル（SvD 038/139）
+# ジバコイル（jibakoil-svd-038）
 JIBAKOIL_SVD_038 = PokemonCard(
     id='jibakoil-svd-038',
     name='ジバコイル',
@@ -250,7 +173,22 @@ JIBAKOIL_SVD_038 = PokemonCard(
     weakness='fighting',
 )
 
-# ノノクラゲ（SVD 065/139）
+# ズピカ（zupika-svd-041）
+ZUPIKA_SVD_041 = PokemonCard(
+    id='zupika-svd-041',
+    name='ズピカ',
+    hp=60,
+    max_hp=60,
+    attacks=[
+        Attack('でんげき', 2, 40, 10, 0, 'このポケモンにも10ダメージ。', energy_cost_typed=['lightning', 'colorless']),
+    ],
+    evolves_from=None,
+    retreat_cost=1,
+    pokemon_type='lightning',
+    weakness='fighting',
+)
+
+# ノノクラゲ（nonokurage-svd-065）
 NONOKURAGE_SVD_065 = PokemonCard(
     id='nonokurage-svd-065',
     name='ノノクラゲ',
@@ -266,7 +204,54 @@ NONOKURAGE_SVD_065 = PokemonCard(
     weakness='grass',
 )
 
-# リククラゲ（svD 066/139）
+# ハラバリー（harabarii-svd-042）
+HARABARII_SVD_042 = PokemonCard(
+    id='harabarii-svd-042',
+    name='ハラバリー',
+    hp=130,
+    max_hp=130,
+    attacks=[
+        Attack('エレキバレット', 2, 70, 0, 30, '相手のベンチポケモン1匹にも、30ダメージ。[ベンチは弱点・抵抗力を計算しない。]', energy_cost_typed=['lightning', 'colorless']),
+    ],
+    evolves_from='zupika',
+    retreat_cost=2,
+    pokemon_type='lightning',
+    weakness='fighting',
+)
+
+# メグロコ（meguroko-svd-062）
+MEGUROKO_SVD_062 = PokemonCard(
+    id='meguroko-svd-062',
+    name='メグロコ',
+    hp=70,
+    max_hp=70,
+    attacks=[
+        Attack('かじる', 1, 10, 0, 0, '', energy_cost_typed=['fighting']),
+        Attack('ぶつかる', 2, 30, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
+    ],
+    evolves_from=None,
+    retreat_cost=2,
+    pokemon_type='fighting',
+    weakness='grass',
+)
+
+# モトトカゲ（mototokage-mc-627）
+MOTOTOKAGE_MC_627 = PokemonCard(
+    id='mototokage-mc-627',
+    name='モトトカゲ',
+    hp=110,
+    max_hp=110,
+    attacks=[
+        Attack('しっぽのムチ', 1, 10, 0, 0, ''),
+        Attack('スピードアタック', 2, 50, 0, 0, ''),
+    ],
+    evolves_from=None,
+    retreat_cost=1,
+    pokemon_type='colorless',
+    weakness='fighting',
+)
+
+# リククラゲ（rikukurage-svd-066）
 RIKUKURAGE_SVD_066 = PokemonCard(
     id='rikukurage-svd-066',
     name='リククラゲ',
@@ -274,7 +259,7 @@ RIKUKURAGE_SVD_066 = PokemonCard(
     max_hp=130,
     attacks=[
         Attack('たたく', 2, 40, 0, 0, ''),
-        Attack('ダブルウィップ', 3, 100, 0, 0, 'コインを2回投げ、オモテの数×100ダメージ。', energy_cost_typed=['fighting', 'colorless', 'colorless']),
+        Attack('ダブルウィップ', 3, 0, 0, 0, 'コインを2回投げ、オモテの数×100ダメージ。', energy_cost_typed=['fighting', 'colorless', 'colorless'], coin_flips=2, damage_per_coin=100),
     ],
     evolves_from='nonokurage',
     retreat_cost=2,
@@ -282,7 +267,7 @@ RIKUKURAGE_SVD_066 = PokemonCard(
     weakness='grass',
 )
 
-# レアコイル（SVD 037/139）
+# レアコイル（rarecoil-svd-037）
 RARECOIL_SVD_037 = PokemonCard(
     id='rarecoil-svd-037',
     name='レアコイル',
@@ -298,7 +283,7 @@ RARECOIL_SVD_037 = PokemonCard(
     weakness='fighting',
 )
 
-# ワルビアル（svD 064/139）
+# ワルビアル（warubiaru-svd-064）
 WARUBIARU_SVD_064 = PokemonCard(
     id='warubiaru-svd-064',
     name='ワルビアル',
@@ -306,7 +291,7 @@ WARUBIARU_SVD_064 = PokemonCard(
     max_hp=170,
     attacks=[
         Attack('ガブガブバイト', 1, 50, 0, 0, 'ウラが出るまでコインを投げ、オモテの数ぶん、相手のバトルポケモンについているエネルギーを選び、トラッシュする。', energy_cost_typed=['fighting']),
-        Attack('じしん', 4, 180, 0, 30, '自分のベンチポケモン全員にも、それぞれ30ダメージ。[ベンチは弱点・抵抗力を計算しない。]', energy_cost_typed=['fighting', 'fighting', 'colorless', 'colorless']),
+        Attack('じしん', 2, 180, 0, 30, '自分のベンチポケモン全員にも、それぞれ30ダメージ。[ベンチは弱点・抵抗力を計算しない。]', energy_cost_typed=['fighting', 'fighting']),
     ],
     evolves_from='waruvile',
     retreat_cost=3,
@@ -314,7 +299,23 @@ WARUBIARU_SVD_064 = PokemonCard(
     weakness='grass',
 )
 
+# ワルビル（warubiru-svd-063）
+WARUBIRU_SVD_063 = PokemonCard(
+    id='warubiru-svd-063',
+    name='ワルビル',
+    hp=100,
+    max_hp=100,
+    attacks=[
+        Attack('しっぺがえし', 1, 30, 0, 0, '相手のサイドの残り枚数が1枚なら、90ダメージ追加。', energy_cost_typed=['fighting']),
+        Attack('どつく', 2, 60, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
+    ],
+    evolves_from='meguroko',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    weakness='grass',
+)
 
+# ----- 以上 JSON から生成 -----
 
 
 
@@ -348,6 +349,14 @@ POTION = ItemCard(
     description="自分のバトル場のポケモンを 30 回復する",
 )
 
+# ポケモンいれかえ（自分のバトル場のポケモンとベンチのポケモンを入れ替えるグッズ）
+POKEMON_IREKAE = ItemCard(
+    id="pokemon_irekae",
+    name="ポケモンいれかえ",
+    effect="swap_active",
+    description="自分のバトル場のポケモンとベンチのポケモンを 1 体入れ替える",
+)
+
 # ネモ（サポート：デッキから 3 枚引く）
 NEMO = SupportCard(
     id="nemo",
@@ -370,21 +379,25 @@ CARD_ID_TO_NAME = {
     "basic-energy-lightning": "基本雷エネルギー",
     "basic-energy-fighting": "基本闘エネルギー",
     "potion": "きずぐすり",
+    "pokemon_irekae": "ポケモンいれかえ",
     "nemo": "ネモ",
 
-    "zupika-svd-041": 'ズピカ',
-    "warubiru-svd-063": 'ワルビル',
-    "harabarii-svd-042": 'ハラバリー',
-    "meguroko-svd-062": 'メグロコ',
-    "mototokage-mc-627": 'モトトカゲ',
+    # ----- JSON から生成 -----
     "karamingo-svg-029": 'カラミンゴ',
     "gakegani-svd-067": 'ガケガニ',
     "coil-svd-036": 'コイル',
     "jibakoil-svd-038": 'ジバコイル',
+    "zupika-svd-041": 'ズピカ',
     "nonokurage-svd-065": 'ノノクラゲ',
+    "harabarii-svd-042": 'ハラバリー',
+    "meguroko-svd-062": 'メグロコ',
+    "mototokage-mc-627": 'モトトカゲ',
     "rikukurage-svd-066": 'リククラゲ',
     "rarecoil-svd-037": 'レアコイル',
-    "warubiaru-svd-064": 'ワルビアル',}
+    "warubiaru-svd-064": 'ワルビアル',
+    "warubiru-svd-063": 'ワルビル',
+    # ----- 以上 JSON から生成 -----
+}
 
 # カード ID → マスタカード（get_card_by_id 用）
 _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | ItemCard | SupportCard] = {
@@ -399,21 +412,25 @@ _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | ItemCard | SupportCard] = {
     "basic-energy-lightning": BASIC_ENERGY_LIGHTNING,
     "basic-energy-fighting": BASIC_ENERGY_FIGHTING,
     "potion": POTION,
+    "pokemon_irekae": POKEMON_IREKAE,
     "nemo": NEMO,
 
-    "zupika-svd-041": ZUPIKA_SVD_041,
-    "warubiru-svd-063": WARUBIRU_SVD_063,
-    "harabarii-svd-042": HARABARII_SVD_042,
-    "meguroko-svd-062": MEGUROKO_SVD_062,
-    "mototokage-mc-627": MOTOTOKAGE_MC_627,
+    # ----- JSON から生成 -----
     "karamingo-svg-029": KARAMINGO_SVG_029,
     "gakegani-svd-067": GAKEGANI_SVD_067,
     "coil-svd-036": COIL_SVD_036,
     "jibakoil-svd-038": JIBAKOIL_SVD_038,
+    "zupika-svd-041": ZUPIKA_SVD_041,
     "nonokurage-svd-065": NONOKURAGE_SVD_065,
+    "harabarii-svd-042": HARABARII_SVD_042,
+    "meguroko-svd-062": MEGUROKO_SVD_062,
+    "mototokage-mc-627": MOTOTOKAGE_MC_627,
     "rikukurage-svd-066": RIKUKURAGE_SVD_066,
     "rarecoil-svd-037": RARECOIL_SVD_037,
-    "warubiaru-svd-064": WARUBIARU_SVD_064,}
+    "warubiaru-svd-064": WARUBIARU_SVD_064,
+    "warubiru-svd-063": WARUBIRU_SVD_063,
+    # ----- 以上 JSON から生成 -----
+}
 
 
 def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyCard | ItemCard | SupportCard:
