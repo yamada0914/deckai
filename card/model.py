@@ -158,6 +158,10 @@ EnergyCostSlot = Literal[
 ]
 
 
+# 技が付与する状態異常（ねむり・マヒ・こんらんはどれか1つのみ、どく・やけどは重複可）
+StatusEffectId = Literal["sleep", "paralysis", "confusion", "poison", "burn"]
+
+
 @dataclass
 class Attack:
     name: str
@@ -169,6 +173,13 @@ class Attack:
     description: str = ""
     # 技に必要なエネルギーをタイプごとに指定（例: ["lightning", "colorless"] = 雷1＋無色1）。省略時は energy_cost だけの「無色のみ」扱い。
     energy_cost_typed: list[EnergyCostSlot] | None = None
+    # 技が付与する状態異常。status_effect_target で自分か相手かを指定。
+    status_effect: StatusEffectId | None = None
+    status_effect_target: Literal["self", "opponent"] = "opponent"  # こんらん等で「このポケモン」のとき "self"
+    poison_damage_if_poison: int = 10  # status_effect == "poison" のときの毎ターンダメージ（10/20/30）
+    # コイン技：coin_flips 回投げ、表の数 × damage_per_coin がダメージ。両方 >0 のとき damage は使わない。
+    coin_flips: int = 0
+    damage_per_coin: int = 0
 
 
 @dataclass
@@ -186,6 +197,8 @@ class PokemonCard:
     pokemon_type: PokemonTypeId | None = None
     # 弱点。このタイプのポケモンから技を受けると、受けるダメージが 2 倍になる。
     weakness: PokemonTypeId | None = None
+    # 抵抗力。このタイプの技から受けるダメージが -30（0 未満なら 0）。
+    resistance: PokemonTypeId | None = None
 
     def copy(self) -> "PokemonCard":
         return PokemonCard(
@@ -200,6 +213,7 @@ class PokemonCard:
             instance_id=self.instance_id,
             pokemon_type=self.pokemon_type,
             weakness=self.weakness,
+            resistance=self.resistance,
         )
 
 
