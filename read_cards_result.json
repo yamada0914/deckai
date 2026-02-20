@@ -408,12 +408,10 @@
         },
         {
           "name": "じしん",
-          "energy_cost": 4,
+          "energy_cost": 2,
           "energy_cost_typed": [
             "fighting",
-            "fighting",
-            "colorless",
-            "colorless"
+            "fighting"
           ],
           "damage": 180,
           "self_damage": 0,
