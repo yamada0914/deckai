@@ -17,14 +17,23 @@ BENCH_SIZE = 5
 WIN_KO_COUNT = 3
 MAX_TURNS = 200
 
+# 状態異常：ねむり・マヒ・こんらんはどれか1つのみ。どく・やけどは重複可。ベンチに下がると全て解除。
+SpecialState = Literal["sleep", "paralysis", "confusion"]
+
 
 @dataclass
 class BattlePokemon:
-    """バトル場／ベンチに出すポケモン（HP と付いているエネルギーを管理）"""
+    """バトル場／ベンチに出すポケモン（HP・エネルギー・状態異常を管理）"""
     card: PokemonCard
     attached_energy: int = 0
     # 付いているエネルギーをタイプごとに（1 つずつ）。長さは attached_energy と一致。無色＝任意として消費可能。
     attached_energy_types: list = field(default_factory=list)
+    # 状態異常：ねむり・マヒ・こんらんはどれか1つのみ
+    special_state: SpecialState | None = None
+    poison_damage: int = 0  # 0 = どくにかかっていない。10/20/30 で毎ターン末尾にダメージ
+    burn: bool = False
+    # このターンに進化したか（そのターンに 1 進化したポケモンは同じターンに 2 進化できない）
+    evolved_this_turn: bool = False
 
     @property
     def hp(self) -> int:
@@ -61,6 +70,41 @@ class PlayerState:
 
 def _card_label(card) -> str:
     return getattr(card, "name", card.__class__.__name__)
+
+
+def _flip_coin() -> bool:
+    """コインを1回投げる。True = 表、False = 裏。"""
+    return random.random() < 0.5
+
+
+def _clear_status(bp: BattlePokemon) -> None:
+    """状態異常を全て解除（ベンチに下がったときなど）。"""
+    bp.special_state = None
+    bp.poison_damage = 0
+    bp.burn = False
+
+
+def _apply_status(
+    state: "GameState",
+    target: BattlePokemon,
+    status_effect: str,
+    poison_damage: int = 10,
+    log_prefix: str = "",
+) -> None:
+    """
+    1 つの状態異常を付与。ねむり・マヒ・こんらんは互いに上書き。どく・やけどは重複可。
+    """
+    status_names = {"sleep": "ねむり", "paralysis": "マヒ", "confusion": "こんらん", "poison": "どく", "burn": "やけど"}
+    name_ja = status_names.get(status_effect, status_effect)
+    if status_effect in ("sleep", "paralysis", "confusion"):
+        target.special_state = status_effect
+        state.log(f"{log_prefix}{target.card.name} は {name_ja} になった")
+    elif status_effect == "poison":
+        target.poison_damage = poison_damage
+        state.log(f"{log_prefix}{target.card.name} は {name_ja}（{poison_damage}）になった")
+    elif status_effect == "burn":
+        target.burn = True
+        state.log(f"{log_prefix}{target.card.name} は {name_ja} になった")
 
 
 def _can_pay_energy_cost(
@@ -223,7 +267,7 @@ def _promote_from_bench(player: PlayerState, state: GameState, player_index: int
     if player.active is not None or not player.bench:
         return False
     player.active = player.bench.pop(0)
-    state.log(f"{state.player_name(player_index)}: ベンチから {player.active.card.name} をバトル場に出す（HP {player.active.max_hp}）")
+    state.log(f"{state.player_name(player_index)}: ベンチから {player.active.card.name} をバトル場に出す（HP {player.active.hp}/{player.active.max_hp}）")
     return True
 
 
@@ -253,7 +297,7 @@ def _check_game_end(state: GameState) -> bool:
 
 
 def start_turn(state: GameState) -> None:
-    """ターン開始：ドロー 1 枚（先行もドローあり）。サポート未使用にリセット。"""
+    """ターン開始：ドロー 1 枚、サポート未使用にリセット。ねむりならコインで解除判定。"""
     state.support_used_this_turn = False
     p = state.active_player_state()
     turn_label = _turn_label(state)
@@ -263,7 +307,26 @@ def start_turn(state: GameState) -> None:
         p.hand.extend(drawn)
         state.log(f"{state.player_name(state.current_player)}: 1 枚ドロー → {_card_label(drawn[0])}（手札 {len(p.hand)} 枚、デッキ {len(p.deck)} 枚）")
     else:
-        state.log(f"{state.player_name(state.current_player)}: デッキが空のためドローなし（手札 {len(p.hand)} 枚）")
+        # state.log(f"{state.player_name(state.current_player)}: デッキが空のためドローなし（手札 {len(p.hand)} 枚）")
+        state.log(f"{state.player_name(state.current_player)}: デッキが空のためドローできず → 負け")
+        state.winner = state.opponent()
+        return
+    # ねむり：自分の番のはじめにコイン。表 → 回復、裏 → そのまま
+    if p.active and getattr(p.active, "special_state", None) == "sleep":
+        if _flip_coin():
+            p.active.special_state = None
+            state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} のねむりが解けた（コイン：表）")
+        else:
+            state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} はねむったまま（コイン：裏）")
+
+
+def _attack_damage_for_eval(atk) -> int:
+    """技のダメージを評価用に返す。コイン技の場合は期待値（表0.5×回数×damage_per_coin）。"""
+    cf = getattr(atk, "coin_flips", 0)
+    dpc = getattr(atk, "damage_per_coin", 0)
+    if cf > 0 and dpc > 0:
+        return int(cf * 0.5 * dpc)
+    return atk.damage
 
 
 def _opponent_max_damage(state: GameState) -> int:
@@ -278,7 +341,7 @@ def _opponent_max_damage(state: GameState) -> int:
             opp.active.attached_energy, types,
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
-            dmg = atk.damage
+            dmg = _attack_damage_for_eval(atk)
             if atk.name == "しっぺがえし" and state.active_player_state().knockouts_suffered == 2:
                 dmg += 90
             max_dmg = max(max_dmg, dmg)
@@ -298,7 +361,7 @@ def _our_max_damage(state: GameState) -> int:
             p.active.attached_energy, types,
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
-            dmg = atk.damage
+            dmg = _attack_damage_for_eval(atk)
             if atk.name == "しっぺがえし" and opp.knockouts_suffered == 2:
                 dmg += 90
             max_dmg = max(max_dmg, dmg)
@@ -306,9 +369,12 @@ def _our_max_damage(state: GameState) -> int:
 
 
 def retreat(state: GameState, bench_index: int) -> bool:
-    """バトル場のポケモンとベンチの bench_index 番目を入れ替える（逃げる）。にげるエネルギー分を捨てる。"""
+    """バトル場のポケモンとベンチの bench_index 番目を入れ替える（逃げる）。にげるエネルギー分を捨てる。ねむり・マヒ中はにげられない。"""
     p = state.active_player_state()
     if not p.active or bench_index < 0 or bench_index >= len(p.bench):
+        return False
+    if getattr(p.active, "special_state", None) in ("sleep", "paralysis"):
+        state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} は状態異常のためにげられない")
         return False
     old_active = p.active
     cost = getattr(old_active.card, "retreat_cost", 1)
@@ -327,6 +393,7 @@ def retreat(state: GameState, bench_index: int) -> bool:
         )
     p.active = p.bench[bench_index]
     p.bench[bench_index] = old_active
+    _clear_status(old_active)  # ベンチに下がると状態異常は全て回復
     state.log(
         f"{state.player_name(state.current_player)}: {old_active.card.name} をベンチに退き、"
         f"{p.active.card.name} をバトル場に出す（HP {p.active.hp}/{p.active.max_hp}）"
@@ -381,6 +448,27 @@ def use_potion(state: GameState, hand_index: int) -> bool:
     return True
 
 
+def use_pokemon_swap(state: GameState, hand_index: int, bench_index: int) -> bool:
+    """ポケモンいれかえを使用して自分のバトル場のポケモンとベンチの指定 1 体を入れ替える。"""
+    p = state.active_player_state()
+    if not p.active or bench_index < 0 or bench_index >= len(p.bench):
+        return False
+    if hand_index < 0 or hand_index >= len(p.hand):
+        return False
+    card = p.hand[hand_index]
+    if not is_item(card) or getattr(card, "effect", None) != "swap_active":
+        return False
+    old_active = p.active
+    p.active = p.bench[bench_index]
+    p.bench[bench_index] = old_active
+    _clear_status(old_active)
+    p.hand.pop(hand_index)
+    state.log(
+        f"{state.player_name(state.current_player)}: ポケモンいれかえを使用 → バトル場に {p.active.card.name}、ベンチに {old_active.card.name} を入れ替え"
+    )
+    return True
+
+
 def _is_first_player_first_turn(state: GameState) -> bool:
     """先行の 1 ターン目か（サポートは原則使用不可）。"""
     return state.turn_count == 0 and state.current_player == state.first_player
@@ -408,8 +496,9 @@ def use_support(state: GameState, hand_index: int) -> bool:
         p.hand.extend(drawn)
         p.hand.pop(hand_index)
         state.support_used_this_turn = True
+        drawn_names = ", ".join(_card_label(c) for c in drawn)
         state.log(
-            f"{state.player_name(state.current_player)}: ネモを使用 → デッキから {len(drawn)} 枚ドロー（手札 {len(p.hand)} 枚、デッキ {len(p.deck)} 枚）"
+            f"{state.player_name(state.current_player)}: ネモを使用 → デッキから {len(drawn)} 枚ドロー → [{drawn_names}]（手札 {len(p.hand)} 枚、デッキ {len(p.deck)} 枚）"
         )
         return True
     return False
@@ -434,6 +523,7 @@ def _apply_evolution(
     target.card.hp = max(0, min(evolved.max_hp, evolved.max_hp - damage_taken))
     target.attached_energy = old_energy
     target.attached_energy_types = list(old_energy_types)
+    target.evolved_this_turn = True  # 同一ターンでの 2 進化を禁止するため
     state.log(f"{log_prefix}{old_name} を {evolved.name} に進化（HP {target.hp}/{target.max_hp}）")
 
 
@@ -452,6 +542,9 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
     if bench_index is None:
         if not p.active or p.active.card.id != evolution_card.evolves_from:
             return False
+        # 2 進化：そのターンに 1 進化していたら同じターンには 2 進化できない
+        if getattr(p.active.card, "evolves_from", None) is not None and getattr(p.active, "evolved_this_turn", False):
+            return False
         _apply_evolution(
             p.active, evolution_card, state,
             f"{state.player_name(state.current_player)}: ",
@@ -462,6 +555,9 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
         return False
     bench_pokemon = p.bench[bench_index]
     if bench_pokemon.card.id != evolution_card.evolves_from:
+        return False
+    # 2 進化：そのターンに 1 進化していたら同じターンには 2 進化できない
+    if getattr(bench_pokemon.card, "evolves_from", None) is not None and getattr(bench_pokemon, "evolved_this_turn", False):
         return False
     _apply_evolution(
         bench_pokemon, evolution_card, state,
@@ -476,13 +572,15 @@ def attack(
     attack_index: int,
 ) -> bool:
     """
-    攻撃を実行。
-    相手にダメージ、自分に self_damage があれば自分にもダメージ。
-    きぜつしたらバトル場から外れ、勝敗判定になる。
+    攻撃を実行。ねむり・マヒ中は攻撃不可。こんらん時はコインで失敗時は自分に30ダメージ。
+    相手にダメージ・状態異常、自分に self_damage を適用。
     """
     p = state.active_player_state()
     opp = state.defending_player_state()
     if not p.active or not opp.active:
+        return False
+    if getattr(p.active, "special_state", None) in ("sleep", "paralysis"):
+        state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} は状態異常のためワザが使えない")
         return False
     pokemon_card = p.active.card
     if attack_index < 0 or attack_index >= len(pokemon_card.attacks):
@@ -494,8 +592,27 @@ def attack(
         atk.energy_cost, getattr(atk, "energy_cost_typed", None),
     ):
         return False
+    # こんらん：ワザを使う前にコイン。裏 → 自分に30ダメージ、攻撃失敗
+    if getattr(p.active, "special_state", None) == "confusion":
+        if not _flip_coin():
+            self_before = p.active.hp
+            p.active.hp -= 30
+            state.log(f"{state.player_name(state.current_player)}: こんらんでコインが裏 → 自分に 30 ダメージ（HP {self_before} → {max(0, p.active.hp)}）、攻撃失敗")
+            if p.active and p.active.hp <= 0:
+                state.log(f"{state.player_name(state.current_player)} のバトル場のポケモンがこんらんの自傷できぜつ！")
+                p.active = None
+                _promote_from_bench(p, state, state.current_player)
+            return True
+        state.log(f"{state.player_name(state.current_player)}: こんらんコイン：表 → 通常通り攻撃")
     opp_before = opp.active.hp
-    damage = atk.damage
+    coin_flips = getattr(atk, "coin_flips", 0)
+    damage_per_coin = getattr(atk, "damage_per_coin", 0)
+    if coin_flips > 0 and damage_per_coin > 0:
+        heads = sum(1 for _ in range(coin_flips) if _flip_coin())
+        damage = heads * damage_per_coin
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」コイン {coin_flips} 回 → 表 {heads} 回、ダメージ {damage}")
+    else:
+        damage = atk.damage
     # 弱点：守備側の弱点タイプと攻撃側ポケモンのタイプが一致するとダメージ 2 倍
     defender_card = opp.active.card
     attacker_card = pokemon_card
@@ -540,6 +657,17 @@ def attack(
         p.active.hp -= self_dmg
         state.log(f"{state.player_name(state.current_player)}: 反動で自分に {self_dmg} ダメージ（自分 HP {self_before} → {max(0, p.active.hp)}）")
 
+    # 技の状態異常を付与（相手または自分。ねむり・マヒ・こんらんは上書き、どく・やけどは重複可）
+    status_effect = getattr(atk, "status_effect", None)
+    if status_effect:
+        target_bp = p.active if getattr(atk, "status_effect_target", "opponent") == "self" else (opp.active if opp.active else None)
+        if target_bp:
+            _apply_status(
+                state, target_bp, status_effect,
+                poison_damage=getattr(atk, "poison_damage_if_poison", 10),
+                log_prefix=f"{state.player_name(state.current_player)}: 「{atk.name}」→ ",
+            )
+
     if opp.active and opp.active.hp <= 0:
         state.log(f"{state.player_name(state.opponent())} のバトル場のポケモンがきぜつ！（{opp.knockouts_suffered + 1} 回目）")
         opp.active = None
@@ -566,7 +694,7 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
             continue
-        dmg = atk.damage
+        dmg = _attack_damage_for_eval(atk)
         if atk.name == "しっぺがえし" and opp.knockouts_suffered == 2:
             dmg += 90
         if dmg > best_dmg:
@@ -661,7 +789,44 @@ def _try_attach_energy_auto(state: GameState) -> bool:
 
 
 def end_turn(state: GameState) -> None:
-    """ターン終了：相手に交代、ターン数増加。"""
+    """ターン終了：どく・やけどダメージ、やけど回復コイン、マヒ解除。その後相手に交代、ターン数増加。"""
+    p = state.active_player_state()
+    if p.active:
+        # どく：ターン終了時に N ダメージ
+        poison_dmg = getattr(p.active, "poison_damage", 0)
+        if poison_dmg > 0:
+            before = p.active.hp
+            p.active.hp -= poison_dmg
+            state.log(f"{state.player_name(state.current_player)}: どくで {p.active.card.name} に {poison_dmg} ダメージ（HP {before} → {max(0, p.active.hp)}）")
+        if p.active and p.active.hp <= 0:
+            state.log(f"{state.player_name(state.current_player)} のバトル場の {p.active.card.name} がきぜつ！（どくのダメージ）")
+            p.active = None
+            _promote_from_bench(p, state, state.current_player)
+        if p.active:
+            # やけど：ターン終了時に 20 ダメージ、その後コインで表なら回復
+            if getattr(p.active, "burn", False):
+                before = p.active.hp
+                p.active.hp -= 20
+                state.log(f"{state.player_name(state.current_player)}: やけどで {p.active.card.name} に 20 ダメージ（HP {before} → {max(0, p.active.hp)}）")
+                if _flip_coin():
+                    p.active.burn = False
+                    state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} のやけどが治った（コイン：表）")
+                else:
+                    state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} のやけどは継続（コイン：裏）")
+            # マヒ：自分の番の終わりに解除
+            if getattr(p.active, "special_state", None) == "paralysis":
+                p.active.special_state = None
+                state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} のマヒが解けた")
+            if p.active and p.active.hp <= 0:
+                state.log(f"{state.player_name(state.current_player)} のバトル場の {p.active.card.name} がきぜつ！（状態異常のダメージ）")
+                p.active = None
+                _promote_from_bench(p, state, state.current_player)
+    # 進化フラグをリセット（次のターンからは「そのターンに 1 進化した」扱いにならない）
+    for pl in state.players:
+        if pl.active:
+            pl.active.evolved_this_turn = False
+        for bp in pl.bench:
+            bp.evolved_this_turn = False
     state.log(f"{state.player_name(state.current_player)} のターン終了")
     state.current_player = state.opponent()
     state.turn_count += 1
@@ -689,7 +854,8 @@ def run_turn_auto(state: GameState) -> bool:
     would_be_koed = p.active and opp_max_dmg > 0 and p.active.hp <= opp_max_dmg
     can_ko_opponent = opp.active and our_max_dmg >= opp.active.hp
     retreat_cost = getattr(p.active.card, "retreat_cost", 1) if p.active else 0
-    if p.active and p.bench and would_be_koed and not can_ko_opponent and p.active.attached_energy >= retreat_cost + 100:
+    can_retreat = p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
+    if can_retreat and p.active and p.bench and would_be_koed and not can_ko_opponent and p.active.attached_energy >= retreat_cost + 100:
         best = max(
             range(len(p.bench)),
             key=lambda i: (p.bench[i].hp, p.bench[i].attached_energy),
@@ -713,6 +879,16 @@ def run_turn_auto(state: GameState) -> bool:
             if is_item(c) and getattr(c, "effect", None) == "heal":
                 use_potion(state, i)
                 acted = True
+                break
+
+    # ポケモンいれかえ（バトル場とベンチを入れ替え）
+    if p.active and p.bench:
+        for i, c in enumerate(p.hand):
+            if is_item(c) and getattr(c, "effect", None) == "swap_active":
+                best_bench = max(range(len(p.bench)), key=lambda b: p.bench[b].hp, default=None)
+                if best_bench is not None and use_pokemon_swap(state, i, best_bench):
+                    acted = True
+                    p = state.active_player_state()
                 break
 
     if _try_attach_energy_auto(state):
@@ -739,7 +915,7 @@ def run_turn_auto(state: GameState) -> bool:
                 break
 
     is_game_first_turn = state.turn_count == 0
-    can_attack = not is_game_first_turn
+    can_attack = not is_game_first_turn and p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
     if can_attack:
         best_idx = _choose_best_attack_index(state, p, opp)
         if best_idx is not None:
@@ -755,7 +931,7 @@ def run_turn_auto(state: GameState) -> bool:
 def run_game_auto(state: GameState, max_turns: int | None = None) -> int | None:
     """
     自動でターンを進め、勝者が決まるまで実行。
-    戻り値: 0 or 1 = 勝者、None = 最大ターンで未決着。
+    デッキ切れ・3 きぜつ等で必ず決着。戻り値: 0 or 1 = 勝者。
     """
     if max_turns is None:
         max_turns = MAX_TURNS
@@ -778,6 +954,4 @@ def run_game_auto(state: GameState, max_turns: int | None = None) -> int | None:
             end_turn(state)
         else:
             end_turn(state)
-    if state.log_fn:
-        state.log("最大ターンに達し未決着\n")
     return None
