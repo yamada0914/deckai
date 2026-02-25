@@ -1,7 +1,7 @@
 """
 対戦シミュレーション
 デッキ A（オタチ・オオタチ・モトトカゲ）、B（メグロコ・ワルビル）、C（ズピカ・ハラバリー）で、
-初手 4 枚・先行ドローあり・3 回きぜつで勝敗。自動対戦を繰り返し、勝率などを表示する。
+初手 4 枚・先行ドローあり・サイド 3 枚取り切りで勝敗。自動対戦を繰り返し、勝率などを表示する。
 """
 import random
 import sys
@@ -41,14 +41,12 @@ def run_simulation(
         winner = run_game_auto(state)
         if state.shippegaeshi_120_used:
             shippegaeshi_120_games += 1
-        if winner is not None:
-            wins[winner] += 1
-            if winner == first_player:
-                first_win += 1
-            else:
-                second_win += 1
-        # デッキ切れ等で必ず決着するため winner is None は発生しない想定
-        if log_when_deck_loses is not None and not logged_loss and winner is not None:
+        wins[winner] += 1
+        if winner == first_player:
+            first_win += 1
+        else:
+            second_win += 1
+        if log_when_deck_loses is not None and not logged_loss:
             deck_lost = (deck0 == log_when_deck_loses and winner == 1) or (deck1 == log_when_deck_loses and winner == 0)
             if deck_lost:
                 print(f"\n===== {DECK_NAMES[log_when_deck_loses]}が負けた試合のログ =====\n")

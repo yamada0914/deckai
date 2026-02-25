@@ -1,12 +1,12 @@
 """
 card パッケージ。
 
-- card.model: 型定義（PokemonCard, Attack 等）と is_pokemon / is_energy / is_item
+- card.model: 型定義（PokemonCard, Attack 等）と is_pokemon / is_energy / is_goods
 - card.data: マスタデータと get_card_by_id / CARD_ID_TO_NAME
 
 利用側は「from card import PokemonCard, get_card_by_id」のようにパッケージから import すればよい。
 """
-from card.data import CARD_ID_TO_NAME, get_card_by_id
+from card.data import CARD_ID_TO_NAME, get_card_by_id, get_trainer_id_by_name
 from card.model import (
     Attack,
     CardType,
@@ -14,14 +14,14 @@ from card.model import (
     EnergyTypeId,
     EnergyTypeInfo,
     ENERGY_TYPES,
-    ItemCard,
+    GoodsCard,
     PokemonCard,
     PokemonTypeId,
     PokemonTypeInfo,
     POKEMON_TYPES,
     SupportCard,
     is_energy,
-    is_item,
+    is_goods,
     is_pokemon,
     is_support,
 )
@@ -34,15 +34,16 @@ __all__ = [
     "EnergyTypeId",
     "EnergyTypeInfo",
     "ENERGY_TYPES",
-    "ItemCard",
+    "GoodsCard",
     "PokemonCard",
     "PokemonTypeId",
     "PokemonTypeInfo",
     "POKEMON_TYPES",
     "SupportCard",
     "get_card_by_id",
+    "get_trainer_id_by_name",
     "is_energy",
-    "is_item",
+    "is_goods",
     "is_pokemon",
     "is_support",
 ]

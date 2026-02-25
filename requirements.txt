@@ -1,3 +1,5 @@
 openai>=1.0.0
 python-dotenv>=1.0.0
 pykakasi>=2.0.0
+selenium>=4.0.0
+webdriver-manager>=4.0.0
