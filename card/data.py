@@ -9,7 +9,6 @@ from card.model import Attack, EnergyCard, GoodsCard, is_goods, is_support, Poke
 
 # ----- マスタカード -----
 
-# オタチ（たねポケモン・デッキ A 用）
 OTACHI = PokemonCard(
     id="otachi",
     name="オタチ",
@@ -108,7 +107,6 @@ HARABARII = PokemonCard(
 )
 
 # ----- 以下 JSON から生成（update_cards_from_json.py で上書き） -----
-# カラミンゴ（karamingo-svg-029）
 KARAMINGO_SVG_029 = PokemonCard(
     id='karamingo-svg-029',
     name='カラミンゴ',
@@ -125,7 +123,6 @@ KARAMINGO_SVG_029 = PokemonCard(
     resistance='fighting',
 )
 
-# ガケガニ（gakegani-svd-067）
 GAKEGANI_SVD_067 = PokemonCard(
     id='gakegani-svd-067',
     name='ガケガニ',
@@ -141,7 +138,6 @@ GAKEGANI_SVD_067 = PokemonCard(
     weakness='grass',
 )
 
-# コイル（coil-svd-036）
 COIL_SVD_036 = PokemonCard(
     id='coil-svd-036',
     name='コイル',
@@ -157,7 +153,6 @@ COIL_SVD_036 = PokemonCard(
     weakness='fighting',
 )
 
-# ジバコイル（jibakoil-svd-038）
 JIBAKOIL_SVD_038 = PokemonCard(
     id='jibakoil-svd-038',
     name='ジバコイル',
@@ -173,7 +168,6 @@ JIBAKOIL_SVD_038 = PokemonCard(
     weakness='fighting',
 )
 
-# ズピカ（zupika-svd-041）
 ZUPIKA_SVD_041 = PokemonCard(
     id='zupika-svd-041',
     name='ズピカ',
@@ -188,7 +182,6 @@ ZUPIKA_SVD_041 = PokemonCard(
     weakness='fighting',
 )
 
-# ノノクラゲ（nonokurage-svd-065）
 NONOKURAGE_SVD_065 = PokemonCard(
     id='nonokurage-svd-065',
     name='ノノクラゲ',
@@ -204,7 +197,6 @@ NONOKURAGE_SVD_065 = PokemonCard(
     weakness='grass',
 )
 
-# ハラバリー（harabarii-svd-042）
 HARABARII_SVD_042 = PokemonCard(
     id='harabarii-svd-042',
     name='ハラバリー',
@@ -219,7 +211,6 @@ HARABARII_SVD_042 = PokemonCard(
     weakness='fighting',
 )
 
-# メグロコ（meguroko-svd-062）
 MEGUROKO_SVD_062 = PokemonCard(
     id='meguroko-svd-062',
     name='メグロコ',
@@ -235,7 +226,6 @@ MEGUROKO_SVD_062 = PokemonCard(
     weakness='grass',
 )
 
-# モトトカゲ（mototokage-mc-627）
 MOTOTOKAGE_MC_627 = PokemonCard(
     id='mototokage-mc-627',
     name='モトトカゲ',
@@ -251,7 +241,6 @@ MOTOTOKAGE_MC_627 = PokemonCard(
     weakness='fighting',
 )
 
-# リククラゲ（rikukurage-svd-066）
 RIKUKURAGE_SVD_066 = PokemonCard(
     id='rikukurage-svd-066',
     name='リククラゲ',
@@ -267,7 +256,6 @@ RIKUKURAGE_SVD_066 = PokemonCard(
     weakness='grass',
 )
 
-# レアコイル（rarecoil-svd-037）
 RARECOIL_SVD_037 = PokemonCard(
     id='rarecoil-svd-037',
     name='レアコイル',
@@ -283,7 +271,6 @@ RARECOIL_SVD_037 = PokemonCard(
     weakness='fighting',
 )
 
-# ワルビアル（warubiaru-svd-064）
 WARUBIARU_SVD_064 = PokemonCard(
     id='warubiaru-svd-064',
     name='ワルビアル',
@@ -299,7 +286,6 @@ WARUBIARU_SVD_064 = PokemonCard(
     weakness='grass',
 )
 
-# ワルビル（warubiru-svd-063）
 WARUBIRU_SVD_063 = PokemonCard(
     id='warubiru-svd-063',
     name='ワルビル',
@@ -333,14 +319,10 @@ WARUBIRU_SVD_063 = PokemonCard(
 
 
 
-# 基本エネルギー（無色＝任意の 1 エネルギーとして使用可）
 BASIC_ENERGY = EnergyCard(id="basic-energy", name="基本エネルギー", provides=1, energy_type=None)
-# 基本雷エネルギー（技コストの「雷」にカウント）
 BASIC_ENERGY_LIGHTNING = EnergyCard(id="basic-energy-lightning", name="基本雷エネルギー", provides=1, energy_type="lightning")
-# 基本闘エネルギー（技コストの「闘」にカウント）
 BASIC_ENERGY_FIGHTING = EnergyCard(id="basic-energy-fighting", name="基本闘エネルギー", provides=1, energy_type="fighting")
 
-# きずぐすり（自分のバトル場のポケモンを 30 回復）
 POTION = GoodsCard(
     id="potion",
     name="きずぐすり",
@@ -349,7 +331,6 @@ POTION = GoodsCard(
     description="自分のバトル場のポケモンを 30 回復する",
 )
 
-# ポケモンいれかえ（自分のバトル場のポケモンとベンチのポケモンを入れ替えるグッズ）
 POKEMON_IREKAE = GoodsCard(
     id="pokemon_irekae",
     name="ポケモンいれかえ",
@@ -357,7 +338,6 @@ POKEMON_IREKAE = GoodsCard(
     description="自分のバトル場のポケモンとベンチのポケモンを 1 体入れ替える",
 )
 
-# 岩のむねあて（ポケモンのどうぐ：つけている闘ポケモンが受けるワザのダメージ -30）
 IWANOMUNEATE = GoodsCard(
     id="iwanomuneate",
     name="岩のむねあて",
@@ -368,7 +348,6 @@ IWANOMUNEATE = GoodsCard(
     tool_condition_type="fighting",
 )
 
-# ネモ（サポート：デッキから 3 枚引く）
 NEMO = SupportCard(
     id="nemo",
     name="ネモ",
@@ -377,7 +356,6 @@ NEMO = SupportCard(
     description="デッキからカードを 3 枚引く",
 )
 
-# ログ用：カード ID → 表示名
 CARD_ID_TO_NAME = {
     "otachi": "オタチ",
     "ootachi": "オオタチ",
@@ -422,7 +400,6 @@ def get_trainer_id_by_name(name_ja: str) -> str | None:
     return None
 
 
-# カード ID → マスタカード（get_card_by_id 用）
 _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | SupportCard] = {
     "otachi": OTACHI,
     "ootachi": OOTACHI,

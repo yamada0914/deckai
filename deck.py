@@ -12,7 +12,6 @@ from card import CARD_ID_TO_NAME, get_card_by_id, get_trainer_id_by_name
 _PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_READ_CARDS_JSON = _PROJECT_ROOT / "read_cards_result.json"
 
-# 数千ゲームなどで同じ deck_code を繰り返し使うときのレシピキャッシュ (deck_code, json_path_str) -> recipe
 _recipe_cache: dict[tuple[str, str], dict[str, int]] = {}
 
 
@@ -41,19 +40,14 @@ def clear_recipe_cache() -> None:
     """load_recipe_from_deck_code のキャッシュを空にする。read_cards_result.json を更新したあとで再読み込みしたいときに呼ぶ。"""
     _recipe_cache.clear()
 
-# デッキ A（14 枚）: オタチ 3、オオタチ 2、モトトカゲ 2、エネルギー 6、ネモ 1
 DECK_RECIPE_A = {"otachi": 3, "ootachi": 2, "mototokage": 2, "basic-energy": 6, "nemo": 1}
-# デッキ B（15 枚）: メグロコ 3、ワルビル 2、モトトカゲ 2、エネルギー 6、きずぐすり 1
 DECK_RECIPE_B = {"meguroko": 3, "warubiru": 2, "mototokage": 2, "basic-energy": 6, "potion": 1}
-# デッキ C（15 枚）: ズピカ 3、ハラバリー 2、モトトカゲ 2、無色 4・雷 2、きずぐすり 1
 DECK_RECIPE_C = {"zupika-svd-041": 3, "harabarii-svd-042": 2, "mototokage": 2, "basic-energy": 4, "basic-energy-lightning": 2, "potion": 1, "nemo": 4}
-# デッキ D（30 枚）: メグロコ 3、ワルビル 2、ワルビアル 2、リククラゲ 2、ノノクラゲ 3、ガケガニ 2、エネルギー 10、ポケモンいれかえ 2
 DECK_RECIPE_D = {"meguroko-svd-062": 3, "warubiru-svd-063": 2, "warubiaru-svd-064": 2, "rikukurage-svd-066": 2, "nonokurage-svd-065": 3, "gakegani-svd-067": 2, "basic-energy-fighting": 8, "nemo": 4, "potion": 2, "pokemon_irekae": 2}
-# デッキ E（30 枚）: ジバコイル 2, レアコイル 2, コイル 3, ズピカ 3、ハラバリー 2、 カラミンゴ 2、 エネルギー 10、ポケモンいれかえ 2
 DECK_RECIPE_E = {"jibakoil-svd-038": 2, "rarecoil-svd-037": 2, "coil-svd-036": 3, "zupika-svd-041": 3, "harabarii-svd-042": 2, "karamingo-svg-029": 2, "basic-energy-lightning": 8, "nemo": 4, "potion": 2, "pokemon_irekae": 2}
 
 DECK_RECIPES = [DECK_RECIPE_A, DECK_RECIPE_B, DECK_RECIPE_C, DECK_RECIPE_D, DECK_RECIPE_E]
-DECK_SIZE = 13  # 最大デッキ枚数（デッキにより 12 または 13）
+DECK_SIZE = 13
 STARTING_HAND_SIZE = 4
 
 
@@ -102,7 +96,6 @@ def load_recipe_from_deck_code(
     except (json.JSONDecodeError, OSError):
         return None
     deck_lists = data.get("deck_lists", [])
-    # 分割ファイル（card_files）の場合は各 JSON から cards を読む
     card_files = data.get("card_files")
     if card_files and isinstance(card_files, dict):
         cards = _load_cards_from_split_files(path.parent, card_files)
@@ -112,7 +105,6 @@ def load_recipe_from_deck_code(
             cards = [c for k in ("pokemon", "goods", "support", "energy") for c in (raw_cards.get(k) or [])]
         else:
             cards = raw_cards
-    # name_ja -> レシピ用 id。トレーナーは同名＝同一のためレジストリ id に寄せる。
     name_to_id: dict[str, str] = {}
     for c in cards:
         name = (c.get("name_ja") or "").strip()
@@ -124,7 +116,6 @@ def load_recipe_from_deck_code(
             cid = get_trainer_id_by_name(name) or cid
         if cid and name not in name_to_id:
             name_to_id[name] = cid
-    # 指定 deck_code のデッキを取得
     deck_item = None
     for d in deck_lists:
         if (d.get("deck_code") or "").strip() == deck_code.strip():

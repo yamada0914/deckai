@@ -11,13 +11,11 @@ from typing import Literal
 
 CardType = Literal["pokemon", "energy", "goods", "support"]
 
-# 基本エネルギーカードがあるタイプ（9 種）。画像認識用に各タイプの「形」の説明を保持する。
 EnergyTypeId = Literal[
     "grass", "fire", "water", "lightning", "psychic",
     "fighting", "darkness", "metal", "fairy",
 ]
 
-# ポケモンのタイプ全 11 種（エネルギーカードのない colorless / dragon を含む）
 PokemonTypeId = Literal[
     "grass", "fire", "water", "lightning", "psychic",
     "fighting", "darkness", "metal", "fairy",
@@ -28,14 +26,13 @@ PokemonTypeId = Literal[
 @dataclass(frozen=True)
 class EnergyTypeInfo:
     """1 種類のエネルギータイプの情報（表示名と画像認識用の形の説明）。"""
-    id: str  # コード用（grass, fire, ...）
-    name_ja: str  # 日本語 1 文字（草・炎・水・雷・超・闘・悪・鋼・妖）
+    id: str
+    name_ja: str
     name_en: str
-    shape_description_ja: str  # 画像認識用：シンボルの形の説明
-    shape_description_en: str  # 同上（英語）
+    shape_description_ja: str
+    shape_description_en: str
 
 
-# 9 種の基本エネルギータイプと、それぞれのシンボル形の説明（今後画像認識で参照する）
 ENERGY_TYPES: tuple[EnergyTypeInfo, ...] = (
     EnergyTypeInfo(
         id="grass",
@@ -111,10 +108,9 @@ class PokemonTypeInfo:
     name_en: str
     shape_description_ja: str
     shape_description_en: str
-    has_basic_energy: bool  # 基本エネルギーカードが存在するか（colorless / dragon は False）
+    has_basic_energy: bool
 
 
-# ポケモンタイプ全 11 種（エネルギー 9 種 + 無色・ドラゴン）。画像認識用の形の説明付き。
 def _pokemon_types() -> tuple[PokemonTypeInfo, ...]:
     energy_by_id = {e.id: e for e in ENERGY_TYPES}
     return (
@@ -151,37 +147,30 @@ def _pokemon_types() -> tuple[PokemonTypeInfo, ...]:
 POKEMON_TYPES: tuple[PokemonTypeInfo, ...] = _pokemon_types()
 
 
-# 技のエネルギーコスト 1 スロットのタイプ（energy_cost_typed の要素）。無色＝任意の 1 エネルギー。
 EnergyCostSlot = Literal[
     "grass", "fire", "water", "lightning", "psychic",
     "fighting", "darkness", "metal", "fairy", "colorless",
 ]
 
 
-# 技が付与する状態異常（ねむり・マヒ・こんらんはどれか1つのみ、どく・やけどは重複可）
 StatusEffectId = Literal["sleep", "paralysis", "confusion", "poison", "burn"]
 
 
 @dataclass
 class Attack:
     name: str
-    # 技に必要なエネルギー数（合計）。energy_cost_typed を指定する場合はその長さと一致させる。
     energy_cost: int
     damage: int
     self_damage: int = 0
-    bench_damage: int = 0  # 相手のベンチへの追加ダメージ（1 体あたり）
+    bench_damage: int = 0
     description: str = ""
-    bench_damage_count: int = 1  # ベンチに与える対象の数。0 なら「全員」、1 以上ならその数（最大でベンチの長さ）。
-    bench_damage_target: Literal["opponent", "self"] = "opponent"  # "self" なら自分のベンチにもダメージ（じしんなど）
-    # 技に必要なエネルギーをタイプごとに指定（例: ["lightning", "colorless"] = 雷1＋無色1）。省略時は energy_cost だけの「無色のみ」扱い。
+    bench_damage_count: int = 1
+    bench_damage_target: Literal["opponent", "self"] = "opponent"
     energy_cost_typed: list[EnergyCostSlot] | None = None
-    # 技が付与する状態異常。status_effect_target で自分か相手かを指定。
     status_effect: StatusEffectId | None = None
-    status_effect_target: Literal["self", "opponent"] = "opponent"  # こんらん等で「このポケモン」のとき "self"
-    # True のとき「コインを投げオモテなら」状態異常。False なら確定で状態異常。
+    status_effect_target: Literal["self", "opponent"] = "opponent"
     status_effect_on_coin_heads: bool = False
-    poison_damage_if_poison: int = 10  # status_effect == "poison" のときの毎ターンダメージ（10/20/30）
-    # コイン技：coin_flips 回投げ、表の数 × damage_per_coin がダメージ。両方 >0 のとき damage は使わない。
+    poison_damage_if_poison: int = 10
     coin_flips: int = 0
     damage_per_coin: int = 0
 
@@ -194,16 +183,12 @@ class PokemonCard:
     hp: int = 110
     max_hp: int = 110
     attacks: list[Attack] = field(default_factory=list)
-    evolves_from: str | None = None  # 進化元の id または name_ja（例: "meguroko" または "メグロコ"）
-    retreat_cost: int = 1  # にげるために捨てるエネルギー数。無色は任意の 1 エネルギーでよい。
+    evolves_from: str | None = None
+    retreat_cost: int = 1
     instance_id: str = ""
-    # ポケモンのタイプ（草・炎・水など）。弱点判定で攻撃側のタイプとして参照する。
     pokemon_type: PokemonTypeId | None = None
-    # 弱点。このタイプのポケモンから技を受けると、受けるダメージが 2 倍になる。
     weakness: PokemonTypeId | None = None
-    # 抵抗力。このタイプの技から受けるダメージが -30（0 未満なら 0）。
     resistance: PokemonTypeId | None = None
-    # きぜつさせた相手がとるサイドの枚数：is_mega なら 3 枚、is_ex なら 2 枚、どちらもでなければ 1 枚。
     is_ex: bool = False
     is_mega: bool = False
 
@@ -233,7 +218,6 @@ class EnergyCard:
     type: CardType = "energy"
     provides: int = 1
     instance_id: str = ""
-    # このエネルギーが付与するタイプ。None の場合は無色（任意の 1 エネルギーとして扱う）。
     energy_type: EnergyTypeId | None = None
 
 
@@ -246,10 +230,9 @@ class GoodsCard:
     heal_amount: int = 20
     description: str = ""
     instance_id: str = ""
-    # ポケモンのどうぐ用（1 匹に 1 枚つけられる。つけている間効果がはたらく）
     is_tool: bool = False
-    tool_damage_reduce: int = 0  # 受けるワザのダメージを減らす量（例: 岩のむねあては 30）
-    tool_condition_type: str | None = None  # 効果がはたらく条件のタイプ（例: fighting＝闘のみ）。None なら常に
+    tool_damage_reduce: int = 0
+    tool_condition_type: str | None = None
 
 
 @dataclass

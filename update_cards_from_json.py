@@ -17,12 +17,10 @@ import json
 import re
 from pathlib import Path
 
-# プロジェクトルート
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_JSON_PATH = PROJECT_ROOT / "read_cards_result.json"
 DATA_PY_PATH = PROJECT_ROOT / "card" / "data.py"
 
-# data.py 内の置き換えブロック用マーカー（data.py に同じ文字列が入っていること）
 CARD_BLOCK_START = "# ----- 以下 JSON から生成（update_cards_from_json.py で上書き） -----"
 CARD_BLOCK_END = "# ----- 以上 JSON から生成 -----"
 REGISTRY_MARKER_START = "    # ----- JSON から生成 -----"
@@ -78,7 +76,6 @@ def attack_from_json(a: dict) -> str:
     bench_damage = a.get("bench_damage", 0)
     description = a.get("description", "") or ""
     cost_typed = a.get("energy_cost_typed")
-    # コイン技：JSON にあればそれを使い、なければ説明から推測
     coin_flips = a.get("coin_flips", 0) or 0
     damage_per_coin = a.get("damage_per_coin", 0) or 0
     if not (coin_flips > 0 and damage_per_coin > 0) and description and "コイン" in description and "オモテ" in description and "×" in description:
@@ -88,8 +85,7 @@ def attack_from_json(a: dict) -> str:
             coin_flips = int(m_n.group(1))
             damage_per_coin = int(m_d.group(1))
     if coin_flips > 0 and damage_per_coin > 0:
-        damage = 0  # コイン技のときはダメージはコインで決まる
-    # 状態異常：JSON にあればそれを使い、なければ説明から推測
+        damage = 0
     status_effect = a.get("status_effect")
     status_effect_target = a.get("status_effect_target")
     if not status_effect and description and "こんらん" in description and "このポケモン" in description:
@@ -97,7 +93,6 @@ def attack_from_json(a: dict) -> str:
         status_effect_target = "self"
     if not status_effect and description and "マヒ" in description:
         status_effect = "paralysis"
-    # コイン表のときだけ状態異常：JSON にあればそれを使い、なければ説明から推測（「コインを投げオモテなら」など）
     status_effect_on_coin_heads = a.get("status_effect_on_coin_heads", False)
     if not status_effect_on_coin_heads and status_effect and description and "コイン" in description and "オモテなら" in description:
         status_effect_on_coin_heads = True
@@ -291,24 +286,20 @@ def update_data_py(cards: list[dict], dry_run: bool = False) -> str:
 
     text = DATA_PY_PATH.read_text(encoding="utf-8")
 
-    # カード定義ブロック（開始・終了マーカーを含めて置換）
     card_pattern = re.escape(CARD_BLOCK_START) + r"\n.*?" + re.escape(CARD_BLOCK_END)
     card_repl = f"{CARD_BLOCK_START}\n{cards_block}\n{CARD_BLOCK_END}"
     if not re.search(card_pattern, text, re.DOTALL):
         raise SystemExit("card/data.py にカード用マーカーが見つかりません。")
     text = re.sub(card_pattern, card_repl, text, count=1, flags=re.DOTALL)
 
-    # CARD_ID_TO_NAME 内の JSON ブロック（マーカー間の行だけ置換）
     name_pattern = re.escape(REGISTRY_MARKER_START) + r"\n(.*?)" + re.escape(REGISTRY_MARKER_END)
     name_repl = f"{REGISTRY_MARKER_START}\n{name_block}\n{REGISTRY_MARKER_END}"
     if not re.search(name_pattern, text, re.DOTALL):
         raise SystemExit("card/data.py の CARD_ID_TO_NAME にマーカーが見つかりません。")
     text = re.sub(name_pattern, name_repl, text, count=1, flags=re.DOTALL)
 
-    # _CARD_REGISTRY 内の JSON ブロック
     reg_pattern = re.escape(REGISTRY_MARKER_START) + r"\n(.*?)" + re.escape(REGISTRY_MARKER_END)
     reg_repl = f"{REGISTRY_MARKER_START}\n{reg_block}\n{REGISTRY_MARKER_END}"
-    # 2 つ目のマーカーペア（_CARD_REGISTRY 内）を置換
     matches = list(re.finditer(reg_pattern, text, re.DOTALL))
     if len(matches) < 2:
         raise SystemExit("card/data.py の _CARD_REGISTRY にマーカーが見つかりません。")
@@ -331,7 +322,6 @@ def main() -> None:
         raise SystemExit(f"ファイルが見つかりません: {path}")
 
     data = json.loads(path.read_text(encoding="utf-8"))
-    # 分割ファイル（card_files）の場合は各 JSON から cards を読む
     card_files = data.get("card_files")
     if card_files and isinstance(card_files, dict):
         cards = _load_cards_from_split_files(path.parent, card_files)
@@ -345,7 +335,6 @@ def main() -> None:
         raise SystemExit("cards が空です")
 
     if args.output is not None:
-        # ファイルに出力するだけ（従来の挙動）
         out_lines = [
             '"""',
             "read_cards_result.json から生成。",
@@ -366,7 +355,6 @@ def main() -> None:
         print(f"出力しました: {args.output}", file=__import__("sys").stderr)
         return
 
-    # data.py を直接更新
     update_data_py(cards, dry_run=args.dry_run)
     if args.dry_run:
         print("--dry-run のため card/data.py は書き換えていません。", file=__import__("sys").stderr)
