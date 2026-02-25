@@ -2,14 +2,14 @@
 カードの型定義（model）。
 
 ポケモン・エネルギー・アイテムの dataclass、エネルギータイプ一覧（画像認識用の形の情報含む）、
-カード種別判定 is_pokemon / is_energy / is_item を提供。
+カード種別判定 is_pokemon / is_energy / is_goods を提供。
 
 ルール: 無色のエネルギーは技のコスト・にげるコストの両方で、任意の 1 エネルギーとして扱う。
 """
 from dataclasses import dataclass, field
 from typing import Literal
 
-CardType = Literal["pokemon", "energy", "item", "support"]
+CardType = Literal["pokemon", "energy", "goods", "support"]
 
 # 基本エネルギーカードがあるタイプ（9 種）。画像認識用に各タイプの「形」の説明を保持する。
 EnergyTypeId = Literal[
@@ -169,13 +169,17 @@ class Attack:
     energy_cost: int
     damage: int
     self_damage: int = 0
-    bench_damage: int = 0  # 相手のベンチ 1 体への追加ダメージ
+    bench_damage: int = 0  # 相手のベンチへの追加ダメージ（1 体あたり）
     description: str = ""
+    bench_damage_count: int = 1  # ベンチに与える対象の数。0 なら「全員」、1 以上ならその数（最大でベンチの長さ）。
+    bench_damage_target: Literal["opponent", "self"] = "opponent"  # "self" なら自分のベンチにもダメージ（じしんなど）
     # 技に必要なエネルギーをタイプごとに指定（例: ["lightning", "colorless"] = 雷1＋無色1）。省略時は energy_cost だけの「無色のみ」扱い。
     energy_cost_typed: list[EnergyCostSlot] | None = None
     # 技が付与する状態異常。status_effect_target で自分か相手かを指定。
     status_effect: StatusEffectId | None = None
     status_effect_target: Literal["self", "opponent"] = "opponent"  # こんらん等で「このポケモン」のとき "self"
+    # True のとき「コインを投げオモテなら」状態異常。False なら確定で状態異常。
+    status_effect_on_coin_heads: bool = False
     poison_damage_if_poison: int = 10  # status_effect == "poison" のときの毎ターンダメージ（10/20/30）
     # コイン技：coin_flips 回投げ、表の数 × damage_per_coin がダメージ。両方 >0 のとき damage は使わない。
     coin_flips: int = 0
@@ -190,7 +194,7 @@ class PokemonCard:
     hp: int = 110
     max_hp: int = 110
     attacks: list[Attack] = field(default_factory=list)
-    evolves_from: str | None = None  # 進化元（例: "meguroko"）
+    evolves_from: str | None = None  # 進化元の id または name_ja（例: "meguroko" または "メグロコ"）
     retreat_cost: int = 1  # にげるために捨てるエネルギー数。無色は任意の 1 エネルギーでよい。
     instance_id: str = ""
     # ポケモンのタイプ（草・炎・水など）。弱点判定で攻撃側のタイプとして参照する。
@@ -199,6 +203,9 @@ class PokemonCard:
     weakness: PokemonTypeId | None = None
     # 抵抗力。このタイプの技から受けるダメージが -30（0 未満なら 0）。
     resistance: PokemonTypeId | None = None
+    # きぜつさせた相手がとるサイドの枚数：is_mega なら 3 枚、is_ex なら 2 枚、どちらもでなければ 1 枚。
+    is_ex: bool = False
+    is_mega: bool = False
 
     def copy(self) -> "PokemonCard":
         return PokemonCard(
@@ -214,6 +221,8 @@ class PokemonCard:
             pokemon_type=self.pokemon_type,
             weakness=self.weakness,
             resistance=self.resistance,
+            is_ex=self.is_ex,
+            is_mega=self.is_mega,
         )
 
 
@@ -229,14 +238,18 @@ class EnergyCard:
 
 
 @dataclass
-class ItemCard:
+class GoodsCard:
     id: str
     name: str
-    type: CardType = "item"
+    type: CardType = "goods"
     effect: str = "heal"
     heal_amount: int = 20
     description: str = ""
     instance_id: str = ""
+    # ポケモンのどうぐ用（1 匹に 1 枚つけられる。つけている間効果がはたらく）
+    is_tool: bool = False
+    tool_damage_reduce: int = 0  # 受けるワザのダメージを減らす量（例: 岩のむねあては 30）
+    tool_condition_type: str | None = None  # 効果がはたらく条件のタイプ（例: fighting＝闘のみ）。None なら常に
 
 
 @dataclass
@@ -259,8 +272,8 @@ def is_energy(card) -> bool:
     return getattr(card, "type", None) == "energy"
 
 
-def is_item(card) -> bool:
-    return getattr(card, "type", None) == "item"
+def is_goods(card) -> bool:
+    return getattr(card, "type", None) == "goods"
 
 
 def is_support(card) -> bool:

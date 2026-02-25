@@ -1,0 +1,152 @@
+[
+  {
+    "card_type": "goods",
+    "name_ja": "おとどけドローン",
+    "description": "コインを2回投げ、すべてオモテなら、自分の山札から好きなカードを1枚選び、手札に加える。そして山札を切る。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "114/139",
+    "_source_image": "043816_T_OTODOKEDORON.jpg",
+    "id": "otodokedoron"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "たんぱんこぞう",
+    "description": "自分の手札をすべて山札にもどして切る。その後、山札を5枚引く。",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "132/139",
+    "_source_image": "043834_T_TANPANKOZOU.jpg",
+    "id": "tanpankozou"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ふしぎなアメ",
+    "description": "自分の手札から2進化ポケモンを1枚選び、そのポケモンへと進化する自分の場のたねポケモンにのせ、1進化をとばして進化させる。（最初の自分の番や、出したばかりのポケモンには使えない。）",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "120/139",
+    "_source_image": "043822_T_FUSHIGINAAME.jpg",
+    "id": "fushiginaame"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "エネルギー回収",
+    "description": "自分のトラッシュから基本エネルギーを2枚まで選び、相手に見せて、手札に加える。",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "110/139",
+    "_source_image": "043812_T_ENERUGIKAISHIXYUU.jpg",
+    "id": "unknown"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "エレキジェネレーター",
+    "description": "自分の山札を上から5枚見て、その中から「基本エネルギー」を2枚まで選び、ベンチのポケモンに好きなようにつける。残りのカードは山札にもどして切る。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "113/139",
+    "_source_image": "043815_T_EREKIJIENERETA.jpg",
+    "id": "erekijienereta"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "キハダ",
+    "description": "自分の手札を1枚選び、山札の下にもどす。その後、自分の手札が5枚になるように、山札を引く。（自分の手札がこのカード1枚だけなら、このカードは使えない。）",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "127/139",
+    "_source_image": "043829_T_KIHADA.jpg",
+    "id": "kihada"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ジャッジマン",
+    "description": "おたがいのプレイヤーは、それぞれ手札をすべて山札にもどして切る。その後、それぞれ山札を4枚引く。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "130/139",
+    "_source_image": "043832_T_JIXYAJJIMAN.jpg",
+    "id": "jixyajjiman"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "スーパーボール",
+    "description": "自分の山札を上から7枚見て、その中からポケモンを1枚選び、相手に見せて、手札に加える。残りのカードは山札にもどして切る。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "117/139",
+    "_source_image": "043819_T_SUPABORU.jpg",
+    "id": "supaboru"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ネモ",
+    "description": "自分の山札を3枚引く。",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "133/139",
+    "_source_image": "043835_T_NEMOKAKO.jpg",
+    "id": "nemokako"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ネモ",
+    "description": "自分の山札を3枚引く。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "134/139",
+    "_source_image": "043836_T_NEMOMIRAI.jpg",
+    "id": "nemomirai"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ハイパーボール",
+    "description": "このカードは、自分の手札を2枚トラッシュしなければ使えない。自分の山札からポケモンを1枚選び、相手に見せて、手札に加える。そして山札を切る。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "119/139",
+    "_source_image": "043821_T_HAIPABORU.jpg",
+    "id": "haipaboru"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ポケモンいれかえ",
+    "description": "自分のバトルポケモンをベンチポケモンと入れ替える。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "122/139",
+    "_source_image": "043824_T_POKEMONIREKAE.jpg",
+    "id": "pokemonirekae"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ポケモンキャッチャー",
+    "description": "コインを1回投げオモテなら、相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "123/139",
+    "_source_image": "043825_T_POKEMONKIXYATCHIXYA.jpg",
+    "id": "pokemonkixyatchixya"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "博士の研究",
+    "description": "自分の手札をすべてトラッシュし、山札を7枚引く。",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "135/139",
+    "_source_image": "043837_T_HAKASENOKENKIXYUUORIMUHAKASE.jpg",
+    "id": "hakasenokenkyuu"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "博士の研究",
+    "description": "自分の手札をすべてトラッシュし、山札を7枚引く。",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "136/139",
+    "_source_image": "043838_T_HAKASENOKENKIXYUUFUTOUHAKASE.jpg",
+    "id": "hakasenokenkixyuufutouhakase"
+  }
+]

@@ -1,0 +1,909 @@
+[
+  {
+    "card_type": "pokemon",
+    "name_ja": "ウソッキー",
+    "hp": 110,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "058/139",
+    "attacks": [
+      {
+        "name": "なぐってかくれる",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 20,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "コインを1回投げオモテなら、次の相手の番、このポケモンはワザのダメージや効果を受けない。"
+      },
+      {
+        "name": "ひじうち",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 90,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "043760_P_USOKKI.jpg",
+    "id": "usokki-svd-058"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "カイデン",
+    "hp": 60,
+    "pokemon_type": "lightning",
+    "weakness": "lightning",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "044/139",
+    "attacks": [
+      {
+        "name": "ふきあらす",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "colorless"
+        ],
+        "damage": 0,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "相手は相手自身の手札をすべて山札にもどして切る。その後、相手は山札を4枚引く。"
+      },
+      {
+        "name": "はばたく",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 40,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "043746_P_KAIDEN.jpg",
+    "id": "kaiden-svd-044"
+  },
+  {
+    "name_ja": "カラミンゴ",
+    "hp": 110,
+    "pokemon_type": "colorless",
+    "weakness": "lightning",
+    "resistance": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "svG",
+    "card_number": "029/049",
+    "attacks": [
+      {
+        "name": "はばたく",
+        "energy_cost": 1,
+        "energy_cost_typed": null,
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "きゅうこうか",
+        "energy_cost": 3,
+        "energy_cost_typed": null,
+        "damage": 110,
+        "self_damage": 20,
+        "bench_damage": 0,
+        "description": "このポケモンにも20ダメージ。"
+      }
+    ],
+    "id": "karamingo-svg-029",
+    "_source_image": "044500_P_KARAMINGO.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "カラミンゴ",
+    "hp": 110,
+    "pokemon_type": "colorless",
+    "weakness": "lightning",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SvD",
+    "card_number": "109/139",
+    "attacks": [
+      {
+        "name": "はばたく",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "きゅうこうか",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 110,
+        "self_damage": 20,
+        "bench_damage": 0,
+        "description": "このポケモンにも20ダメージ。"
+      }
+    ],
+    "_source_image": "043811_P_KARAMINGO.jpg",
+    "id": "karamingo-svd-109"
+  },
+  {
+    "name_ja": "ガケガニ",
+    "hp": 130,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 3,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "067/139",
+    "attacks": [
+      {
+        "name": "はさむ",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "アドレナハンマー",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting",
+          "fighting"
+        ],
+        "damage": 130,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "このポケモンをこんらんにする。",
+        "status_effect": "confusion",
+        "status_effect_target": "self"
+      }
+    ],
+    "id": "gakegani-svd-067",
+    "_source_image": "043769_P_GAKEGANI.jpg"
+  },
+  {
+    "name_ja": "コイル",
+    "hp": 60,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "036/139",
+    "attacks": [
+      {
+        "name": "ぶつかる",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "lightning"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "スピードボール",
+        "energy_cost": 2,
+        "energy_cost_typed": null,
+        "damage": 20,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "id": "coil-svd-036",
+    "_source_image": "043738_P_KOIRU.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "コライドンex",
+    "is_ex": true,
+    "hp": 230,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "068/139",
+    "attacks": [
+      {
+        "name": "スプリットビーム",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 20,
+        "self_damage": 0,
+        "bench_damage": 20,
+        "bench_damage_count": 2,
+        "description": "相手のベンチポケモン2匹にも、それぞれ20ダメージ。[ベンチは弱点・抵抗力を計算しない。]"
+      },
+      {
+        "name": "ガイアプレス",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting",
+          "colorless"
+        ],
+        "damage": 230,
+        "self_damage": 30,
+        "bench_damage": 0,
+        "description": "このポケモンにも30ダメージ。"
+      }
+    ],
+    "_source_image": "043770_P_KORAIDONEX.jpg",
+    "id": "koraidonex-svd-068"
+  },
+  {
+    "name_ja": "ジバコイル",
+    "hp": 170,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 2,
+    "evolves_from": "レアコイル",
+    "regulation": "G",
+    "set_code": "SvD",
+    "card_number": "038/139",
+    "attacks": [
+      {
+        "name": "マグネリジェクト",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "lightning"
+        ],
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "のぞむなら、相手のバトルポケモンをベンチポケモンと入れ替える。[バトル場に出すポケモンは相手が選ぶ。]"
+      },
+      {
+        "name": "かみなり",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "lightning",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 180,
+        "self_damage": 30,
+        "bench_damage": 0,
+        "description": "このポケモンにも30ダメージ。"
+      }
+    ],
+    "id": "jibakoil-svd-038",
+    "_source_image": "043740_P_JIBAKOIRU.jpg"
+  },
+  {
+    "name_ja": "ズピカ",
+    "hp": 60,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "041/139",
+    "attacks": [
+      {
+        "name": "でんげき",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "lightning",
+          "colorless"
+        ],
+        "damage": 40,
+        "self_damage": 10,
+        "bench_damage": 0,
+        "description": "このポケモンにも10ダメージ。"
+      }
+    ],
+    "id": "zupika-svd-041",
+    "_source_image": "043743_P_ZUPIKA.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ノコッチ",
+    "hp": 70,
+    "pokemon_type": "colorless",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SvD",
+    "card_number": "092/139",
+    "attacks": [
+      {
+        "name": "ともだちをさがす",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "colorless"
+        ],
+        "damage": 0,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分の山札からポケモンを1枚選び、相手に見せて、手札に加える。そして山札を切る。"
+      },
+      {
+        "name": "かみつく",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "043794_P_NOKOTCHI.jpg",
+    "id": "nokotchi-svd-092"
+  },
+  {
+    "name_ja": "ノノクラゲ",
+    "hp": 60,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "065/139",
+    "attacks": [
+      {
+        "name": "けとばす",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "どろかけ",
+        "energy_cost": 2,
+        "energy_cost_typed": null,
+        "damage": 20,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "id": "nonokurage-svd-065",
+    "_source_image": "043767_P_NONOKURAGE.jpg"
+  },
+  {
+    "name_ja": "ハラバリー",
+    "hp": 130,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 2,
+    "evolves_from": "ズピカ",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "042/139",
+    "attacks": [
+      {
+        "name": "エレキバレット",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "lightning",
+          "colorless"
+        ],
+        "damage": 70,
+        "self_damage": 0,
+        "bench_damage": 30,
+        "description": "相手のベンチポケモン1匹にも、30ダメージ。[ベンチは弱点・抵抗力を計算しない。]"
+      }
+    ],
+    "id": "harabarii-svd-042",
+    "_source_image": "043744_P_HARABARI.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "バチンウニ",
+    "hp": 90,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 3,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "040/139",
+    "attacks": [
+      {
+        "name": "しびれはり",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "lightning"
+        ],
+        "damage": 20,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "コインを1回投げオモテなら、相手のバトルポケモンをマヒにする。",
+        "status_effect": "paralysis",
+        "status_effect_on_coin_heads": true
+      },
+      {
+        "name": "ついげきバリバリ",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "lightning"
+        ],
+        "damage": 100,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "このワザは、前の自分の番に、このポケモンが「しびれはり」を使っていなければ使えない。"
+      }
+    ],
+    "_source_image": "043742_P_BACHINUNI.jpg",
+    "id": "bachinuni-svd-040"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ピカチュウ",
+    "hp": 70,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "034/139",
+    "attacks": [
+      {
+        "name": "なきごえ",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "colorless"
+        ],
+        "damage": 0,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の相手の番、このワザを受けたポケモンが使うワザのダメージは「-20」される。"
+      },
+      {
+        "name": "ピカボルト",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "lightning",
+          "colorless"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "043736_P_PIKACHIXYUU.jpg",
+    "id": "pikachixyuu-svd-034"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ミライドン",
+    "hp": 220,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "046/139",
+    "attacks": [
+      {
+        "name": "クイックドロー",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "lightning"
+        ],
+        "damage": 20,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分の山札を2枚引く。"
+      },
+      {
+        "name": "テクノターボ",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "lightning",
+          "lightning",
+          "colorless"
+        ],
+        "damage": 150,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分のトラッシュから「基本 雷エネルギー」を1枚選び、ベンチポケモンにつける。"
+      }
+    ],
+    "_source_image": "043748_P_MIRAIDONEX.jpg",
+    "id": "miraidonex-svd-046"
+  },
+  {
+    "name_ja": "メグロコ",
+    "hp": 70,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "062/139",
+    "attacks": [
+      {
+        "name": "かじる",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "ぶつかる",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "id": "meguroko-svd-062",
+    "_source_image": "043764_P_MEGUROKO.jpg"
+  },
+  {
+    "name_ja": "モトトカゲ",
+    "hp": 110,
+    "pokemon_type": "colorless",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "627/742",
+    "attacks": [
+      {
+        "name": "しっぽのムチ",
+        "energy_cost": 1,
+        "energy_cost_typed": null,
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "スピードアタック",
+        "energy_cost": 2,
+        "energy_cost_typed": null,
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "id": "mototokage-mc-627",
+    "_source_image": "049343_P_MOTOTOKAGE.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ライチュウ",
+    "hp": 140,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": "ピカチュウ",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "035/139",
+    "attacks": [
+      {
+        "name": "エレキチャージ",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "colorless"
+        ],
+        "damage": 0,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分の山札から「基本エネルギー」を2枚まで選び、このポケモンにつける。そして山札を切る。"
+      },
+      {
+        "name": "10まんボルト",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "lightning",
+          "lightning",
+          "colorless"
+        ],
+        "damage": 200,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "このポケモンについているエネルギーを、すべてトラッシュする。"
+      }
+    ],
+    "_source_image": "043737_P_RAICHIXYUU.jpg",
+    "id": "raichixyuu-svd-035"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "リオル",
+    "hp": 70,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "059/139",
+    "attacks": [
+      {
+        "name": "パンチ",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "とつげき",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "colorless"
+        ],
+        "damage": 50,
+        "self_damage": 20,
+        "bench_damage": 0,
+        "description": "このポケモンにも20ダメージ。"
+      }
+    ],
+    "_source_image": "043761_P_RIORU.jpg",
+    "id": "rioru-svd-059"
+  },
+  {
+    "name_ja": "リククラゲ",
+    "hp": 130,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 2,
+    "evolves_from": "ノノクラゲ",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "066/139",
+    "attacks": [
+      {
+        "name": "たたく",
+        "energy_cost": 2,
+        "energy_cost_typed": null,
+        "damage": 40,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "ダブルウィップ",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "fighting",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 0,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "コインを2回投げ、オモテの数×100ダメージ。",
+        "coin_flips": 2,
+        "damage_per_coin": 100
+      }
+    ],
+    "id": "rikukurage-svd-066",
+    "_source_image": "043768_P_RIKUKURAGE.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ルカリオ",
+    "hp": 130,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": "リオル",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "060/139",
+    "attacks": [
+      {
+        "name": "アベンジナックル",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "前の相手の番に、ワザのダメージで、自分の闘ポケモンがきぜつしていたなら、120ダメージ追加。"
+      },
+      {
+        "name": "かそくづき",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 120,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の自分の番、このポケモンは「かそくづき」が使えない。"
+      }
+    ],
+    "_source_image": "043762_P_RUKARIO.jpg",
+    "id": "rukario-svd-060"
+  },
+  {
+    "name_ja": "レアコイル",
+    "hp": 90,
+    "pokemon_type": "lightning",
+    "weakness": "fighting",
+    "retreat_cost": 2,
+    "evolves_from": "コイル",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "037/139",
+    "attacks": [
+      {
+        "name": "たいあたり",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "lightning"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "エレキボール",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "lightning",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 60,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "id": "rarecoil-svd-037",
+    "_source_image": "043739_P_REAKOIRU.jpg"
+  },
+  {
+    "name_ja": "ワルビアル",
+    "hp": 170,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 3,
+    "evolves_from": "ワルビル",
+    "regulation": "G",
+    "set_code": "svD",
+    "card_number": "064/139",
+    "attacks": [
+      {
+        "name": "ガブガブバイト",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "ウラが出るまでコインを投げ、オモテの数ぶん、相手のバトルポケモンについているエネルギーを選び、トラッシュする。"
+      },
+      {
+        "name": "じしん",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 180,
+        "self_damage": 0,
+        "bench_damage": 30,
+        "bench_damage_count": 0,
+        "bench_damage_target": "self",
+        "description": "自分のベンチポケモン全員にも、それぞれ30ダメージ。[ベンチは弱点・抵抗力を計算しない。]"
+      }
+    ],
+    "id": "warubiaru-svd-064",
+    "_source_image": "043766_P_WARUBIARU.jpg"
+  },
+  {
+    "name_ja": "ワルビル",
+    "hp": 100,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 2,
+    "evolves_from": "メグロコ",
+    "regulation": "G",
+    "set_code": "SVD",
+    "card_number": "063/139",
+    "attacks": [
+      {
+        "name": "しっぺがえし",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "相手のサイドの残り枚数が1枚なら、90ダメージ追加。"
+      },
+      {
+        "name": "どつく",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 60,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "id": "warubiru-svd-063",
+    "_source_image": "043765_P_WARUBIRU.jpg"
+  }
+]

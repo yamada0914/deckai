@@ -29,6 +29,27 @@ REGISTRY_MARKER_START = "    # ----- JSON から生成 -----"
 REGISTRY_MARKER_END = "    # ----- 以上 JSON から生成 -----"
 
 
+def _load_cards_from_split_files(base_dir: Path, card_files: dict) -> list:
+    """card_files で指定された JSON を読み、1 つの配列にマージして返す。"""
+    order = ("pokemon", "trainers", "energy")
+    result: list = []
+    for key in order:
+        name = card_files.get(key)
+        if not name:
+            continue
+        p = base_dir / name
+        if not p.is_file():
+            continue
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            items = raw if isinstance(raw, list) else raw.get("cards", raw.get("items", []))
+            if isinstance(items, list):
+                result.extend(items)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return result
+
+
 def id_to_var_name(card_id: str) -> str:
     """カード id（例: karamingo-svg-029）を変数名（KARAMINGO_SVG_029）に変換。"""
     return card_id.replace("-", "_").upper()
@@ -49,7 +70,7 @@ def py_list_str(arr: list | None) -> str:
 
 
 def attack_from_json(a: dict) -> str:
-    """1 つの技を Attack(...) のソース文字列に。説明から status_effect / コイン技を推測して付与する。"""
+    """1 つの技を Attack(...) のソース文字列に。JSON の明示フィールドを優先し、なければ説明から status_effect / コイン技を推測する。"""
     name = a.get("name", "")
     energy_cost = a.get("energy_cost", 0)
     damage = a.get("damage", 0)
@@ -57,16 +78,35 @@ def attack_from_json(a: dict) -> str:
     bench_damage = a.get("bench_damage", 0)
     description = a.get("description", "") or ""
     cost_typed = a.get("energy_cost_typed")
-    # 説明からコイン技を推測（「コインを2回投げ、オモテの数×100ダメージ」など）
-    coin_flips = 0
-    damage_per_coin = 0
-    if description and "コイン" in description and "オモテ" in description and "×" in description:
+    # コイン技：JSON にあればそれを使い、なければ説明から推測
+    coin_flips = a.get("coin_flips", 0) or 0
+    damage_per_coin = a.get("damage_per_coin", 0) or 0
+    if not (coin_flips > 0 and damage_per_coin > 0) and description and "コイン" in description and "オモテ" in description and "×" in description:
         m_n = re.search(r"コインを?(\d+)回", description)
         m_d = re.search(r"×(\d+)", description)
         if m_n and m_d:
             coin_flips = int(m_n.group(1))
             damage_per_coin = int(m_d.group(1))
-            damage = 0  # コイン技のときはダメージはコインで決まる
+    if coin_flips > 0 and damage_per_coin > 0:
+        damage = 0  # コイン技のときはダメージはコインで決まる
+    # 状態異常：JSON にあればそれを使い、なければ説明から推測
+    status_effect = a.get("status_effect")
+    status_effect_target = a.get("status_effect_target")
+    if not status_effect and description and "こんらん" in description and "このポケモン" in description:
+        status_effect = "confusion"
+        status_effect_target = "self"
+    if not status_effect and description and "マヒ" in description:
+        status_effect = "paralysis"
+    # コイン表のときだけ状態異常：JSON にあればそれを使い、なければ説明から推測（「コインを投げオモテなら」など）
+    status_effect_on_coin_heads = a.get("status_effect_on_coin_heads", False)
+    if not status_effect_on_coin_heads and status_effect and description and "コイン" in description and "オモテなら" in description:
+        status_effect_on_coin_heads = True
+    bench_damage_count = a.get("bench_damage_count", 1)
+    bench_damage_target = a.get("bench_damage_target", "opponent")
+    if bench_damage_target == "opponent" and description and "自分のベンチ" in description:
+        bench_damage_target = "self"
+    if bench_damage_count == 1 and bench_damage_target == "self" and description and "全員" in description:
+        bench_damage_count = 0
     parts = [
         py_str(name),
         str(energy_cost),
@@ -75,20 +115,26 @@ def attack_from_json(a: dict) -> str:
         str(bench_damage),
         py_str(description),
     ]
+    if bench_damage_count != 1:
+        parts.append(f"bench_damage_count={bench_damage_count}")
+    if bench_damage_target != "opponent":
+        parts.append(f"bench_damage_target={py_str(bench_damage_target)}")
     if cost_typed is not None:
         parts.append(f"energy_cost_typed={py_list_str(cost_typed)}")
     if coin_flips > 0 and damage_per_coin > 0:
         parts.append(f"coin_flips={coin_flips}")
         parts.append(f"damage_per_coin={damage_per_coin}")
-    # 説明から状態異常を推測（「このポケモンをこんらんにする」など）
-    if description and "こんらん" in description and "このポケモン" in description:
-        parts.append("status_effect='confusion'")
-        parts.append("status_effect_target='self'")
+    if status_effect:
+        parts.append(f"status_effect={py_str(status_effect)}")
+        if status_effect_target:
+            parts.append(f"status_effect_target={py_str(status_effect_target)}")
+        if status_effect_on_coin_heads:
+            parts.append("status_effect_on_coin_heads=True")
     return "Attack(" + ", ".join(parts) + ")"
 
 
-def card_from_json(card: dict) -> str:
-    """1 枚のカードを PokemonCard(...) のソース文字列に。"""
+def _pokemon_card_from_json(card: dict) -> str:
+    """ポケモンカードを PokemonCard(...) のソース文字列に。"""
     card_id = card.get("id", "unknown")
     name_ja = card.get("name_ja", "")
     hp = card.get("hp", 60)
@@ -98,7 +144,6 @@ def card_from_json(card: dict) -> str:
     pokemon_type = card.get("pokemon_type")
     weakness = card.get("weakness")
     resistance = card.get("resistance")
-
     lines = [
         f"# {name_ja}（{card_id}）",
         f"{id_to_var_name(card_id)} = PokemonCard(",
@@ -118,8 +163,97 @@ def card_from_json(card: dict) -> str:
         lines.append(f"    weakness={py_str(weakness)},")
     if resistance is not None:
         lines.append(f"    resistance={py_str(resistance)},")
+    is_ex = card.get("is_ex") if "is_ex" in card else ("ex" in (name_ja or ""))
+    is_mega = card.get("is_mega") if "is_mega" in card else ("メガ" in (name_ja or ""))
+    if is_ex:
+        lines.append("    is_ex=True,")
+    if is_mega:
+        lines.append("    is_mega=True,")
     lines.append(")")
     return "\n".join(lines)
+
+
+def _goods_card_from_json(card: dict) -> str:
+    """グッズカードを GoodsCard(...) のソース文字列に。"""
+    card_id = card.get("id", "unknown")
+    name_ja = card.get("name_ja", "")
+    description = card.get("description", "") or ""
+    return "\n".join([
+        f"# {name_ja}（{card_id}）",
+        f"{id_to_var_name(card_id)} = GoodsCard(",
+        f"    id={py_str(card_id)},",
+        f"    name={py_str(name_ja)},",
+        f"    description={py_str(description)},",
+        ")",
+    ])
+
+
+def _tool_card_from_json(card: dict) -> str:
+    """ポケモンのどうぐを GoodsCard(..., is_tool=True, ...) のソース文字列に。"""
+    card_id = card.get("id", "unknown")
+    name_ja = card.get("name_ja", "")
+    description = card.get("description", "") or ""
+    reduce_val = card.get("tool_damage_reduce")
+    cond_type = card.get("tool_condition_type")
+    if reduce_val is None and name_ja == "岩のむねあて":
+        reduce_val, cond_type = 30, "fighting"
+    lines = [
+        f"# {name_ja}（{card_id}）",
+        f"{id_to_var_name(card_id)} = GoodsCard(",
+        f"    id={py_str(card_id)},",
+        f"    name={py_str(name_ja)},",
+        f"    effect={py_str('tool')},",
+        f"    description={py_str(description)},",
+        "    is_tool=True,",
+        f"    tool_damage_reduce={reduce_val if reduce_val is not None else 0},",
+        f"    tool_condition_type={py_str(cond_type)},",
+        ")",
+    ]
+    return "\n".join(lines)
+
+
+def _support_card_from_json(card: dict) -> str:
+    """サポートカードを SupportCard(...) のソース文字列に。"""
+    card_id = card.get("id", "unknown")
+    name_ja = card.get("name_ja", "")
+    description = card.get("description", "") or ""
+    return "\n".join([
+        f"# {name_ja}（{card_id}）",
+        f"{id_to_var_name(card_id)} = SupportCard(",
+        f"    id={py_str(card_id)},",
+        f"    name={py_str(name_ja)},",
+        f"    description={py_str(description)},",
+        ")",
+    ])
+
+
+def _energy_card_from_json(card: dict) -> str:
+    """エネルギーカードを EnergyCard(...) のソース文字列に。"""
+    card_id = card.get("id", "unknown")
+    name_ja = card.get("name_ja", "")
+    energy_type = card.get("energy_type")
+    return "\n".join([
+        f"# {name_ja}（{card_id}）",
+        f"{id_to_var_name(card_id)} = EnergyCard(",
+        f"    id={py_str(card_id)},",
+        f"    name={py_str(name_ja)},",
+        f"    energy_type={py_str(energy_type)},",
+        ")",
+    ])
+
+
+def card_from_json(card: dict) -> str:
+    """card_type に応じて PokemonCard / GoodsCard / SupportCard / EnergyCard のソース文字列に。"""
+    card_type = (card.get("card_type") or "pokemon").strip().lower()
+    if card_type in ("goods", "item"):  # "item" は旧形式の互換
+        return _goods_card_from_json(card)
+    if card_type == "tool":
+        return _tool_card_from_json(card)
+    if card_type == "support":
+        return _support_card_from_json(card)
+    if card_type == "energy":
+        return _energy_card_from_json(card)
+    return _pokemon_card_from_json(card)
 
 
 def generate_registry_entries(cards: list[dict]) -> tuple[str, str]:
@@ -197,7 +331,16 @@ def main() -> None:
         raise SystemExit(f"ファイルが見つかりません: {path}")
 
     data = json.loads(path.read_text(encoding="utf-8"))
-    cards = data.get("cards", [])
+    # 分割ファイル（card_files）の場合は各 JSON から cards を読む
+    card_files = data.get("card_files")
+    if card_files and isinstance(card_files, dict):
+        cards = _load_cards_from_split_files(path.parent, card_files)
+    else:
+        raw_cards = data.get("cards", [])
+        if isinstance(raw_cards, dict):
+            cards = [c for k in ("pokemon", "goods", "support", "energy") for c in (raw_cards.get(k) or [])]
+        else:
+            cards = raw_cards or []
     if not cards:
         raise SystemExit("cards が空です")
 
@@ -207,7 +350,7 @@ def main() -> None:
             '"""',
             "read_cards_result.json から生成。",
             '"""',
-            "from card.model import Attack, PokemonCard",
+            "from card.model import Attack, EnergyCard, GoodsCard, PokemonCard, SupportCard",
             "",
         ]
         for card in cards:

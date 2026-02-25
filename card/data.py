@@ -5,7 +5,7 @@
 """
 from copy import deepcopy
 
-from card.model import Attack, EnergyCard, ItemCard, PokemonCard, SupportCard
+from card.model import Attack, EnergyCard, GoodsCard, is_goods, is_support, PokemonCard, SupportCard
 
 # ----- マスタカード -----
 
@@ -51,8 +51,8 @@ MEGUROKO = PokemonCard(
     hp=70,
     max_hp=70,
     attacks=[
-        Attack("かじる", 1, 210, 0, 0, "10 ダメージ"),
-        Attack("ぶつかる", 2, 230, 0, 0, "30 ダメージ"),
+        Attack("かじる", 1, 10, 0, 0, "10 ダメージ", energy_cost_typed=["fighting"]),
+        Attack("ぶつかる", 2, 30, 0, 0, "30 ダメージ", energy_cost_typed=["fighting", "fighting"]),
     ],
     evolves_from=None,
     retreat_cost=2,
@@ -341,7 +341,7 @@ BASIC_ENERGY_LIGHTNING = EnergyCard(id="basic-energy-lightning", name="基本雷
 BASIC_ENERGY_FIGHTING = EnergyCard(id="basic-energy-fighting", name="基本闘エネルギー", provides=1, energy_type="fighting")
 
 # きずぐすり（自分のバトル場のポケモンを 30 回復）
-POTION = ItemCard(
+POTION = GoodsCard(
     id="potion",
     name="きずぐすり",
     effect="heal",
@@ -350,11 +350,22 @@ POTION = ItemCard(
 )
 
 # ポケモンいれかえ（自分のバトル場のポケモンとベンチのポケモンを入れ替えるグッズ）
-POKEMON_IREKAE = ItemCard(
+POKEMON_IREKAE = GoodsCard(
     id="pokemon_irekae",
     name="ポケモンいれかえ",
     effect="swap_active",
     description="自分のバトル場のポケモンとベンチのポケモンを 1 体入れ替える",
+)
+
+# 岩のむねあて（ポケモンのどうぐ：つけている闘ポケモンが受けるワザのダメージ -30）
+IWANOMUNEATE = GoodsCard(
+    id="iwanomuneate",
+    name="岩のむねあて",
+    effect="tool",
+    description="このカードをつけている闘ポケモンが、相手のポケモンから受けるワザのダメージは「-30」される。",
+    is_tool=True,
+    tool_damage_reduce=30,
+    tool_condition_type="fighting",
 )
 
 # ネモ（サポート：デッキから 3 枚引く）
@@ -380,6 +391,7 @@ CARD_ID_TO_NAME = {
     "basic-energy-fighting": "基本闘エネルギー",
     "potion": "きずぐすり",
     "pokemon_irekae": "ポケモンいれかえ",
+    "iwanomuneate": "岩のむねあて",
     "nemo": "ネモ",
 
     # ----- JSON から生成 -----
@@ -399,8 +411,19 @@ CARD_ID_TO_NAME = {
     # ----- 以上 JSON から生成 -----
 }
 
+def get_trainer_id_by_name(name_ja: str) -> str | None:
+    """トレーナー（グッズ・サポート）の名前からレジストリの id を返す。見つからなければ None。"""
+    name = (name_ja or "").strip()
+    if not name:
+        return None
+    for cid, card in _CARD_REGISTRY.items():
+        if (is_goods(card) or is_support(card)) and (getattr(card, "name", "") or "").strip() == name:
+            return cid
+    return None
+
+
 # カード ID → マスタカード（get_card_by_id 用）
-_CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | ItemCard | SupportCard] = {
+_CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | SupportCard] = {
     "otachi": OTACHI,
     "ootachi": OOTACHI,
     "mototokage": MOTOTOKAGE,
@@ -413,6 +436,7 @@ _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | ItemCard | SupportCard] = {
     "basic-energy-fighting": BASIC_ENERGY_FIGHTING,
     "potion": POTION,
     "pokemon_irekae": POKEMON_IREKAE,
+    "iwanomuneate": IWANOMUNEATE,
     "nemo": NEMO,
 
     # ----- JSON から生成 -----
@@ -433,7 +457,7 @@ _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | ItemCard | SupportCard] = {
 }
 
 
-def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyCard | ItemCard | SupportCard:
+def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyCard | GoodsCard | SupportCard:
     """カード ID からマスタのコピーを生成する。instance_id を付与。"""
     if card_id not in _CARD_REGISTRY:
         raise ValueError(f"Unknown card id: {card_id}")

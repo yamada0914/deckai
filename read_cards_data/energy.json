@@ -1,0 +1,16 @@
+[
+  {
+    "card_type": "energy",
+    "name_ja": "基本闘エネルギー",
+    "energy_type": "fighting",
+    "_source_image": "042784_E_KIHONTOUENERUGI.jpg",
+    "id": "kihontouenerugi"
+  },
+  {
+    "card_type": "energy",
+    "name_ja": "基本雷エネルギー",
+    "energy_type": "lightning",
+    "_source_image": "042782_E_KIHONKAMINARIENERUGI.jpg",
+    "id": "kihonkaminarienerugi"
+  }
+]
