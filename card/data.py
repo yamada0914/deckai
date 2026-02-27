@@ -155,7 +155,7 @@ KARAMINGO_SVD_109 = PokemonCard(
     hp=110,
     max_hp=110,
     attacks=[
-        Attack('はばたく', 2, 30, 0, 0, '', energy_cost_typed=['colorless', 'colorless']),
+        Attack('はばたく', 1, 30, 0, 0, '', energy_cost_typed=['colorless']),
         Attack('きゅうこうか', 3, 110, 20, 0, 'このポケモンにも20ダメージ。', energy_cost_typed=['colorless', 'colorless', 'colorless']),
     ],
     evolves_from=None,
@@ -558,6 +558,7 @@ JIXYAJJIMAN = SupportCard(
 SUPABORU = GoodsCard(
     id='supaboru',
     name='スーパーボール',
+    effect='',
     description='自分の山札を上から7枚見て、その中からポケモンを1枚選び、相手に見せて、手札に加える。残りのカードは山札にもどして切る。',
 )
 
@@ -579,6 +580,7 @@ NEMOMIRAI = SupportCard(
 HAIPABORU = GoodsCard(
     id='haipaboru',
     name='ハイパーボール',
+    effect='',
     description='このカードは、自分の手札を2枚トラッシュしなければ使えない。自分の山札からポケモンを1枚選び、相手に見せて、手札に加える。そして山札を切る。',
 )
 

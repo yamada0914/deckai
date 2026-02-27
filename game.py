@@ -655,9 +655,9 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
     card = p.hand[hand_index]
     if not is_goods(card):
         return False
-    if getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False):
-        return False
     cid = getattr(card, "id", "")
+    if (getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False)) and cid not in ("supaboru", "haipaboru"):
+        return False
     name_ja = getattr(card, "name", "")
 
     # ふしぎなアメ：手札の 2 進化 1 枚を、場のたねポケモンにのせて 1 進化をとばして進化
@@ -801,7 +801,11 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         random.shuffle(p.deck)
         p.discard.append(p.hand.pop(hand_index))
         pokemon_label = _card_label(pokemon) if pokemon else ""
-        state.log(f"{state.player_name(state.current_player)}: スーパーボールを使用 → 山札上から {look} 枚を見てポケモン 1 枚を手札に加えた → {pokemon_label}" if pokemon_label else f"{state.player_name(state.current_player)}: スーパーボールを使用 → 山札上から {look} 枚を見たがポケモンなし")
+        state.log(
+            f"{state.player_name(state.current_player)}: スーパーボールを使用 → 山札上から {look} 枚を見てポケモン 1 枚を手札に加えた → {pokemon_label}"
+            if pokemon_label
+            else f"{state.player_name(state.current_player)}: スーパーボールを使用 → 山札上から {look} 枚を見たがポケモンなし"
+        )
         return True
 
     if cid == "haipaboru" and len(p.hand) >= 3 and p.deck:
@@ -822,7 +826,11 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
             random.shuffle(p.deck)
         p.discard.append(p.hand.pop(new_hi))
         add_label = f" → {_card_label(pokemon_found[1])}" if pokemon_found else ""
-        state.log(f"{state.player_name(state.current_player)}: ハイパーボールを使用（手札 2 枚トラッシュ）→ 山札からポケモン 1 枚を手札に加えた{add_label}" if pokemon_found else f"{state.player_name(state.current_player)}: ハイパーボールを使用（手札 2 枚トラッシュ、山札にポケモンなし）")
+        state.log(
+            f"{state.player_name(state.current_player)}: ハイパーボールを使用（手札 2 枚トラッシュ）→ 山札からポケモン 1 枚を手札に加えた{add_label}"
+            if pokemon_found
+            else f"{state.player_name(state.current_player)}: ハイパーボールを使用（手札 2 枚トラッシュ、山札にポケモンなし）"
+        )
         return True
 
     if cid == "pokemonkixyatchixya":
@@ -1618,6 +1626,20 @@ def run_turn_auto(state: GameState) -> bool:
     our_max_effective = _our_max_effective_damage(state)
     would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
     can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
+
+    _BALL_GOODS_IDS = ("supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya")
+    if not _is_first_player_first_turn(state):
+        for i, c in enumerate(p.hand):
+            if not is_goods(c) or getattr(c, "is_tool", False):
+                continue
+            if getattr(c, "id", "") not in _BALL_GOODS_IDS:
+                continue
+            if use_trainer_goods(state, i):
+                acted = True
+                p = state.active_player_state()
+                state._record_frame()
+                break
+        _try_put_bench_until_full()
 
     if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
         for i, c in enumerate(p.hand):
