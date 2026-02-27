@@ -1212,6 +1212,12 @@ def attack(
                     owner.discard.append(tool)
                 if bench_target_self:
                     state.log(f"{state.player_name(state.current_player)} のベンチの {bp_name} がきぜつ！")
+                    prize_count = _prizes_for_ko(koed_bench_bp)
+                    if prize_count > 1:
+                        state.log(f"{state.player_name(state.opponent())}: {koed_bench_bp.card.name} は {'メガ' if prize_count == 3 else 'ex'} のため、サイドを {prize_count} 枚とる")
+                    for _ in range(prize_count):
+                        if _take_prize(state, state.opponent()):
+                            return True
                 else:
                     state.log(f"{state.player_name(state.opponent())} のベンチの {bp_name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
                     if _handle_opponent_ko(opp, state, koed_bench_bp):
