@@ -1701,8 +1701,13 @@ def run_turn_auto(state: GameState) -> bool:
                 break
         _try_put_bench_until_full()
 
-    # ポケモンいれかえ: にげるより先に試す（エネルギーを消費せずにバトル場を替えられる）
-    if p.active and p.bench:
+    # ポケモンいれかえ: 次の相手の番でやられそうなときだけ使う（そうでないときは攻撃を優先）
+    p = state.active_player_state()
+    opp_max_effective = _opponent_max_effective_damage(state)
+    our_max_effective = _our_max_effective_damage(state)
+    would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
+    can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
+    if would_be_koed and p.active and p.bench:
         for i, c in enumerate(p.hand):
             if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
                 survives = [(bi, p.bench[bi].hp) for bi in range(len(p.bench)) if p.bench[bi].hp > opp_max_effective]
