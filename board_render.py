@@ -10,7 +10,6 @@ import textwrap
 
 from PIL import Image, ImageDraw, ImageFont
 
-# 型チェック用（実行時は game を import）
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 _READ_CARDS_DATA = _PROJECT_ROOT / "read_cards_data"
-# 裏向きカード（サイド・手札用）の画像
 CARD_BACK_IMAGE = _PROJECT_ROOT / "card_images" / "basic" / "20230809083754-0.jpeg"
 _CARD_IMAGE_FILES: dict[str, str] | None = None
 
@@ -45,19 +43,16 @@ def _load_card_id_to_image() -> dict[str, str]:
                     out[cid] = src
         except (json.JSONDecodeError, OSError):
             continue
-    # ゲーム側の ID（basic-energy-fighting 等）を read_cards_data の画像にフォールバック
     if "kihontouenerugi" in out:
         out.setdefault("basic-energy-fighting", out["kihontouenerugi"])
     if "kihonkaminarienerugi" in out:
         out.setdefault("basic-energy-lightning", out["kihonkaminarienerugi"])
     if "basic-energy-fighting" in out:
         out.setdefault("basic-energy", out["basic-energy-fighting"])
-    # ゲーム側のトレーナー ID を read_cards_data の画像にフォールバック
     if "nemokako" in out:
         out.setdefault("nemo", out["nemokako"])
     if "pokemonirekae" in out:
         out.setdefault("pokemon_irekae", out["pokemonirekae"])
-    # ポケモン別 ID 同士をフォールバック（例: デッキは karamingo-svg-029、JSON は karamingo-svd-109）
     if "karamingo-svd-109" in out:
         out.setdefault("karamingo-svg-029", out["karamingo-svd-109"])
     _CARD_IMAGE_FILES = out
@@ -78,20 +73,18 @@ def get_card_image_path(card_id: str, images_dir: Path | str) -> Path | None:
     return p if p.is_file() else None
 
 
-# 盤面レイアウト定数（上: 相手側 / 下: 自分側・中央横線でバトル場が向き合う）
-BOARD_WIDTH = 1100   # 盤面部分の横幅（小さくすると両端の余白が減る）
+BOARD_WIDTH = 1100
 BOARD_HEIGHT = 980
 PRIZE_SLOTS = 6
 BENCH_SLOTS = 5
 MARGIN = 24
-PRIZE_TO_BENCH = 12        # サイドブロックとベンチ列の間隔（バトル場・ベンチの横に寄せる）
-BENCH_GAP = 10             # ベンチカード間・ベンチと山札/トラッシュの間隔
-TOOL_OFFSET = 8            # どうぐをポケモンカードの下に重ねて見せる際のずれ（px）
-# カードサイズ（手札・バトル場・サイド・ベンチすべて同一）
+PRIZE_TO_BENCH = 12
+BENCH_GAP = 10
+TOOL_OFFSET = 8
 CARD_W_BENCH = 90
 CARD_H_BENCH = 124
-MIN_HAND_CARD_W = 20       # 手札 1 枚の最小幅（枚数が多いときの下限）
-LOG_PANEL_WIDTH = 280     # 左側ログ表示の幅（px）
+MIN_HAND_CARD_W = 20
+LOG_PANEL_WIDTH = 280
 LOG_LINE_HEIGHT = 16
 LOG_FONT_SIZE = 11
 BG_COLOR = (30, 80, 30)
@@ -109,7 +102,6 @@ def _draw_placeholder(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
             font = ImageFont.truetype("/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc", 14)
         except OSError:
             font = ImageFont.load_default()
-        # テキストはスロット内に収める（簡易）
         tw = draw.textlength(label, font=font)
         if tw > w - 8:
             label = label[: min(len(label), 8)] + "…"
@@ -144,7 +136,6 @@ def _draw_log_panel(
     pad = 8
     max_lines = max(1, (height - pad * 2) // LOG_LINE_HEIGHT)
     lines = [ln.strip() for ln in (log_text or "").split("\n") if ln.strip()]
-    # 1 行が長い場合は折り返し（約 20 文字で）
     wrapped = []
     for ln in lines:
         wrapped.extend(textwrap.wrap(ln, width=20) or [ln[:20]])
@@ -212,7 +203,6 @@ def _draw_hp_bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, hp: 
         draw.rounded_rectangle([bar_x, bar_y, bar_x + int(bar_w * ratio), bar_y + bar_h], radius=2, fill=(60, 200, 80))
 
 
-# card_images/energy/ 内のファイル名（ゲームの energy_type → ファイル名）
 _ENERGY_IMAGE_FILES = {
     "fighting": "fighting_energy_icatch-640x360.webp",
     "lightning": "ligtning_energy_icatch-640x360.webp",
@@ -258,7 +248,6 @@ def _draw_energy_on_card(
     step = 2 * r + gap
     n_max = min(len(energy_types), max(1, (w - 2 * pad) // step))
     energy_types = energy_types[:n_max]
-    # 表示位置を少しだけ左下へ
     cx = x + pad + r - 4
     cy = y + h - pad - r + 10
     energy_dir = Path(images_dir) / "energy"
@@ -273,7 +262,6 @@ def _draw_energy_on_card(
         if path and path.is_file():
             try:
                 img = Image.open(path).convert("RGBA")
-                # アスペクト比を保ちつつ白枠いっぱいに見えるよう少し大きく表示（間隔を埋める）
                 scale = min(size / img.width, size / img.height) * 2
                 new_w = max(1, int(img.width * scale))
                 new_h = max(1, int(img.height * scale))
@@ -335,10 +323,8 @@ def _render_hand_cards(
     if n_hand == 0:
         return
     n_show = n_hand
-    # 1 枚あたりの幅を算出（最大 CARD_W_BENCH、最小 MIN_HAND_CARD_W）
     card_w = (max_width - max(0, n_show - 1) * BENCH_GAP) // n_show
     if card_w < MIN_HAND_CARD_W:
-        # 最小幅を下回る場合は表示枚数を制限し、残りは +N 表示
         n_show = max(1, (max_width + BENCH_GAP) // (MIN_HAND_CARD_W + BENCH_GAP))
         n_show = min(n_show, n_hand)
         card_w = (max_width - max(0, n_show - 1) * BENCH_GAP) // n_show
@@ -397,20 +383,16 @@ def render_board_frame(
 
     cx = board_offset + width // 2
     center_y = height // 2
-    # サイドは 2 行×3 枚（ベンチと同じカードサイズ）。ベンチの横に寄せて配置
     total_bw = BENCH_SLOTS * CARD_W_BENCH + (BENCH_SLOTS - 1) * BENCH_GAP
     active_x = cx - CARD_W_BENCH // 2
     start_bx = cx - total_bw // 2
-    # サイドは重ね表示（ベンチと同じカードサイズ）。3 段×左右 2 枚を半分ずつ重ね
     prize_w = CARD_W_BENCH
     prize_h = CARD_H_BENCH
     prize_area_height = 12 + 2 * CARD_H_BENCH
-    # 段間の間隔（大きいほど上に広がる）。カード高さの約 55%
     prize_step = int(CARD_H_BENCH * 0.55)
     prize_row_w = int(1.5 * prize_w) + BENCH_GAP
     start_px_opp = start_bx + total_bw + PRIZE_TO_BENCH
     start_px_self = start_bx - prize_row_w - PRIZE_TO_BENCH
-    # 手札の最大横幅（山札・ベンチ・トラッシュからはみ出さない）
     hand_max_width = total_bw + 2 * CARD_W_BENCH + 2 * BENCH_GAP
 
     try:
@@ -420,7 +402,6 @@ def render_board_frame(
         font_label = ImageFont.load_default()
         font_small = ImageFont.load_default()
 
-    # 中央の横線（バトル場同士が向き合う境）
     draw.rectangle([board_offset, center_y - 2, total_width, center_y + 2], fill=(70, 110, 70))
 
     turn_n = (state.turn_count // 2) + 1
@@ -430,7 +411,6 @@ def render_board_frame(
     opp_label = state.player_name(1)
     self_label = state.player_name(0)
 
-    # 相手の番のときは画面上部中央にターン表示
     if state.current_player == 1:
         try:
             bbox = draw.textbbox((0, 0), turn_text, font=font_label)
@@ -439,25 +419,22 @@ def render_board_frame(
         except (TypeError, AttributeError):
             draw.text((cx - 80, 8), turn_text, fill=LABEL_COLOR, font=font_label)
 
-    # ========== 上: 相手側 ==========
     opp = state.players[1]
     draw.text((board_offset + MARGIN, 10), opp_label, fill=LABEL_COLOR, font=font_label)
     hand_y_opp = 42
     _render_hand_cards(bg, draw, opp.hand, images_dir, hand_y_opp, cx, hand_max_width)
     draw.text((cx + hand_max_width // 2 + 8, hand_y_opp + CARD_H_BENCH + 4), f"手札 {len(opp.hand)} 枚", fill=TEXT_COLOR, font=font_small, anchor="lt")
     active_y_opp = center_y - CARD_H_BENCH - 16
-    bench_y_opp = active_y_opp - 20 - CARD_H_BENCH  # ベンチをほんの少し上に（12 → 20）
+    bench_y_opp = active_y_opp - 20 - CARD_H_BENCH
     prize_y_bottom_opp = active_y_opp + CARD_H_BENCH
     _render_prize_stack(bg, draw, opp.prize_pile, start_px_opp, prize_y_bottom_opp, prize_w, prize_h, prize_step)
     prize_block_top_opp = prize_y_bottom_opp - prize_h - 2 * prize_step
-    # 相手側: 山札はバトル場と同じ高さ、トラッシュはベンチと同じ高さ。トラッシュの表記はトラッシュの上に表示
     deck_trash_x_opp = start_bx - CARD_W_BENCH - BENCH_GAP
     deck_y_opp = active_y_opp
     trash_y_opp = bench_y_opp
     draw.text((deck_trash_x_opp, deck_y_opp - 14), f"山札 {len(opp.deck)}", fill=TEXT_COLOR, font=font_small)
     _draw_card_back(bg, draw, deck_trash_x_opp, deck_y_opp, CARD_W_BENCH, CARD_H_BENCH)
     draw.text((deck_trash_x_opp, trash_y_opp - 14), f"トラッシュ {len(opp.discard)}", fill=TEXT_COLOR, font=font_small)
-    # トラッシュは裏面を使わない: 1 枚以上なら表面のみ、0 枚なら空スロット（プレースホルダー）
     if opp.discard:
         top_card = opp.discard[-1]
         path = get_card_image_path(getattr(top_card, "id", ""), images_dir)
@@ -485,7 +462,6 @@ def render_board_frame(
     else:
         _draw_placeholder(draw, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, "なし")
 
-    # ========== 下: 自分側 ==========
     self_p = state.players[0]
     active_y_self = center_y + 16
     if self_p.active:
@@ -501,13 +477,11 @@ def render_board_frame(
             _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir)
         else:
             _draw_placeholder(draw, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, "")
-    # 自分側: 上に山札、下にトラッシュ（表面）。山札ラベルは山札の上、トラッシュラベルはトラッシュの下に表示
     deck_trash_x_self = start_bx + total_bw + BENCH_GAP
     deck_y_self = bench_y_self - CARD_H_BENCH - 8
     trash_y_self = bench_y_self
     draw.text((deck_trash_x_self, deck_y_self - 14), f"山札 {len(self_p.deck)}", fill=TEXT_COLOR, font=font_small)
     _draw_card_back(bg, draw, deck_trash_x_self, deck_y_self, CARD_W_BENCH, CARD_H_BENCH)
-    # トラッシュは裏面を使わない: 1 枚以上なら表面のみ、0 枚なら空スロット（プレースホルダー）
     if self_p.discard:
         top_card = self_p.discard[-1]
         path = get_card_image_path(getattr(top_card, "id", ""), images_dir)
@@ -526,7 +500,6 @@ def render_board_frame(
     hand_y_self = bench_y_self + CARD_H_BENCH + 36
     _render_hand_cards(bg, draw, self_p.hand, images_dir, hand_y_self, cx, hand_max_width)
     draw.text((cx + hand_max_width // 2 + 8, hand_y_self - 4), f"手札 {len(self_p.hand)} 枚", fill=TEXT_COLOR, font=font_small, anchor="lb")
-    # 自分の番のときは手札の下にターン表示
     if state.current_player == 0:
         turn_y_below_hand = hand_y_self + CARD_H_BENCH + 12
         try:

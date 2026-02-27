@@ -25,7 +25,7 @@ def run_simulation(
         random.seed(seed)
     first_win = 0
     second_win = 0
-    wins = [0, 0]  # wins[0] = deck0 の勝ち, wins[1] = deck1 の勝ち
+    wins = [0, 0]
     shippegaeshi_120_games = 0
     logged_loss = False
     for game_idx in range(n_games):
@@ -65,7 +65,7 @@ def run_simulation(
 
 def main() -> None:
     n = 1000
-    deck0 = 0  # 0=A, 1=B, 2=C, 3=D, 4=E
+    deck0 = 0
     deck1 = 1
     if len(sys.argv) > 1:
         try:
@@ -94,7 +94,7 @@ def main() -> None:
         print(f"{get_deck_name(deck0)}どうし、{n} 回シミュレートします。")
     else:
         print(f"{get_deck_name(deck0)} vs {get_deck_name(deck1)}、{n} 回シミュレートします。")
-    log_wani_loss = deck0 == 1 and deck1 == 2  # ワニ vs カエルのときワニが負けた試合のログを 1 回表示
+    log_wani_loss = deck0 == 1 and deck1 == 2
     print("（1 回目のみアクションのログを表示します）\n" if not log_wani_loss else "（ワニが負けた最初の 1 試合のログを表示します）\n")
     results = run_simulation(
         n_games=n,

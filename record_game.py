@@ -57,11 +57,9 @@ def _run_and_record(
         states.append(copy.deepcopy(s))
         log_snapshots.append(list(log_lines))
 
-    # ログ先頭に対戦 ID を入れる
     log_lines.append(f"対戦 ID: {bid}")
     log_lines.append("")
 
-    # コライドン vs ミライドン。1 フレーム = 1 行動（setup 終了・ターン開始・各行動の直後）
     state = setup_game(seed=seed, log_fn=log_fn, record_frame_fn=record_frame, deck0=deck0, deck1=deck1)
 
     while True:
@@ -75,7 +73,7 @@ def _run_and_record(
             state._record_frame()
             break
         end_turn(state)
-        if state.turn_count >= 200:  # MAX_TURNS_SAFETY
+        if state.turn_count >= 200:
             from game import MAX_TURNS_SAFETY
             state.winner = 0 if (6 - len(state.players[0].prize_pile)) >= (6 - len(state.players[1].prize_pile)) else 1
             if state.log_fn:
@@ -90,7 +88,6 @@ def _run_and_record(
     print(f"対戦 ID: {bid}")
     print(f"ログを保存しました: {log_path}")
 
-    # クロージャは pickle できないので除去
     for s in states:
         s.log_fn = None
         s.record_frame_fn = None

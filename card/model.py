@@ -11,7 +11,6 @@ from typing import Literal
 
 CardType = Literal["pokemon", "energy", "goods", "support"]
 
-# 進化段階：たね＝basic、1進化＝stage1、2進化＝stage2。画像認識・ゲームロジックで共通利用。
 EvolutionStage = Literal["basic", "stage1", "stage2"]
 
 EnergyTypeId = Literal[
@@ -187,7 +186,7 @@ class PokemonCard:
     max_hp: int = 110
     attacks: list[Attack] = field(default_factory=list)
     evolves_from: str | None = None
-    evolution_stage: EvolutionStage | None = None  # たね=basic, 1進化=stage1, 2進化=stage2。画像認識で設定可。
+    evolution_stage: EvolutionStage | None = None
     retreat_cost: int = 1
     instance_id: str = ""
     pokemon_type: PokemonTypeId | None = None

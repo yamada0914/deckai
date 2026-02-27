@@ -188,9 +188,7 @@ class GameState:
     last_turn_attack_name: list = field(default_factory=lambda: [None, None])
     last_turn_attack_actor_id: list = field(default_factory=lambda: [None, None])
     our_ko_by_damage_last_turn: list = field(default_factory=lambda: [False, False])
-    # 今ターンに現在のプレイヤーがドローで手札に加えたカード（いつ引いたかログ用）
     drawn_this_turn: list = field(default_factory=list)
-    # 動画用: 行動のたびに呼ぶコールバック（引数で state を受け取る。setup_game 内では state 未代入のため）
     record_frame_fn: Callable[["GameState"], None] | None = field(default=None, repr=False)
 
     def log(self, msg: str) -> None:
@@ -1584,7 +1582,6 @@ def run_turn_auto(state: GameState) -> bool:
 
     _try_put_bench_until_full()
 
-    # エネルギー付与（サポートの前に実行）
     if _try_attach_energy_auto(state):
         acted = True
         p = state.active_player_state()

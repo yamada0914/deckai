@@ -43,7 +43,6 @@ def main() -> None:
     parser.add_argument("--frames-dir", type=Path, default=None, help="フレーム画像を残すディレクトリ（省略時: battle-id なら battles/<ID>/frames/）")
     args = parser.parse_args()
 
-    # オプションなし時は最新シミュレーション（battles/ 内で pkl が最も新しい対戦）を使う
     if args.states is not None:
         states_path = args.states
         output_mp4 = args.output or _PROJECT_ROOT / "battle.mp4"
@@ -58,7 +57,6 @@ def main() -> None:
     else:
         latest_id = _latest_battle_id()
         if latest_id is None:
-            # 互換: ルートの battle_states.pkl があれば使う
             fallback = _PROJECT_ROOT / "battle_states.pkl"
             if fallback.is_file():
                 states_path = fallback
@@ -109,7 +107,6 @@ def main() -> None:
 
     if effective_battle_id:
         print(f"対戦 ID: {effective_battle_id}")
-    # ffmpeg で PNG 連番 → MP4
     pattern = frames_dir / "frame_%04d.png"
     cmd = [
         "ffmpeg", "-y",
