@@ -1440,14 +1440,63 @@ def _can_active_use_any_attack(p: PlayerState) -> bool:
     return False
 
 
+def _max_energy_for_pokemon(attacks: list) -> int:
+    """そのポケモンの技で必要な最大エネルギー数（個数）を返す。"""
+    return max((a.energy_cost for a in attacks), default=0)
+
+
+def _max_effective_damage_if_attach(
+    state: GameState,
+    attacker_card: PokemonCard,
+    attached_count: int,
+    attached_types: list,
+    extra_type: str,
+    defender: "BattlePokemon | None",
+    current_player: int,
+) -> int:
+    """
+    このポケモンに extra_type を 1 つ付けたとき、
+    相手のバトル場（defender）に与えられる最大の有效ダメージを返す。
+    """
+    if not attacker_card.attacks:
+        return 0
+    sim_count = attached_count + 1
+    sim_types = list(attached_types) + [extra_type]
+    max_eff = 0
+    opp = state.defending_player_state()
+    for atk in attacker_card.attacks:
+        if not _can_pay_energy_cost(
+            sim_count, sim_types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
+            continue
+        base = _attack_damage_for_eval(atk)
+        if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
+            base += 90
+        if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[current_player]:
+            base += 120
+        eff = _effective_damage_to_defender(attacker_card, defender, base) if defender else base
+        max_eff = max(max_eff, eff)
+    return max_eff
+
+
 def _try_attach_energy_auto(state: GameState) -> bool:
-    """自動ターン用：エネルギーを 1 枚付与するなら True を返す。"""
+    """
+    自動ターン用：エネルギーを 1 枚付与するなら True を返す。
+    付与先は「このエネルギーを付けたときに相手に与えられる有效ダメージが最大のポケモン」で決める。
+    技で必要な最大までしか付与しない。
+    """
     p = state.active_player_state()
-    # 最初の番（先行 1 ターン目）のみ進化できない（ルール A-05）
     can_evolve_this_turn = not _is_first_player_first_turn(state)
     energy_hand_idx = next((i for i, c in enumerate(p.hand) if is_energy(c)), None)
     if energy_hand_idx is None or not p.active:
         return False
+
+    energy_card = p.hand[energy_hand_idx]
+    new_type = getattr(energy_card, "energy_type", None) or "colorless"
+    opp = state.defending_player_state()
+    max_active = _max_energy_for_pokemon(p.active.card.attacks)
+    energy_needed_active = _energy_needed_for_active(p)
 
     if p.active.attached_energy == 0:
         attach_energy(state, energy_hand_idx)
@@ -1456,50 +1505,41 @@ def _try_attach_energy_auto(state: GameState) -> bool:
         attach_energy(state, energy_hand_idx)
         return True
 
-    opp = state.defending_player_state()
-    if opp.active:
-        energy_card = p.hand[energy_hand_idx]
-        new_type = getattr(energy_card, "energy_type", None) or "colorless"
-        sim_count = p.active.attached_energy + 1
-        sim_types = getattr(p.active, "attached_energy_types", []) + [new_type]
-        for atk in p.active.card.attacks:
-            if not _can_pay_energy_cost(
-                sim_count, sim_types,
-                atk.energy_cost, getattr(atk, "energy_cost_typed", None),
-            ):
-                continue
-            base_dmg = _attack_damage_for_eval(atk)
-            if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
-                base_dmg += 90
-            effective = _effective_damage_to_defender(
-                p.active.card, opp.active, base_dmg
-            )
-            if effective >= opp.active.hp:
-                attach_energy(state, energy_hand_idx)
-                return True
+    candidates = []
+    if p.active.attached_energy < max_active:
+        dmg = _max_effective_damage_if_attach(
+            state,
+            p.active.card,
+            p.active.attached_energy,
+            getattr(p.active, "attached_energy_types", []),
+            new_type,
+            opp.active,
+            state.current_player,
+        )
+        candidates.append((None, dmg))
+    for bi, b in enumerate(p.bench):
+        max_b = _max_energy_for_pokemon(b.card.attacks)
+        if b.attached_energy >= max_b:
+            continue
+        dmg = _max_effective_damage_if_attach(
+            state,
+            b.card,
+            b.attached_energy,
+            getattr(b, "attached_energy_types", []),
+            new_type,
+            opp.active,
+            state.current_player,
+        )
+        candidates.append((bi, dmg))
 
-    energy_needed_active = _energy_needed_for_active(p)
-    if _can_active_use_any_attack(p) and p.bench:
-        bench_candidates = [
-            (bi, b.attached_energy, b.card.attacks)
-            for bi, b in enumerate(p.bench)
-        ]
-        max_need = 2
-        need_more = [
-            (bi, max_need - en, max((a.energy_cost for a in atks), default=0))
-            for bi, en, atks in bench_candidates
-        ]
-        best_bench = max(need_more, key=lambda x: (x[1] > 0, x[2]), default=None)
-        if best_bench and best_bench[1] > 0:
-            attach_energy(state, energy_hand_idx, bench_index=best_bench[0])
-            return True
-    if not _can_active_use_any_attack(p) or not p.bench:
+    if not candidates:
+        return False
+    best = max(candidates, key=lambda x: (x[1], x[0] is None))
+    if best[0] is None:
         attach_energy(state, energy_hand_idx)
         return True
-    if p.bench:
-        attach_energy(state, energy_hand_idx, bench_index=0)
-        return True
-    return False
+    attach_energy(state, energy_hand_idx, bench_index=best[0])
+    return True
 
 
 def _apply_poison_burn_paralysis_for_active(
