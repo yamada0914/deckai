@@ -1,12 +1,12 @@
 """
 対戦シミュレーション
 デッキ A（オタチ・オオタチ・モトトカゲ）、B（メグロコ・ワルビル）、C（ズピカ・ハラバリー）で、
-初手 4 枚・先行ドローあり・サイド 3 枚取り切りで勝敗。自動対戦を繰り返し、勝率などを表示する。
+初手 7 枚・先行ドローあり・サイド 6 枚取り切りで勝敗。自動対戦を繰り返し、勝率などを表示する。
 """
 import random
 import sys
 from game import setup_game, run_game_auto
-DECK_NAMES = ["オタチデッキ", "ワニデッキ", "カエルデッキ", "ワルビアルデッキ", "ジバコイルデッキ"]
+from deck import get_deck_count, get_deck_name
 
 
 def run_simulation(
@@ -49,7 +49,7 @@ def run_simulation(
         if log_when_deck_loses is not None and not logged_loss:
             deck_lost = (deck0 == log_when_deck_loses and winner == 1) or (deck1 == log_when_deck_loses and winner == 0)
             if deck_lost:
-                print(f"\n===== {DECK_NAMES[log_when_deck_loses]}が負けた試合のログ =====\n")
+                print(f"\n===== {get_deck_name(log_when_deck_loses)}が負けた試合のログ =====\n")
                 for line in log_buffer:
                     print(line)
                 logged_loss = True
@@ -72,7 +72,7 @@ def main() -> None:
             n = int(sys.argv[1])
         except ValueError:
             pass
-    max_deck = len(DECK_NAMES) - 1
+    max_deck = get_deck_count() - 1
     if len(sys.argv) > 2:
         try:
             deck0 = int(sys.argv[2])
@@ -87,13 +87,13 @@ def main() -> None:
             pass
     if "--help" in sys.argv or "-h" in sys.argv:
         print("使い方: python simulate.py [対戦数] [デッキ0] [デッキ1]")
-        print("  デッキ: 0=オタチ, 1=ワニ, 2=カエル, 3=ワルビアル, 4=ジバコイル")
+        print("  デッキ: 0=オタチ, 1=ワニ, 2=カエル, 3=ワルビアル, 4=ジバコイル, 5以降=登録デッキ")
         print("  例: python simulate.py 1000 3 4  → 1000 回、ワルビアル vs ジバコイル")
         return
     if deck0 == deck1:
-        print(f"{DECK_NAMES[deck0]}どうし、{n} 回シミュレートします。")
+        print(f"{get_deck_name(deck0)}どうし、{n} 回シミュレートします。")
     else:
-        print(f"{DECK_NAMES[deck0]} vs {DECK_NAMES[deck1]}、{n} 回シミュレートします。")
+        print(f"{get_deck_name(deck0)} vs {get_deck_name(deck1)}、{n} 回シミュレートします。")
     log_wani_loss = deck0 == 1 and deck1 == 2  # ワニ vs カエルのときワニが負けた試合のログを 1 回表示
     print("（1 回目のみアクションのログを表示します）\n" if not log_wani_loss else "（ワニが負けた最初の 1 試合のログを表示します）\n")
     results = run_simulation(
@@ -110,8 +110,8 @@ def main() -> None:
     print(f"先手の勝ち: {first_win} 回 ({100 * first_win / n:.1f} %)")
     print(f"後手の勝ち: {second_win} 回 ({100 * second_win / n:.1f} %)")
     if d0 != d1:
-        print(f"{DECK_NAMES[d0]}の勝ち: {wins[0]} 回 ({100 * wins[0] / n:.1f} %)")
-        print(f"{DECK_NAMES[d1]}の勝ち: {wins[1]} 回 ({100 * wins[1] / n:.1f} %)")
+        print(f"{get_deck_name(d0)}の勝ち: {wins[0]} 回 ({100 * wins[0] / n:.1f} %)")
+        print(f"{get_deck_name(d1)}の勝ち: {wins[1]} 回 ({100 * wins[1] / n:.1f} %)")
 
 
 if __name__ == "__main__":
