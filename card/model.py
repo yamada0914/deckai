@@ -11,6 +11,9 @@ from typing import Literal
 
 CardType = Literal["pokemon", "energy", "goods", "support"]
 
+# 進化段階：たね＝basic、1進化＝stage1、2進化＝stage2。画像認識・ゲームロジックで共通利用。
+EvolutionStage = Literal["basic", "stage1", "stage2"]
+
 EnergyTypeId = Literal[
     "grass", "fire", "water", "lightning", "psychic",
     "fighting", "darkness", "metal", "fairy",
@@ -184,6 +187,7 @@ class PokemonCard:
     max_hp: int = 110
     attacks: list[Attack] = field(default_factory=list)
     evolves_from: str | None = None
+    evolution_stage: EvolutionStage | None = None  # たね=basic, 1進化=stage1, 2進化=stage2。画像認識で設定可。
     retreat_cost: int = 1
     instance_id: str = ""
     pokemon_type: PokemonTypeId | None = None
@@ -201,6 +205,7 @@ class PokemonCard:
             max_hp=self.max_hp,
             attacks=[Attack(**a.__dict__) for a in self.attacks],
             evolves_from=self.evolves_from,
+            evolution_stage=self.evolution_stage,
             retreat_cost=self.retreat_cost,
             instance_id=self.instance_id,
             pokemon_type=self.pokemon_type,
@@ -241,7 +246,7 @@ class SupportCard:
     id: str
     name: str
     type: CardType = "support"
-    effect: str = "draw_3"
+    effect: str = ""
     draw_count: int = 3
     description: str = ""
     instance_id: str = ""
@@ -261,3 +266,23 @@ def is_goods(card) -> bool:
 
 def is_support(card) -> bool:
     return getattr(card, "type", None) == "support"
+
+
+def is_basic_pokemon(card) -> bool:
+    """たねポケモンか。evolution_stage が "basic" または、未設定で evolves_from が無い場合 True。"""
+    if getattr(card, "type", None) != "pokemon":
+        return False
+    stage = getattr(card, "evolution_stage", None)
+    if stage is not None:
+        return stage == "basic"
+    return not getattr(card, "evolves_from", None)
+
+
+def is_stage1_pokemon(card) -> bool:
+    """1進化ポケモンか。evolution_stage が "stage1" のとき True。"""
+    return getattr(card, "type", None) == "pokemon" and getattr(card, "evolution_stage", None) == "stage1"
+
+
+def is_stage2_pokemon(card) -> bool:
+    """2進化ポケモンか。evolution_stage が "stage2" のとき True。"""
+    return getattr(card, "type", None) == "pokemon" and getattr(card, "evolution_stage", None) == "stage2"
