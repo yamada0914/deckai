@@ -689,8 +689,9 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
     name_ja = getattr(card, "name", "")
 
     # ふしぎなアメ：手札の 2 進化 1 枚を、場のたねポケモンにのせて 1 進化をとばして進化
+    # 先行・後行とも、そのプレイヤーの 1 ターン目は進化できない。
     if cid == "fushiginaame":
-        if _is_first_player_first_turn(state):
+        if state.turn_count < 2:
             return False
         stage1_id = None
         stage2_card = None
@@ -1672,7 +1673,7 @@ def end_turn(state: GameState) -> None:
 def run_turn_auto(state: GameState) -> bool:
     """
     現在のプレイヤーが「可能な行動を順番に実行」する。
-    順序：0. ベンチにポケモン出す、1. エネルギー付与、2. サポート（ネモ等でドロー）、3. ポケモンいれかえ、4. にげる（条件満たすとき）、5. どうぐ・グッズ、6. 進化、7. 攻撃。
+    順序：0. ベンチにポケモン出す、1. 進化（最優先）、2. エネルギー付与、3. サポート（ネモ等でドロー）、4. ポケモンいれかえ、5. にげる（条件満たすとき）、6. どうぐ・グッズ、7. 攻撃。
     何もできなければ False を返す。True = ターン内で何かした。
     """
     p = state.active_player_state()
@@ -1690,6 +1691,32 @@ def run_turn_auto(state: GameState) -> bool:
             state._record_frame()
 
     _try_put_bench_until_full()
+
+    # 進化を最優先で行う（先行・後行の 1 ターン目以外）
+    can_evolve = state.turn_count >= 2
+    while can_evolve:
+        p = state.active_player_state()
+        evolved_this_round = False
+        for hand_idx, c in enumerate(p.hand):
+            if not is_pokemon(c) or not c.evolves_from:
+                continue
+            if p.active and _can_evolve_onto(p.active.card, c):
+                evolve_pokemon(state, hand_idx, bench_index=None)
+                acted = True
+                evolved_this_round = True
+                state._record_frame()
+                break
+            for bench_idx, bench_poke in enumerate(p.bench):
+                if _can_evolve_onto(bench_poke.card, c):
+                    evolve_pokemon(state, hand_idx, bench_index=bench_idx)
+                    acted = True
+                    evolved_this_round = True
+                    state._record_frame()
+                    break
+            if evolved_this_round:
+                break
+        if not evolved_this_round:
+            break
 
     if _try_attach_energy_auto(state):
         acted = True
