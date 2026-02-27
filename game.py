@@ -381,6 +381,10 @@ def _take_prize(state: GameState, taker_index: int) -> bool:
 
 def _handle_opponent_ko(opp: PlayerState, state: GameState, koed_bp: BattlePokemon) -> bool:
     """相手のきぜつを 1 回加算し、攻撃側がサイドをとる（ex なら 2 枚、それ以外は 1 枚）。サイド 0 なら勝ち、否則ベンチから繰り出す。"""
+    opp.discard.append(koed_bp.card)
+    tool = getattr(koed_bp, "attached_tool", None)
+    if tool:
+        opp.discard.append(tool)
     opp.knockouts_suffered += 1
     prize_count = _prizes_for_ko(koed_bp)
     if prize_count > 1:
@@ -1113,6 +1117,11 @@ def attack(
             state.log(f"{state.player_name(state.current_player)}: こんらんでコインが裏 → 自分に 30 ダメージ（HP {self_before} → {max(0, p.active.hp)}）、攻撃失敗")
             if p.active and p.active.hp <= 0:
                 state.log(f"{state.player_name(state.current_player)} のバトル場のポケモンがこんらんの自傷できぜつ！")
+                koed_conf = p.active
+                p.discard.append(koed_conf.card)
+                tool = getattr(koed_conf, "attached_tool", None)
+                if tool:
+                    p.discard.append(tool)
                 p.active = None
                 _promote_from_bench(p, state, state.current_player)
             return True
@@ -1188,6 +1197,11 @@ def attack(
                 koed_bench_bp = bench_list[i]
                 bp_name = koed_bench_bp.card.name
                 bench_list.pop(i)
+                owner = p if bench_target_self else opp
+                owner.discard.append(koed_bench_bp.card)
+                tool = getattr(koed_bench_bp, "attached_tool", None)
+                if tool:
+                    owner.discard.append(tool)
                 if bench_target_self:
                     state.log(f"{state.player_name(state.current_player)} のベンチの {bp_name} がきぜつ！")
                 else:
@@ -1322,6 +1336,11 @@ def attack(
 
     if p.active and p.active.hp <= 0:
         state.log(f"{state.player_name(state.current_player)} のバトル場のポケモンが反動できぜつ！")
+        koed_recoil = p.active
+        p.discard.append(koed_recoil.card)
+        tool = getattr(koed_recoil, "attached_tool", None)
+        if tool:
+            p.discard.append(tool)
         p.active = None
         _promote_from_bench(p, state, state.current_player)
     return True
@@ -1494,6 +1513,10 @@ def _apply_poison_burn_paralysis_for_active(
     if p.active and p.active.hp <= 0:
         koed_poison = p.active
         state.log(f"{state.player_name(player_index)} のバトル場の {koed_poison.card.name} がきぜつ！（どくのダメージ）")
+        p.discard.append(koed_poison.card)
+        tool = getattr(koed_poison, "attached_tool", None)
+        if tool:
+            p.discard.append(tool)
         p.knockouts_suffered += 1
         p.active = None
         prize_count = _prizes_for_ko(koed_poison)
@@ -1521,6 +1544,10 @@ def _apply_poison_burn_paralysis_for_active(
     if p.active and p.active.hp <= 0:
         koed_status = p.active
         state.log(f"{state.player_name(player_index)} のバトル場の {koed_status.card.name} がきぜつ！（状態異常のダメージ）")
+        p.discard.append(koed_status.card)
+        tool = getattr(koed_status, "attached_tool", None)
+        if tool:
+            p.discard.append(tool)
         p.knockouts_suffered += 1
         p.active = None
         prize_count = _prizes_for_ko(koed_status)
