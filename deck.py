@@ -11,8 +11,34 @@ from card import CARD_ID_TO_NAME, get_card_by_id, get_trainer_id_by_name
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_READ_CARDS_JSON = _PROJECT_ROOT / "read_cards_result.json"
+REGISTERED_DECKS_PATH = _PROJECT_ROOT / "registered_decks.json"
 
 _recipe_cache: dict[tuple[str, str], dict[str, int]] = {}
+_registered_decks_cache: list[dict] | None = None
+
+
+def _load_registered_decks() -> list[dict]:
+    """registered_decks.json を読み、[ {"deck_code": "...", "name": "..."}, ... ] を返す。"""
+    global _registered_decks_cache
+    if _registered_decks_cache is not None:
+        return _registered_decks_cache
+    if not REGISTERED_DECKS_PATH.is_file():
+        _registered_decks_cache = []
+        return _registered_decks_cache
+    try:
+        data = json.loads(REGISTERED_DECKS_PATH.read_text(encoding="utf-8"))
+        _registered_decks_cache = data if isinstance(data, list) else data.get("decks", [])
+        if not isinstance(_registered_decks_cache, list):
+            _registered_decks_cache = []
+    except (json.JSONDecodeError, OSError):
+        _registered_decks_cache = []
+    return _registered_decks_cache
+
+
+def clear_registered_decks_cache() -> None:
+    """登録デッキのキャッシュを空にする。registered_decks.json 更新後に再読み込みするときに呼ぶ。"""
+    global _registered_decks_cache
+    _registered_decks_cache = None
 
 
 def _load_cards_from_split_files(base_dir: Path, card_files: dict) -> list:
@@ -47,21 +73,54 @@ DECK_RECIPE_D = {"meguroko-svd-062": 3, "warubiru-svd-063": 2, "warubiaru-svd-06
 DECK_RECIPE_E = {"jibakoil-svd-038": 2, "rarecoil-svd-037": 2, "coil-svd-036": 3, "zupika-svd-041": 3, "harabarii-svd-042": 2, "karamingo-svg-029": 2, "basic-energy-lightning": 8, "nemo": 4, "potion": 2, "pokemon_irekae": 2}
 
 DECK_RECIPES = [DECK_RECIPE_A, DECK_RECIPE_B, DECK_RECIPE_C, DECK_RECIPE_D, DECK_RECIPE_E]
-DECK_SIZE = 13
-STARTING_HAND_SIZE = 4
+DECK_SIZE = 60
+STARTING_HAND_SIZE = 7
+
+
+def get_deck_count() -> int:
+    """利用可能なデッキ数（固定 A〜E + 登録デッキ）を返す。"""
+    return len(DECK_RECIPES) + len(_load_registered_decks())
+
+
+def get_deck_name(deck_index: int) -> str:
+    """デッキ番号の表示名を返す。0=A, 1=B, ..., 5 以降は登録デッキの name または deck_code。"""
+    reg = _load_registered_decks()
+    if deck_index < len(DECK_RECIPES):
+        return ["オタチデッキ", "ワニデッキ", "カエルデッキ", "ワルビアルデッキ", "ジバコイルデッキ"][deck_index % len(DECK_RECIPES)]
+    i = deck_index - len(DECK_RECIPES)
+    if i < len(reg):
+        return (reg[i].get("name") or reg[i].get("deck_code") or "").strip() or f"デッキ{deck_index}"
+    return f"デッキ{deck_index}"
 
 
 def format_deck_recipe(deck_index: int) -> str:
-    """デッキ番号（0=A, 1=B, 2=C, 3=D, 4=E）のレシピを「カード名枚数, ...」の文字列で返す。"""
-    recipe = DECK_RECIPES[deck_index % len(DECK_RECIPES)]
-    names = [f"{CARD_ID_TO_NAME.get(cid, cid)}{n}" for cid, n in recipe.items()]
-    return "、".join(names)
+    """デッキ番号のレシピを「カード名枚数, ...」または「[デッキコード ...]」で返す。"""
+    reg = _load_registered_decks()
+    if deck_index < len(DECK_RECIPES):
+        recipe = DECK_RECIPES[deck_index % len(DECK_RECIPES)]
+        names = [f"{CARD_ID_TO_NAME.get(cid, cid)}{n}" for cid, n in recipe.items()]
+        return "、".join(names)
+    i = deck_index - len(DECK_RECIPES)
+    if i < len(reg):
+        code = reg[i].get("deck_code") or ""
+        return f"[デッキコード {code}]"
+    return ""
 
 
 def create_deck(deck_index: int = 0) -> list:
-    """指定デッキを生成（0=A, 1=B, 2=C, 3=D, 4=E）。各カードにユニーク instance_id を付与。"""
-    recipe = DECK_RECIPES[deck_index % len(DECK_RECIPES)]
-    return create_deck_from_recipe(recipe)
+    """指定デッキを生成（0=A, 1=B, ..., 4=E, 5 以降は登録デッキ）。各カードにユニーク instance_id を付与。"""
+    reg = _load_registered_decks()
+    if deck_index < len(DECK_RECIPES):
+        recipe = DECK_RECIPES[deck_index % len(DECK_RECIPES)]
+        return create_deck_from_recipe(recipe)
+    i = deck_index - len(DECK_RECIPES)
+    if i < len(reg):
+        code = (reg[i].get("deck_code") or "").strip()
+        if code:
+            deck = create_deck_from_deck_code(code)
+            if deck is not None:
+                return deck
+    return create_deck_from_recipe(DECK_RECIPES[0])
 
 
 def create_deck_from_recipe(recipe: dict) -> list:
@@ -73,6 +132,16 @@ def create_deck_from_recipe(recipe: dict) -> list:
             deck.append(get_card_by_id(card_id, f"card-{uid}"))
             uid += 1
     return deck
+
+
+def _resolve_card_id(name: str, name_to_id: dict[str, str]) -> str | None:
+    """カード名を id に解決する。name_to_id → 「〇〇ex」なら「〇〇」でも検索 → トレーナー名で検索。"""
+    cid = name_to_id.get(name)
+    if not cid and name.endswith("ex"):
+        cid = name_to_id.get(name[:-2].strip())
+    if not cid:
+        cid = get_trainer_id_by_name(name)
+    return cid or None
 
 
 def load_recipe_from_deck_code(
@@ -129,7 +198,7 @@ def load_recipe_from_deck_code(
         count = int(item.get("count") or 0)
         if not name or count <= 0:
             continue
-        cid = name_to_id.get(name)
+        cid = _resolve_card_id(name, name_to_id)
         if not cid:
             continue
         recipe[cid] = recipe.get(cid, 0) + count
