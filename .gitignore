@@ -21,3 +21,12 @@ env/
 
 # ダウンロードしたカード画像
 card_images/
+
+# 記録した対戦（ログ・pkl・動画・フレームは battles/<id>/ に保存）
+battles/
+
+# ルートに残っている従来形式（互換用）
+battle_states.pkl
+battle_*.log
+battle_*.mp4
+frames/
