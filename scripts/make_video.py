@@ -1,19 +1,22 @@
 """
 記録した状態スナップショットから盤面フレームを描画し、動画にまとめる。
 
-対戦 ID で record_game のログ・pkl と対応づけて動画を出力する。
   オプションなしなら battles/ 内の最新シミュレーションで動画を作成。
-  python make_video.py                              # 最新対戦 → battles/<最新ID>/battle.mp4
-  python make_video.py --battle-id 20250226_143052   # 指定した対戦で動画作成
+  python scripts/make_video.py                              # 最新対戦 → battles/<最新ID>/battle.mp4
+  python scripts/make_video.py --battle-id 20250226_143052   # 指定した対戦で動画作成
 """
-import argparse
-import pickle
-import subprocess
 import sys
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parent
-BATTLES_DIR = _PROJECT_ROOT / "battles"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+
+import argparse
+import pickle
+import subprocess
+from board_render import render_board_frame
+
+BATTLES_DIR = _REPO_ROOT / "battles"
 
 
 def _latest_battle_id() -> str | None:
@@ -45,8 +48,8 @@ def main() -> None:
 
     if args.states is not None:
         states_path = args.states
-        output_mp4 = args.output or _PROJECT_ROOT / "battle.mp4"
-        frames_dir = args.frames_dir or _PROJECT_ROOT / "frames"
+        output_mp4 = args.output or _REPO_ROOT / "battle.mp4"
+        frames_dir = args.frames_dir or _REPO_ROOT / "frames"
         effective_battle_id = None
     elif args.battle_id:
         battle_dir = BATTLES_DIR / args.battle_id
@@ -57,14 +60,14 @@ def main() -> None:
     else:
         latest_id = _latest_battle_id()
         if latest_id is None:
-            fallback = _PROJECT_ROOT / "battle_states.pkl"
+            fallback = _REPO_ROOT / "battle_states.pkl"
             if fallback.is_file():
                 states_path = fallback
-                output_mp4 = args.output or _PROJECT_ROOT / "battle.mp4"
-                frames_dir = args.frames_dir or _PROJECT_ROOT / "frames"
+                output_mp4 = args.output or _REPO_ROOT / "battle.mp4"
+                frames_dir = args.frames_dir or _REPO_ROOT / "frames"
                 effective_battle_id = None
             else:
-                print("エラー: battles/ に対戦がありません。先に python record_game.py を実行してください。", file=sys.stderr)
+                print("エラー: battles/ に対戦がありません。先に python scripts/record_game.py を実行してください。", file=sys.stderr)
                 sys.exit(1)
         else:
             battle_dir = BATTLES_DIR / latest_id
@@ -77,7 +80,7 @@ def main() -> None:
         output_mp4 = args.output
     if not states_path.is_file():
         print(f"エラー: 状態ファイルが見つかりません: {states_path}", file=sys.stderr)
-        print("先に python record_game.py を実行するか、--battle-id で対戦 ID を指定してください。", file=sys.stderr)
+        print("先に python scripts/record_game.py を実行するか、--battle-id で対戦 ID を指定してください。", file=sys.stderr)
         sys.exit(1)
 
     with open(states_path, "rb") as f:
@@ -92,9 +95,7 @@ def main() -> None:
         print("エラー: 状態が 0 件です。", file=sys.stderr)
         sys.exit(1)
 
-    from board_render import render_board_frame
-
-    images_dir = _PROJECT_ROOT / "card_images"
+    images_dir = _REPO_ROOT / "card_images"
     frames_dir.mkdir(parents=True, exist_ok=True)
     for f in frames_dir.glob("frame_*.png"):
         f.unlink()

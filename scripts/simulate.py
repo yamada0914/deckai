@@ -3,8 +3,13 @@
 デッキ A（オタチ・オオタチ・モトトカゲ）、B（メグロコ・ワルビル）、C（ズピカ・ハラバリー）で、
 初手 7 枚・先行ドローあり・サイド 6 枚取り切りで勝敗。自動対戦を繰り返し、勝率などを表示する。
 """
-import random
 import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+
+import random
 from game import setup_game, run_game_auto
 from deck import get_deck_count, get_deck_name
 
@@ -86,9 +91,9 @@ def main() -> None:
         except ValueError:
             pass
     if "--help" in sys.argv or "-h" in sys.argv:
-        print("使い方: python simulate.py [対戦数] [デッキ0] [デッキ1]")
+        print("使い方: python scripts/simulate.py [対戦数] [デッキ0] [デッキ1]")
         print("  デッキ: 0=オタチ, 1=ワニ, 2=カエル, 3=ワルビアル, 4=ジバコイル, 5以降=登録デッキ")
-        print("  例: python simulate.py 1000 3 4  → 1000 回、ワルビアル vs ジバコイル")
+        print("  例: python scripts/simulate.py 1000 3 4  → 1000 回、ワルビアル vs ジバコイル")
         return
     if deck0 == deck1:
         print(f"{get_deck_name(deck0)}どうし、{n} 回シミュレートします。")

@@ -4,8 +4,15 @@
 バトル場に「メグロコ（たね）」がある状態でふしぎなアメを使い、
 メグロコがワルビアルに 1 進化をとばして進化することを確認する。
 """
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+
 from game import GameState, PlayerState, BattlePokemon, use_trainer_goods
 from card import get_card_by_id
+
 
 def main() -> None:
     state = GameState(

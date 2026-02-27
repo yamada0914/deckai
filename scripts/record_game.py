@@ -3,18 +3,22 @@
 
 対戦 ID でログ・pkl・動画を紐付け。ID 未指定時は日時（YYYYMMDD_HHMMSS）で自動採番。
   1 対戦ごとに battles/<id>/ フォルダに battle.log, battle_states.pkl を保存。
-  python record_game.py                    # 日時で ID 自動 → battles/20260227_143052/ など
-  python record_game.py --id my_match      # 対戦 ID を手動指定する場合のみ
-  python make_video.py --battle-id <id>   # 表示された ID で battles/<id>/battle.mp4 を生成
+  python scripts/record_game.py                    # 日時で ID 自動
+  python scripts/record_game.py --id my_match       # 対戦 ID を手動指定
+  python scripts/make_video.py --battle-id <id>     # 動画生成
 """
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT))
+
 import argparse
 import copy
 import pickle
 from datetime import datetime
-from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parent
-BATTLES_DIR = _PROJECT_ROOT / "battles"
+BATTLES_DIR = _REPO_ROOT / "battles"
 
 
 def _run_and_record(
@@ -95,7 +99,7 @@ def _run_and_record(
     with open(states_path, "wb") as f:
         pickle.dump({"states": states, "log_snapshots": log_snapshots}, f)
     print(f"状態スナップショットを保存しました: {states_path} ({len(states)} フレーム)")
-    print(f"動画生成: python make_video.py --battle-id {bid}")
+    print(f"動画生成: python scripts/make_video.py --battle-id {bid}")
 
     return states, bid
 
