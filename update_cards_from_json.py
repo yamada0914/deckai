@@ -135,6 +135,10 @@ def _pokemon_card_from_json(card: dict) -> str:
     hp = card.get("hp", 60)
     attacks = card.get("attacks", [])
     evolves_from = card.get("evolves_from")
+    evolution_stage = card.get("evolution_stage")  # basic / stage1 / stage2（画像認識で設定）
+    if evolution_stage not in ("basic", "stage1", "stage2"):
+        # JSON に無い場合は evolves_from が無ければたねとみなす
+        evolution_stage = "basic" if not evolves_from else None
     retreat_cost = card.get("retreat_cost", 1)
     pokemon_type = card.get("pokemon_type")
     weakness = card.get("weakness")
@@ -152,6 +156,8 @@ def _pokemon_card_from_json(card: dict) -> str:
         lines.append("        " + attack_from_json(a) + ",")
     lines.append("    ],")
     lines.append(f"    evolves_from={py_str(evolves_from)},")
+    if evolution_stage is not None:
+        lines.append(f"    evolution_stage={py_str(evolution_stage)},")
     lines.append(f"    retreat_cost={retreat_cost},")
     lines.append(f"    pokemon_type={py_str(pokemon_type)},")
     if weakness is not None:
