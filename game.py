@@ -1675,15 +1675,20 @@ def run_turn_auto(state: GameState) -> bool:
 
     _BALL_GOODS_IDS = ("supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya")
     if not _is_first_player_first_turn(state):
-        for i, c in enumerate(p.hand):
-            if not is_goods(c) or getattr(c, "is_tool", False):
-                continue
-            if getattr(c, "id", "") not in _BALL_GOODS_IDS:
-                continue
-            if use_trainer_goods(state, i):
-                acted = True
-                p = state.active_player_state()
-                state._record_frame()
+        while True:
+            used_ball = False
+            for i, c in enumerate(p.hand):
+                if not is_goods(c) or getattr(c, "is_tool", False):
+                    continue
+                if getattr(c, "id", "") not in _BALL_GOODS_IDS:
+                    continue
+                if use_trainer_goods(state, i):
+                    acted = True
+                    used_ball = True
+                    p = state.active_player_state()
+                    state._record_frame()
+                    break
+            if not used_ball:
                 break
         _try_put_bench_until_full()
 
