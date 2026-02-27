@@ -1785,17 +1785,28 @@ def run_turn_auto(state: GameState) -> bool:
     retreat_cost = getattr(p.active.card, "retreat_cost", 1) if p.active else 0
     can_retreat = p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
     if can_retreat and p.active and p.bench and would_be_koed and not can_ko_opponent and p.active.attached_energy >= retreat_cost:
-        # 相手の有效ダメージで生き残れるベンチを優先、否則 HP・エネルギーで選択
-        survivors = [(i, p.bench[i].hp, p.bench[i].attached_energy) for i in range(len(p.bench)) if p.bench[i].hp > opp_max_effective]
-        if survivors:
-            best = max(survivors, key=lambda x: (x[1], x[2]))[0]
-        else:
-            best = max(
-                range(len(p.bench)),
-                key=lambda i: (p.bench[i].hp, p.bench[i].attached_energy),
-                default=None,
-            )
-        if best is not None and retreat(state, best):
+        # ベンチ候補ごとの最大ダメージを見て、相手をきぜつさせられるベンチを最優先
+        best_idx = None
+        best_score = (-1, -1, -1)  # (can_ko_flag, damage, hp/energyの目安)
+        for i, bp in enumerate(p.bench):
+            dmg = _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player) if opp.active else 0
+            can_ko = int(opp.active is not None and dmg >= opp.active.hp)
+            score = (can_ko, dmg, bp.hp)
+            if score > best_score:
+                best_score = score
+                best_idx = i
+        # それでも候補がなければ、従来どおり生存しやすいベンチを選ぶ
+        if best_idx is None:
+            survivors = [(i, p.bench[i].hp, p.bench[i].attached_energy) for i in range(len(p.bench)) if p.bench[i].hp > opp_max_effective]
+            if survivors:
+                best_idx = max(survivors, key=lambda x: (x[1], x[2]))[0]
+            else:
+                best_idx = max(
+                    range(len(p.bench)),
+                    key=lambda i: (p.bench[i].hp, p.bench[i].attached_energy),
+                    default=None,
+                )
+        if best_idx is not None and retreat(state, best_idx):
             acted = True
             p = state.active_player_state()
             state._record_frame()
