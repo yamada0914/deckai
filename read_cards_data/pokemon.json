@@ -96,9 +96,8 @@
     "attacks": [
       {
         "name": "はばたく",
-        "energy_cost": 2,
+        "energy_cost": 1,
         "energy_cost_typed": [
-          "colorless",
           "colorless"
         ],
         "damage": 30,
