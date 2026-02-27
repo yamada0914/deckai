@@ -315,8 +315,12 @@ def _put_one_pokemon_on_bench(
     """手札からたねポケモン（進化ポケモンでない）1 体をベンチに出す（ベンチが 5 体未満のとき）。"""
     if len(player.bench) >= BENCH_SIZE:
         return False
+    existing_names = {getattr(bp.card, "name", "") for bp in player.bench}
     for i, c in enumerate(player.hand):
         if is_pokemon(c) and not c.evolves_from:
+            # すでに同名のポケモンがベンチにいる場合は出さない
+            if getattr(c, "name", "") in existing_names:
+                continue
             p = c.copy()
             bp = BattlePokemon(card=p)
             bp.put_on_bench_this_turn = True  # その番には進化できない（ルール A-05）
