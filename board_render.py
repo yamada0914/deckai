@@ -135,10 +135,12 @@ def _draw_log_panel(
         font = ImageFont.load_default()
     pad = 8
     max_lines = max(1, (height - pad * 2) // LOG_LINE_HEIGHT)
-    lines = [ln.strip() for ln in (log_text or "").split("\n") if ln.strip()]
+    lines = [ln.rstrip() for ln in (log_text or "").split("\n") if ln.strip()]
     wrapped = []
     for ln in lines:
-        wrapped.extend(textwrap.wrap(ln, width=20) or [ln[:20]])
+        chunks = textwrap.wrap(ln, width=20) or [ln[:20]]
+        wrapped.extend(chunks)
+        wrapped.append("")
     show_lines = wrapped[-max_lines:] if len(wrapped) > max_lines else wrapped
     y = pad
     for ln in show_lines:
