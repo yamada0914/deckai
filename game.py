@@ -560,6 +560,34 @@ def _our_max_effective_damage(state: GameState) -> int:
     return max_dmg
 
 
+def _max_effective_damage_for_attacker(
+    state: GameState,
+    attacker_bp: BattlePokemon,
+    defender_bp: BattlePokemon | None,
+    player_index: int,
+) -> int:
+    """任意のバトルポケモンが相手のバトル場に与えうる最大の有效ダメージを返す。"""
+    if not attacker_bp.card.attacks or not defender_bp:
+        return 0
+    max_dmg = 0
+    types = getattr(attacker_bp, "attached_energy_types", [])
+    opp = state.players[1 - player_index]
+    for atk in attacker_bp.card.attacks:
+        if not _can_pay_energy_cost(
+            attacker_bp.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
+            continue
+        base = _attack_damage_for_eval(atk)
+        if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
+            base += 90
+        if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[player_index]:
+            base += 120
+        eff = _effective_damage_to_defender(attacker_bp.card, defender_bp, base)
+        max_dmg = max(max_dmg, eff)
+    return max_dmg
+
+
 def retreat(state: GameState, bench_index: int) -> bool:
     """バトル場のポケモンとベンチの bench_index 番目を入れ替える（逃げる）。にげるエネルギー分を捨てる。ねむり・マヒ中はにげられない。"""
     p = state.active_player_state()
@@ -1788,25 +1816,31 @@ def run_turn_auto(state: GameState) -> bool:
     p = state.active_player_state()
     _try_put_bench_until_full()
 
-    # 最初の番（先行 1 ターン目）のみ進化できない（ルール A-05）
-    can_evolve = not _is_first_player_first_turn(state)
-    if can_evolve:
+    # 進化を最優先で行う（サポートやグッズで手札が変わったあとも再度チェック）
+    can_evolve = state.turn_count >= 2
+    while can_evolve:
+        p = state.active_player_state()
+        evolved_this_round = False
         for hand_idx, c in enumerate(p.hand):
             if not is_pokemon(c) or not c.evolves_from:
                 continue
             if p.active and _can_evolve_onto(p.active.card, c):
                 evolve_pokemon(state, hand_idx, bench_index=None)
                 acted = True
+                evolved_this_round = True
                 state._record_frame()
                 break
             for bench_idx, bench_poke in enumerate(p.bench):
                 if _can_evolve_onto(bench_poke.card, c):
                     evolve_pokemon(state, hand_idx, bench_index=bench_idx)
                     acted = True
+                    evolved_this_round = True
                     state._record_frame()
                     break
-            if acted:
+            if evolved_this_round:
                 break
+        if not evolved_this_round:
+            break
 
     is_game_first_turn = state.turn_count == 0
     can_attack = not is_game_first_turn and p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
