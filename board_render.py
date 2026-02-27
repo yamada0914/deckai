@@ -81,6 +81,7 @@ MARGIN = 24
 PRIZE_TO_BENCH = 12
 BENCH_GAP = 10
 TOOL_OFFSET = 8
+TOOL_VERTICAL_OVERHANG = 36
 CARD_W_BENCH = 90
 CARD_H_BENCH = 124
 MIN_HAND_CARD_W = 20
@@ -160,12 +161,12 @@ def _draw_pokemon_with_tool(
     h: int,
     images_dir: Path,
 ) -> None:
-    """ポケモンカードを描画する。どうぐがついていればその下に重ねて表示する。"""
+    """ポケモンカードを描画する。どうぐがついていればその上にはみ出すように重ねて表示する。"""
     tool = getattr(bp, "attached_tool", None)
     if tool:
         tool_path = get_card_image_path(getattr(tool, "id", ""), images_dir)
         tool_name = getattr(tool, "name", "どうぐ")
-        _paste_card_image(bg, tool_path, x + TOOL_OFFSET, y + TOOL_OFFSET, w, h, tool_name)
+        _paste_card_image(bg, tool_path, x, y - TOOL_VERTICAL_OVERHANG, w, h, tool_name)
     path = get_card_image_path(getattr(bp.card, "id", ""), images_dir)
     _paste_card_image(bg, path, x, y, w, h, bp.card.name)
     _draw_hp_bar(draw, x, y, w, h, bp.hp, bp.max_hp)
