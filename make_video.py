@@ -1,0 +1,135 @@
+"""
+記録した状態スナップショットから盤面フレームを描画し、動画にまとめる。
+
+対戦 ID で record_game のログ・pkl と対応づけて動画を出力する。
+  オプションなしなら battles/ 内の最新シミュレーションで動画を作成。
+  python make_video.py                              # 最新対戦 → battles/<最新ID>/battle.mp4
+  python make_video.py --battle-id 20250226_143052   # 指定した対戦で動画作成
+"""
+import argparse
+import pickle
+import subprocess
+import sys
+from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parent
+BATTLES_DIR = _PROJECT_ROOT / "battles"
+
+
+def _latest_battle_id() -> str | None:
+    """battles/ 内で battle_states.pkl がある対戦のうち、最も新しい対戦 ID を返す。なければ None。"""
+    if not BATTLES_DIR.is_dir():
+        return None
+    latest_id = None
+    latest_mtime = 0.0
+    for sub in BATTLES_DIR.iterdir():
+        if not sub.is_dir():
+            continue
+        pkl = sub / "battle_states.pkl"
+        if pkl.is_file():
+            m = pkl.stat().st_mtime
+            if m > latest_mtime:
+                latest_mtime = m
+                latest_id = sub.name
+    return latest_id
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="状態スナップショットから盤面動画を生成する")
+    parser.add_argument("--battle-id", type=str, default=None, metavar="ID", help="対戦 ID（指定時は battles/<ID>/ 内の pkl → battle.mp4, フレームは frames/）")
+    parser.add_argument("--states", type=Path, default=None, metavar="PATH", help="状態 pickle（--battle-id 未指定時のデフォルト: battle_states.pkl）")
+    parser.add_argument("-o", "--output", type=Path, default=None, metavar="PATH", help="出力動画（--battle-id 未指定時のデフォルト: battle.mp4）")
+    parser.add_argument("--fps", type=float, default=0.5, help="動画の FPS（デフォルト: 0.5 = 1 フレーム 2 秒表示）")
+    parser.add_argument("--frames-dir", type=Path, default=None, help="フレーム画像を残すディレクトリ（省略時: battle-id なら battles/<ID>/frames/）")
+    args = parser.parse_args()
+
+    # オプションなし時は最新シミュレーション（battles/ 内で pkl が最も新しい対戦）を使う
+    if args.states is not None:
+        states_path = args.states
+        output_mp4 = args.output or _PROJECT_ROOT / "battle.mp4"
+        frames_dir = args.frames_dir or _PROJECT_ROOT / "frames"
+        effective_battle_id = None
+    elif args.battle_id:
+        battle_dir = BATTLES_DIR / args.battle_id
+        states_path = battle_dir / "battle_states.pkl"
+        output_mp4 = args.output or battle_dir / "battle.mp4"
+        frames_dir = args.frames_dir or battle_dir / "frames"
+        effective_battle_id = args.battle_id
+    else:
+        latest_id = _latest_battle_id()
+        if latest_id is None:
+            # 互換: ルートの battle_states.pkl があれば使う
+            fallback = _PROJECT_ROOT / "battle_states.pkl"
+            if fallback.is_file():
+                states_path = fallback
+                output_mp4 = args.output or _PROJECT_ROOT / "battle.mp4"
+                frames_dir = args.frames_dir or _PROJECT_ROOT / "frames"
+                effective_battle_id = None
+            else:
+                print("エラー: battles/ に対戦がありません。先に python record_game.py を実行してください。", file=sys.stderr)
+                sys.exit(1)
+        else:
+            battle_dir = BATTLES_DIR / latest_id
+            states_path = battle_dir / "battle_states.pkl"
+            output_mp4 = args.output or battle_dir / "battle.mp4"
+            frames_dir = args.frames_dir or battle_dir / "frames"
+            effective_battle_id = latest_id
+            print(f"最新の対戦を使用: {latest_id}")
+    if args.output is not None:
+        output_mp4 = args.output
+    if not states_path.is_file():
+        print(f"エラー: 状態ファイルが見つかりません: {states_path}", file=sys.stderr)
+        print("先に python record_game.py を実行するか、--battle-id で対戦 ID を指定してください。", file=sys.stderr)
+        sys.exit(1)
+
+    with open(states_path, "rb") as f:
+        data = pickle.load(f)
+    if isinstance(data, dict):
+        states = data.get("states", [])
+        log_snapshots = data.get("log_snapshots", [])
+    else:
+        states = data
+        log_snapshots = []
+    if not states:
+        print("エラー: 状態が 0 件です。", file=sys.stderr)
+        sys.exit(1)
+
+    from board_render import render_board_frame
+
+    images_dir = _PROJECT_ROOT / "card_images"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    for f in frames_dir.glob("frame_*.png"):
+        f.unlink()
+
+    for i, state in enumerate(states):
+        out_png = frames_dir / f"frame_{i:04d}.png"
+        log_text = "\n".join(log_snapshots[i]) if i < len(log_snapshots) else ""
+        render_board_frame(state, images_dir, output_path=out_png, log_text=log_text or None)
+    print(f"フレームを {len(states)} 枚出力しました: {frames_dir}/")
+
+    if effective_battle_id:
+        print(f"対戦 ID: {effective_battle_id}")
+    # ffmpeg で PNG 連番 → MP4
+    pattern = frames_dir / "frame_%04d.png"
+    cmd = [
+        "ffmpeg", "-y",
+        "-framerate", str(args.fps),
+        "-i", str(pattern),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        str(output_mp4),
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+        print(f"動画を保存しました: {output_mp4}")
+    except FileNotFoundError:
+        print("ffmpeg が見つかりません。インストール後、次で動画を作成できます:", file=sys.stderr)
+        print(f"  ffmpeg -y -framerate {args.fps} -i \"{frames_dir}/frame_%04d.png\" -c:v libx264 -pix_fmt yuv420p {output_mp4}", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"エラー: ffmpeg が失敗しました: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
