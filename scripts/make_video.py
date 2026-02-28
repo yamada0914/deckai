@@ -19,6 +19,37 @@ from board_render import render_board_frame
 BATTLES_DIR = _REPO_ROOT / "battles"
 
 
+def _board_signature(state) -> tuple:
+    """盤面の見た目を決める要素だけを取り出し、同一フレームの間引きに使う。"""
+    parts: list = [state.turn_count, state.current_player, state.winner]
+    for p in state.players:
+        if p.active is None:
+            parts.append(None)
+        else:
+            parts.append((getattr(p.active.card, "id", ""), p.active.hp))
+        bench = tuple((getattr(bp.card, "id", ""), bp.hp) for bp in p.bench)
+        parts.append(bench)
+        parts.append(len(p.hand))
+        parts.append(len(p.deck))
+        parts.append(len(p.discard))
+        parts.append(len(p.prize_pile))
+    return tuple(parts)
+
+
+def _key_frame_indices(states: list) -> list[int]:
+    """盤面が前フレームと変わったインデックスだけを返す（先頭は必ず含む）。"""
+    if not states:
+        return []
+    indices = [0]
+    prev_sig = _board_signature(states[0])
+    for i in range(1, len(states)):
+        sig = _board_signature(states[i])
+        if sig != prev_sig:
+            indices.append(i)
+            prev_sig = sig
+    return indices
+
+
 def _latest_battle_id() -> str | None:
     """battles/ 内で battle_states.pkl がある対戦のうち、最も新しい対戦 ID を返す。なければ None。"""
     if not BATTLES_DIR.is_dir():
@@ -100,11 +131,14 @@ def main() -> None:
     for f in frames_dir.glob("frame_*.png"):
         f.unlink()
 
-    for i, state in enumerate(states):
-        out_png = frames_dir / f"frame_{i:04d}.png"
-        log_text = "\n".join(log_snapshots[i]) if i < len(log_snapshots) else ""
+    # 盤面が同じ連続フレームを間引き、動画の「何も動かない」時間をなくす
+    key_indices = _key_frame_indices(states)
+    for out_i, state_i in enumerate(key_indices):
+        state = states[state_i]
+        out_png = frames_dir / f"frame_{out_i:04d}.png"
+        log_text = "\n".join(log_snapshots[state_i]) if state_i < len(log_snapshots) else ""
         render_board_frame(state, images_dir, output_path=out_png, log_text=log_text or None)
-    print(f"フレームを {len(states)} 枚出力しました: {frames_dir}/")
+    print(f"フレームを {len(key_indices)} 枚出力しました（元 {len(states)} 枚から間引き）: {frames_dir}/")
 
     if effective_battle_id:
         print(f"対戦 ID: {effective_battle_id}")
