@@ -1,0 +1,350 @@
+"""攻撃実行と最良技選択。"""
+import random
+
+from card import is_pokemon, is_energy
+
+from .damage import (
+    _attack_damage_for_eval,
+    _effective_damage_to_defender,
+)
+from .state import (
+    GameState,
+    PlayerState,
+    BattlePokemon,
+    _can_pay_energy_cost,
+    _flip_coin,
+    _prizes_for_ko,
+    _take_prize,
+    _check_game_end,
+    _promote_from_bench,
+    _apply_status,
+    _card_label,
+    _put_energy_cards_in_discard,
+    _handle_opponent_ko,
+    _handle_own_active_ko,
+    _log_prize_count_for_ko,
+)
+
+_KO_BONUS_FOR_ATTACK = 10000
+
+
+def _handle_bench_ko(
+    state: GameState,
+    owner: PlayerState,
+    koed_bench_bp: BattlePokemon,
+    bench_target_self: bool,
+    p: PlayerState,
+    opp: PlayerState,
+) -> bool:
+    """ベンチ 1 体のきぜつ処理（トラッシュ送り・サイド取得）。勝敗がついたら True。"""
+    bp_name = koed_bench_bp.card.name
+    owner.discard.append(koed_bench_bp.card)
+    tool = getattr(koed_bench_bp, "attached_tool", None)
+    if tool:
+        owner.discard.append(tool)
+    if bench_target_self:
+        state.log(f"{state.player_name(state.current_player)} のベンチの {bp_name} がきぜつ！")
+        prize_count = _prizes_for_ko(koed_bench_bp)
+        _log_prize_count_for_ko(state, state.opponent(), koed_bench_bp, prize_count)
+        for _ in range(prize_count):
+            if _take_prize(state, state.opponent()):
+                return True
+    else:
+        state.log(f"{state.player_name(state.opponent())} のベンチの {bp_name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
+        if _handle_opponent_ko(opp, state, koed_bench_bp):
+            return True
+    return False
+
+
+def _apply_attack_status_effect(
+    state: GameState,
+    atk,
+    target_bp: BattlePokemon | None,
+    skip_opponent_status: bool,
+    opp: PlayerState,
+) -> None:
+    """技の状態異常効果を対象に付与する（コイン指定ありなら判定してから）。"""
+    if not target_bp or (skip_opponent_status and target_bp == opp.active):
+        return
+    status_effect = getattr(atk, "status_effect", None)
+    if not status_effect:
+        return
+    on_coin_heads = getattr(atk, "status_effect_on_coin_heads", False)
+    poison_damage = getattr(atk, "poison_damage_if_poison", 10)
+    prefix = f"{state.player_name(state.current_player)}: 「{atk.name}」"
+    if on_coin_heads:
+        if _flip_coin():
+            _apply_status(state, target_bp, status_effect, poison_damage=poison_damage, log_prefix=prefix + "コイン表 → ")
+        else:
+            state.log(prefix + "コイン裏 → 状態異常は付与されなかった")
+    else:
+        _apply_status(state, target_bp, status_effect, poison_damage=poison_damage, log_prefix=prefix + "→ ")
+
+
+def attack(state: GameState, attack_index: int) -> bool:
+    """
+    攻撃を実行。ねむり・マヒ中は攻撃不可。こんらん時はコインで失敗時は自分に30ダメージ。
+    相手にダメージ・状態異常、自分に self_damage を適用。
+    """
+    p = state.active_player_state()
+    opp = state.defending_player_state()
+    if not p.active or not opp.active:
+        return False
+    if getattr(p.active, "special_state", None) in ("sleep", "paralysis"):
+        state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} は状態異常のためワザが使えない")
+        return False
+    pokemon_card = p.active.card
+    if attack_index < 0 or attack_index >= len(pokemon_card.attacks):
+        return False
+    atk = pokemon_card.attacks[attack_index]
+    if getattr(p.active, "disabled_attack_name", None) == atk.name:
+        state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} はこのターン「{atk.name}」が使えない")
+        return False
+    if atk.name == "ついげきバリバリ":
+        last_name = state.last_turn_attack_name[state.current_player]
+        last_id = state.last_turn_attack_actor_id[state.current_player]
+        actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
+        if last_name != "しびれはり" or last_id != actor_id:
+            state.log(f"{state.player_name(state.current_player)}: 「ついげきバリバリ」は前の自分の番にこのポケモンが「しびれはり」を使っていないと使えない")
+            return False
+    types = getattr(p.active, "attached_energy_types", [])
+    if not _can_pay_energy_cost(
+        p.active.attached_energy, types,
+        atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+    ):
+        return False
+    if getattr(p.active, "special_state", None) == "confusion":
+        if not _flip_coin():
+            self_before = p.active.hp
+            p.active.hp -= 30
+            state.log(f"{state.player_name(state.current_player)}: こんらんでコインが裏 → 自分に 30 ダメージ（HP {self_before} → {max(0, p.active.hp)}）、攻撃失敗")
+            if p.active and p.active.hp <= 0:
+                koed_conf = p.active
+                if _handle_own_active_ko(state, state.current_player, koed_conf, "こんらんの自傷"):
+                    return True
+                state._record_frame()
+            return True
+        state.log(f"{state.player_name(state.current_player)}: こんらんコイン：表 → 通常通り攻撃")
+    opp_before = opp.active.hp
+    coin_flips = getattr(atk, "coin_flips", 0)
+    damage_per_coin = getattr(atk, "damage_per_coin", 0)
+    if coin_flips > 0 and damage_per_coin > 0:
+        heads = sum(1 for _ in range(coin_flips) if _flip_coin())
+        damage = heads * damage_per_coin
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」コイン {coin_flips} 回 → 表 {heads} 回、ダメージ {damage}")
+    else:
+        damage = atk.damage
+    defender_card = opp.active.card
+    attacker_card = pokemon_card
+    if (
+        getattr(defender_card, "weakness", None)
+        and getattr(attacker_card, "pokemon_type", None)
+        and defender_card.weakness == attacker_card.pokemon_type
+    ):
+        damage *= 2
+        state.log(f"{state.player_name(state.current_player)}: 弱点一致！ダメージが 2 倍（{damage // 2} → {damage}）")
+    if (
+        getattr(defender_card, "resistance", None)
+        and getattr(attacker_card, "pokemon_type", None)
+        and defender_card.resistance == attacker_card.pokemon_type
+    ):
+        before_r = damage
+        damage = max(0, damage - 30)
+        state.log(f"{state.player_name(state.current_player)}: 抵抗力一致！ダメージが -30（{before_r} → {damage}）")
+    tool = getattr(opp.active, "attached_tool", None)
+    if tool and getattr(tool, "is_tool", False) and getattr(tool, "tool_damage_reduce", 0) > 0:
+        cond = getattr(tool, "tool_condition_type", None)
+        if cond is None or getattr(defender_card, "pokemon_type", None) == cond:
+            before_t = damage
+            damage = max(0, damage - getattr(tool, "tool_damage_reduce", 0))
+            state.log(f"{state.player_name(state.current_player)}: {opp.active.card.name} の {tool.name} でダメージ -{before_t - damage}（{before_t} → {damage}）")
+    if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
+        damage += 90
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手サイド残り 1 枚のため 90 ダメージ追加、相手 HP {opp_before} → {max(0, opp_before - damage)}）")
+    elif atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
+        damage += 120
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（前の相手の番に自分の闘ポケモンがきぜつしたため 120 ダメージ追加、相手 HP {opp_before} → {max(0, opp_before - damage)}）")
+    else:
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手 HP {opp_before} → {max(0, opp_before - damage)}）")
+    if getattr(p.active, "damage_reduction_next_turn", 0) > 0:
+        red = p.active.damage_reduction_next_turn
+        damage = max(0, damage - red)
+        p.active.damage_reduction_next_turn = 0
+        if red > 0:
+            state.log(f"{state.player_name(state.current_player)}: 前の相手の番に受けた「なきごえ」のためダメージ -{red}（→ {damage}）")
+    skip_opponent_status = False
+    if getattr(opp.active, "protected_next_opponent_turn", False):
+        opp.active.protected_next_opponent_turn = False
+        damage = 0
+        skip_opponent_status = True
+        state.log(f"{state.player_name(state.current_player)}: 相手の {opp.active.card.name} は「なぐってかくれる」のためワザのダメージ・効果を受けない")
+    opp.active.hp -= damage
+    bench_dmg = getattr(atk, "bench_damage", 0)
+    bench_count = getattr(atk, "bench_damage_count", 1)
+    bench_target_self = getattr(atk, "bench_damage_target", "opponent") == "self"
+    bench_list = p.bench if bench_target_self else opp.bench
+    if bench_dmg > 0 and bench_list:
+        n = len(bench_list) if bench_count == 0 else min(bench_count, len(bench_list))
+        for i in range(n):
+            bench_target = bench_list[i]
+            bench_before = bench_target.hp
+            bench_target.hp -= bench_dmg
+            who = "自分のベンチの" if bench_target_self else f"相手のベンチの"
+            state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で{who} {bench_target.card.name} に {bench_dmg} ダメージ（HP {bench_before} → {max(0, bench_target.hp)}）")
+        for i in range(n - 1, -1, -1):
+            if i < len(bench_list) and bench_list[i].hp <= 0:
+                koed_bench_bp = bench_list[i]
+                owner = p if bench_target_self else opp
+                bench_list.pop(i)
+                if _handle_bench_ko(state, owner, koed_bench_bp, bench_target_self, p, opp):
+                    return True
+
+    self_dmg = getattr(atk, "self_damage", 0)
+    if self_dmg > 0 and p.active:
+        self_before = p.active.hp
+        p.active.hp -= self_dmg
+        state.log(f"{state.player_name(state.current_player)}: 反動で自分に {self_dmg} ダメージ（自分 HP {self_before} → {max(0, p.active.hp)}）")
+
+    target_bp = p.active if getattr(atk, "status_effect_target", "opponent") == "self" else (opp.active if opp.active else None)
+    _apply_attack_status_effect(state, atk, target_bp, skip_opponent_status, opp)
+
+    if atk.name == "なぐってかくれる" and _flip_coin():
+        p.active.protected_next_opponent_turn = True
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」コイン表 → 次の相手の番、このポケモンはワザのダメージや効果を受けない")
+    elif atk.name == "なきごえ" and opp.active:
+        opp.active.damage_reduction_next_turn = 20
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 次の相手の番、相手のワザのダメージが -20 される")
+    if atk.name == "かそくづき":
+        p.active.disabled_attack_name = "かそくづき"
+        state.turn_when_disabled_attack[state.current_player] = state.turn_count
+        state.log(f"{state.player_name(state.current_player)}: 次の自分の番、このポケモンは「かそくづき」が使えなくなる")
+
+    state.this_turn_attack_name = atk.name
+    state.this_turn_attack_actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
+
+    if atk.name == "ふきあらす":
+        n_hand = len(opp.hand)
+        opp.deck.extend(opp.hand)
+        opp.hand = []
+        random.shuffle(opp.deck)
+        opp_drawn = opp.draw(4)
+        opp.hand = opp_drawn
+        opp_drawn_names = ", ".join(_card_label(c) for c in opp_drawn)
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 相手は手札 {n_hand} 枚を山札にもどして切り、山札から 4 枚ドロー → [{opp_drawn_names}]（手札 {len(opp.hand)} 枚）")
+    elif atk.name == "マグネリジェクト" and opp.active and opp.bench:
+        idx = random.randint(0, len(opp.bench) - 1)
+        opp.active, opp.bench[idx] = opp.bench[idx], opp.active
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 相手のバトルポケモンとベンチを入れ替えた（{opp.active.card.name} がバトル場に）")
+    elif atk.name == "ともだちをさがす":
+        for i, c in enumerate(p.deck):
+            if is_pokemon(c):
+                p.deck.pop(i)
+                p.hand.append(c)
+                state.drawn_this_turn.append(c)
+                random.shuffle(p.deck)
+                state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札からポケモン 1 枚（{_card_label(c)}）を手札に加え、山札を切った")
+                break
+    elif atk.name == "クイックドロー":
+        drawn = p.draw(2)
+        p.hand.extend(drawn)
+        state.drawn_this_turn.extend(drawn)
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から 2 枚ドロー → [{', '.join(_card_label(c) for c in drawn)}]（手札 {len(p.hand)} 枚）")
+    elif atk.name == "エレキチャージ" and p.active:
+        attached = 0
+        for i in range(len(p.deck) - 1, -1, -1):
+            if attached >= 2:
+                break
+            if is_energy(p.deck[i]):
+                p.active.attached_energy += 1
+                et = getattr(p.deck[i], "energy_type", None) or "colorless"
+                p.active.attached_energy_types.append(et)
+                p.deck.pop(i)
+                attached += 1
+        if attached > 0:
+            random.shuffle(p.deck)
+            state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から基本エネルギー {attached} 枚をこのポケモンにつけた")
+    elif atk.name == "10まんボルト" and p.active:
+        num = p.active.attached_energy
+        types_to_discard = list(getattr(p.active, "attached_energy_types", []))
+        _put_energy_cards_in_discard(p, types_to_discard, state)
+        p.active.attached_energy = 0
+        p.active.attached_energy_types = []
+        state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ このポケモンについているエネルギー {num} 個をすべてトラッシュした")
+    elif atk.name == "ガブガブバイト" and opp.active:
+        heads = 0
+        while _flip_coin():
+            heads += 1
+        discard_n = min(heads, opp.active.attached_energy)
+        if discard_n > 0:
+            types = getattr(opp.active, "attached_energy_types", [])
+            discarded_types = types[-discard_n:] if len(types) >= discard_n else list(types)
+            _put_energy_cards_in_discard(opp, discarded_types, state)
+            opp.active.attached_energy -= discard_n
+            if len(types) >= discard_n:
+                opp.active.attached_energy_types = types[:-discard_n]
+            else:
+                opp.active.attached_energy_types = []
+            state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ コイン表 {heads} 回、相手のバトルポケモンのエネルギー {discard_n} 個をトラッシュした")
+    elif atk.name == "テクノターボ" and p.discard and p.bench:
+        lightning_idx = None
+        for i, c in enumerate(p.discard):
+            if is_energy(c) and getattr(c, "energy_type", None) == "lightning":
+                lightning_idx = i
+                break
+        if lightning_idx is not None:
+            p.discard.pop(lightning_idx)
+            bench_idx = min(range(len(p.bench)), key=lambda i: p.bench[i].attached_energy)
+            target = p.bench[bench_idx]
+            target.attached_energy += 1
+            target.attached_energy_types.append("lightning")
+            state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ トラッシュから基本雷エネルギー 1 枚をベンチの {target.card.name} につけた")
+
+    if opp.active and opp.active.hp <= 0:
+        koed_active = opp.active
+        state.our_ko_by_damage_last_turn[state.opponent()] = True
+        state.log(f"{state.player_name(state.opponent())} のバトル場の {koed_active.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
+        if _handle_opponent_ko(opp, state, koed_active):
+            return True
+
+    if p.active and p.active.hp <= 0:
+        koed_recoil = p.active
+        if _handle_own_active_ko(state, state.current_player, koed_recoil, "反動"):
+            return True
+        state._record_frame()
+    return True
+
+
+def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState) -> int | None:
+    """出せる技のうち、相手をきぜつさせられる技を最優先し、否則有效ダメージが最大のインデックスを返す。"""
+    if not p.active or not p.active.card.attacks:
+        return None
+    opp_hp = opp.active.hp if opp.active else 0
+    best_idx = None
+    best_score = -1
+    types = getattr(p.active, "attached_energy_types", [])
+    for idx, atk in enumerate(p.active.card.attacks):
+        if not _can_pay_energy_cost(
+            p.active.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
+            continue
+        if getattr(p.active, "disabled_attack_name", None) == atk.name:
+            continue
+        if atk.name == "ついげきバリバリ":
+            last_name = state.last_turn_attack_name[state.current_player]
+            last_id = state.last_turn_attack_actor_id[state.current_player]
+            actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
+            if last_name != "しびれはり" or last_id != actor_id:
+                continue
+        base_dmg = _attack_damage_for_eval(atk)
+        if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
+            base_dmg += 90
+        if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
+            base_dmg += 120
+        effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
+        ko_bonus = _KO_BONUS_FOR_ATTACK if (opp.active and effective_dmg >= opp_hp) else 0
+        score = effective_dmg + ko_bonus
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+    return best_idx
