@@ -17,6 +17,10 @@ BENCH_SIZE = 5
 WIN_KO_COUNT = 3
 PRIZE_COUNT = 6
 MAX_TURNS_SAFETY = 200
+# 1 ターン内のループガード（無限ループ防止）
+MAX_EVOLVE_ROUNDS_PER_TURN = 20
+MAX_BALL_USES_PER_TURN = 30
+MAX_TURN_ACTION_ROUNDS = 10  # サポート・グッズでドローしたあと優先順位に戻る回数上限
 
 SpecialState = Literal["sleep", "paralysis", "confusion"]
 
@@ -101,12 +105,13 @@ def _flip_coin() -> bool:
 
 
 def _clear_status(bp: BattlePokemon) -> None:
-    """状態異常を全て解除（ベンチに下がったときなど）。"""
+    """状態異常を全て解除（ベンチに下がったときなど）。かそくづき等の「次の自分の番で使えない」も解除。"""
     bp.special_state = None
     bp.poison_damage = 0
     bp.burn = False
     bp.protected_next_opponent_turn = False
     bp.damage_reduction_next_turn = 0
+    bp.disabled_attack_name = None
 
 
 def _apply_status(
@@ -183,6 +188,7 @@ class GameState:
     deck_indices: tuple = (0, 1)
     shippegaeshi_120_used: bool = False
     support_used_this_turn: bool = False
+    energy_attached_this_turn: bool = False
     this_turn_attack_name: str | None = None
     this_turn_attack_actor_id: str | None = None
     last_turn_attack_name: list = field(default_factory=lambda: [None, None])
@@ -343,10 +349,11 @@ def _fill_bench_from_hand(
 
 
 def _promote_from_bench(player: PlayerState, state: GameState, player_index: int) -> bool:
-    """バトル場が空のとき、ベンチから 1 体をバトル場に出す。"""
+    """バトル場が空のとき、ベンチから 1 体をバトル場に出す。HP が一番高いポケモンを選ぶ。"""
     if player.active is not None or not player.bench:
         return False
-    player.active = player.bench.pop(0)
+    best_idx = max(range(len(player.bench)), key=lambda i: player.bench[i].hp)
+    player.active = player.bench.pop(best_idx)
     state.log(f"{state.player_name(player_index)}: ベンチから {player.active.card.name} をバトル場に出す（HP {player.active.hp}/{player.active.max_hp}）")
     return True
 
@@ -384,19 +391,24 @@ def _take_prize(state: GameState, taker_index: int) -> bool:
 
 
 def _handle_opponent_ko(opp: PlayerState, state: GameState, koed_bp: BattlePokemon) -> bool:
-    """相手のきぜつを 1 回加算し、攻撃側がサイドをとる（ex なら 2 枚、それ以外は 1 枚）。サイド 0 なら勝ち、否則ベンチから繰り出す。"""
+    """相手のきぜつを 1 回加算し、攻撃側がサイドをとる（ex なら 2 枚、それ以外は 1 枚）。サイド 0 なら勝ち、否則ベンチから繰り出す。きぜつしたポケモンはすぐにトラッシュに送る。"""
     opp.discard.append(koed_bp.card)
     tool = getattr(koed_bp, "attached_tool", None)
     if tool:
         opp.discard.append(tool)
+    if opp.active is koed_bp:
+        opp.active = None
     opp.knockouts_suffered += 1
+    state._record_frame()
     prize_count = _prizes_for_ko(koed_bp)
     if prize_count > 1:
         state.log(f"{state.player_name(state.current_player)}: {koed_bp.card.name} は {'メガ' if prize_count == 3 else 'ex'} のため、サイドを {prize_count} 枚とる")
     for _ in range(prize_count):
         if _take_prize(state, state.current_player):
             return True
+    state._record_frame()
     _promote_from_bench(opp, state, state.opponent())
+    state._record_frame()
     return False
 
 
@@ -415,14 +427,13 @@ def _check_game_end(state: GameState) -> bool:
 
 
 def start_turn(state: GameState) -> None:
-    """ターン開始：ドロー 1 枚、サポート未使用にリセット。ねむりならコインで解除判定。"""
+    """ターン開始：ドロー 1 枚、サポート・エネルギー付与未使用にリセット。ねむりならコインで解除判定。"""
     state.support_used_this_turn = False
+    state.energy_attached_this_turn = False
     state.our_ko_by_damage_last_turn[state.current_player] = False
     state.drawn_this_turn = []
     p = state.active_player_state()
-    for bp in ([p.active] if p.active else []) + list(p.bench):
-        if bp:
-            bp.disabled_attack_name = None
+    # 「かそくづき」等の「次の自分の番で使えない」は end_turn で解除する（自分の番の終了時）
     turn_label = _turn_label(state)
     state.log(f"---------- {turn_label} ---------- {state.player_name(state.current_player)} のターン")
     drawn = p.draw(1)
@@ -640,19 +651,25 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
     if bench_index is not None:
         if bench_index < 0 or bench_index >= len(p.bench):
             return False
+        if state.energy_attached_this_turn:
+            return False
         target = p.bench[bench_index]
         target.attached_energy += 1
         target.attached_energy_types.append(slot_type)
         p.hand.pop(hand_index)
+        state.energy_attached_this_turn = True
         state.log(
             f"{state.player_name(state.current_player)}: エネルギーを 1 つ付与（ベンチの {target.card.name}、エネルギー {target.attached_energy} 個）"
         )
         return True
     if not p.active:
         return False
+    if state.energy_attached_this_turn:
+        return False
     p.active.attached_energy += 1
     p.active.attached_energy_types.append(slot_type)
     p.hand.pop(hand_index)
+    state.energy_attached_this_turn = True
     state.log(f"{state.player_name(state.current_player)}: エネルギーを 1 つ付与（バトル場のエネルギー {p.active.attached_energy} 個）")
     return True
 
@@ -688,7 +705,7 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
     if not is_goods(card):
         return False
     cid = getattr(card, "id", "")
-    if (getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False)) and cid not in ("supaboru", "haipaboru"):
+    if (getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False)) and cid not in ("supaboru", "haipaboru", "fushiginaame"):
         return False
     name_ja = getattr(card, "name", "")
 
@@ -742,7 +759,7 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         if not stage1_ref:
             return False
         target_bp = None
-        # たねポケモンのみ対象（evolution_stage が "basic" または evolves_from が無い）
+        # 対象はバトル場・ベンチのたねポケモン（このターンに出したばかりは除く）
         if p.active and is_basic_pokemon(p.active.card) and not getattr(p.active, "put_on_bench_this_turn", False):
             if _can_evolve_onto(p.active.card, stage1_ref):
                 target_bp = p.active
@@ -766,7 +783,7 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
             p.hand.pop(stage2_idx)
             p.hand.pop(hand_index)
         p.discard.append(card)
-        state.log(f"{state.player_name(state.current_player)}: ふしぎなアメを使用（手札から {stage2_card.name} を場のたねにのせて 1 進化をとばして進化）")
+        state.log(f"{state.player_name(state.current_player)}: ふしぎなアメを使用（手札から {stage2_card.name} をバトル場またはベンチのたねにのせて 1 進化をとばして進化）")
         return True
 
     if cid == "otodokedoron":
@@ -784,17 +801,19 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         state.log(f"{state.player_name(state.current_player)}: おとどけドローンを使用（コイン裏）→ 効果なし")
         return True
 
-    if (cid == "unknown" and name_ja == "エネルギー回収") or cid == "enerugikaishixyuu":
-        lightning_count = sum(1 for c in p.discard if is_energy(c) and getattr(c, "energy_type", None) == "lightning")
-        fighting_count = sum(1 for c in p.discard if is_energy(c) and getattr(c, "energy_type", None) == "fighting")
-        other_count = sum(1 for c in p.discard if is_energy(c) and getattr(c, "energy_type", None) not in ("lightning", "fighting"))
-        taken = []
-        for _ in range(2):
-            for i, c in enumerate(p.discard):
-                if is_energy(c):
-                    p.discard.pop(i)
-                    taken.append(c)
+    # エネルギー回収: トラッシュから基本エネルギーを 2 枚まで選び手札に加える。
+    _basic_energy_types = ("grass", "fire", "water", "lightning", "psychic", "fighting", "darkness", "metal", "fairy")
+    _is_enerugikaishixyuu = (cid == "unknown" and name_ja == "エネルギー回収") or cid == "enerugikaishixyuu" or name_ja == "エネルギー回収"
+    if _is_enerugikaishixyuu:
+        indices = []
+        for i, c in enumerate(p.discard):
+            if is_energy(c) and getattr(c, "energy_type", None) in _basic_energy_types:
+                indices.append(i)
+                if len(indices) >= 2:
                     break
+        taken = [p.discard[i] for i in indices]
+        for i in sorted(indices, reverse=True):
+            p.discard.pop(i)
         if taken:
             p.hand.extend(taken)
             p.discard.append(p.hand.pop(hand_index))
@@ -802,10 +821,13 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
             return True
         return False
 
-    if cid == "erekijienereta" and p.bench:
+    # エレキジェネレーター: 山札上から 5 枚見て、その中から基本エネルギーを 2 枚まで選びベンチにつける。残りは山札にもどして切る。
+    _is_erekijienereta = cid == "erekijienereta" or name_ja == "エレキジェネレーター"
+    _basic_energy_types = ("grass", "fire", "water", "lightning", "psychic", "fighting", "darkness", "metal", "fairy")
+    if _is_erekijienereta and p.bench and p.deck:
         look = min(5, len(p.deck))
         top = [p.deck.pop(0) for _ in range(look)]
-        energies = [c for c in top if is_energy(c)][:2]
+        energies = [c for c in top if is_energy(c) and getattr(c, "energy_type", None) in _basic_energy_types][:2]
         for c in energies:
             bi = min(range(len(p.bench)), key=lambda i: p.bench[i].attached_energy)
             p.bench[bi].attached_energy += 1
@@ -817,8 +839,8 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         p.discard.append(p.hand.pop(hand_index))
         if energies:
             state.log(f"{state.player_name(state.current_player)}: エレキジェネレーターを使用 → 山札上から 5 枚のうち基本エネルギー {len(energies)} 枚をベンチにつけた")
-            return True
-        state.log(f"{state.player_name(state.current_player)}: エレキジェネレーターを使用（エネルギーなし）")
+        else:
+            state.log(f"{state.player_name(state.current_player)}: エレキジェネレーターを使用（山札上 5 枚に基本エネルギーなし）")
         return True
 
     if cid == "supaboru" and p.deck:
@@ -842,15 +864,37 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         return True
 
     if cid == "haipaboru" and len(p.hand) >= 3 and p.deck:
+        # 手札 2 枚をトラッシュ
         to_discard_idx = [i for i in range(len(p.hand)) if i != hand_index][:2]
         for i in sorted(to_discard_idx, reverse=True):
             p.discard.append(p.hand.pop(i))
         new_hi = p.hand.index(card)
-        pokemon_found = None
-        for i, c in enumerate(p.deck):
-            if is_pokemon(c):
-                pokemon_found = (i, c)
-                break
+
+        # まずはバトル場のポケモンの進化先を優先して探す
+        pokemon_found: tuple[int, object] | None = None
+        if p.active:
+            for i, c in enumerate(p.deck):
+                if is_pokemon(c) and getattr(c, "evolves_from", None) and _can_evolve_onto(p.active.card, c):
+                    pokemon_found = (i, c)
+                    break
+
+        # 見つからなければ、ベンチポケモンの誰かの進化先を探す
+        if pokemon_found is None and p.bench:
+            for bp in p.bench:
+                for i, c in enumerate(p.deck):
+                    if is_pokemon(c) and getattr(c, "evolves_from", None) and _can_evolve_onto(bp.card, c):
+                        pokemon_found = (i, c)
+                        break
+                if pokemon_found is not None:
+                    break
+
+        # それでも無ければ、従来通り最初のポケモン 1 枚を持ってくる
+        if pokemon_found is None:
+            for i, c in enumerate(p.deck):
+                if is_pokemon(c):
+                    pokemon_found = (i, c)
+                    break
+
         if pokemon_found:
             i, c = pokemon_found
             p.deck.pop(i)
@@ -1163,8 +1207,19 @@ def attack(
                 tool = getattr(koed_conf, "attached_tool", None)
                 if tool:
                     p.discard.append(tool)
+                p.knockouts_suffered += 1
                 p.active = None
-                _promote_from_bench(p, state, state.current_player)
+                state._record_frame()
+                prize_count = _prizes_for_ko(koed_conf)
+                if prize_count > 1:
+                    state.log(f"{state.player_name(state.opponent())}: {koed_conf.card.name} は {'メガ' if prize_count == 3 else 'ex'} のため、サイドを {prize_count} 枚とる")
+                for _ in range(prize_count):
+                    if _take_prize(state, state.opponent()):
+                        return True
+                state._record_frame()
+                if not _check_game_end(state):
+                    _promote_from_bench(p, state, state.current_player)
+                    state._record_frame()
             return True
         state.log(f"{state.player_name(state.current_player)}: こんらんコイン：表 → 通常通り攻撃")
     opp_before = opp.active.hp
@@ -1237,12 +1292,12 @@ def attack(
             if i < len(bench_list) and bench_list[i].hp <= 0:
                 koed_bench_bp = bench_list[i]
                 bp_name = koed_bench_bp.card.name
-                bench_list.pop(i)
                 owner = p if bench_target_self else opp
                 owner.discard.append(koed_bench_bp.card)
                 tool = getattr(koed_bench_bp, "attached_tool", None)
                 if tool:
                     owner.discard.append(tool)
+                bench_list.pop(i)
                 if bench_target_self:
                     state.log(f"{state.player_name(state.current_player)} のベンチの {bp_name} がきぜつ！")
                     prize_count = _prizes_for_ko(koed_bench_bp)
@@ -1377,7 +1432,6 @@ def attack(
         koed_active = opp.active
         state.our_ko_by_damage_last_turn[state.opponent()] = True
         state.log(f"{state.player_name(state.opponent())} のバトル場の {koed_active.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
-        opp.active = None
         if _handle_opponent_ko(opp, state, koed_active):
             return True
 
@@ -1388,8 +1442,19 @@ def attack(
         tool = getattr(koed_recoil, "attached_tool", None)
         if tool:
             p.discard.append(tool)
+        p.knockouts_suffered += 1
         p.active = None
-        _promote_from_bench(p, state, state.current_player)
+        state._record_frame()
+        prize_count = _prizes_for_ko(koed_recoil)
+        if prize_count > 1:
+            state.log(f"{state.player_name(state.opponent())}: {koed_recoil.card.name} は {'メガ' if prize_count == 3 else 'ex'} のため、サイドを {prize_count} 枚とる")
+        for _ in range(prize_count):
+            if _take_prize(state, state.opponent()):
+                return True
+        state._record_frame()
+        if not _check_game_end(state):
+            _promote_from_bench(p, state, state.current_player)
+            state._record_frame()
     return True
 
 
@@ -1669,6 +1734,11 @@ def end_turn(state: GameState) -> None:
     state.last_turn_attack_actor_id[cp] = state.this_turn_attack_actor_id
     state.this_turn_attack_name = None
     state.this_turn_attack_actor_id = None
+    # 「次の自分の番で使えない」（かそくづき等）は、自分の番を終えたときに解除する
+    leaving = state.players[cp]
+    for bp in ([leaving.active] if leaving.active else []) + list(leaving.bench):
+        if bp:
+            bp.disabled_attack_name = None
     state.current_player = state.opponent()
     state.turn_count += 1
     state.log("")
@@ -1677,7 +1747,8 @@ def end_turn(state: GameState) -> None:
 def run_turn_auto(state: GameState) -> bool:
     """
     現在のプレイヤーが「可能な行動を順番に実行」する。
-    順序：0. ベンチにポケモン出す、1. 進化（最優先）、2. エネルギー付与、3. サポート（ネモ等でドロー）、4. ポケモンいれかえ、5. にげる（条件満たすとき）、6. どうぐ・グッズ、7. 攻撃。
+    順序：0. ベンチにポケモン出す、1. 進化、2. エネルギー付与、3. ボール系グッズ、4. サポート、5. いれかえ、6. にげる、7. どうぐ・グッズ、8. 進化（再）、9. 攻撃。
+    サポートまたはグッズを使用した場合は優先順位 1（進化）から手札を再確認する（MAX_TURN_ACTION_ROUNDS 回まで）。
     何もできなければ False を返す。True = ターン内で何かした。
     """
     p = state.active_player_state()
@@ -1689,200 +1760,295 @@ def run_turn_auto(state: GameState) -> bool:
 
     def _try_put_bench_until_full():
         nonlocal p, acted
-        while _put_one_pokemon_on_bench(p, state, state.current_player):
+        put_count = 0
+        while put_count < BENCH_SIZE and _put_one_pokemon_on_bench(p, state, state.current_player):
+            put_count += 1
             acted = True
             p = state.active_player_state()
             state._record_frame()
 
     _try_put_bench_until_full()
 
-    # 進化を最優先で行う（先行・後行の 1 ターン目以外）
-    can_evolve = state.turn_count >= 2
-    while can_evolve:
-        p = state.active_player_state()
-        evolved_this_round = False
-        for hand_idx, c in enumerate(p.hand):
-            if not is_pokemon(c) or not c.evolves_from:
-                continue
-            if p.active and _can_evolve_onto(p.active.card, c):
-                evolve_pokemon(state, hand_idx, bench_index=None)
-                acted = True
-                evolved_this_round = True
-                state._record_frame()
-                break
-            for bench_idx, bench_poke in enumerate(p.bench):
-                if _can_evolve_onto(bench_poke.card, c):
-                    evolve_pokemon(state, hand_idx, bench_index=bench_idx)
-                    acted = True
-                    evolved_this_round = True
-                    state._record_frame()
-                    break
-            if evolved_this_round:
-                break
-        if not evolved_this_round:
-            break
+    # サポート・グッズでドローした場合は優先順位 1（進化）から手札を再確認する
+    action_round = 0
+    while action_round < MAX_TURN_ACTION_ROUNDS:
+        action_round += 1
 
-    if _try_attach_energy_auto(state):
-        acted = True
-        p = state.active_player_state()
-        state._record_frame()
-
-    opp_max_effective = _opponent_max_effective_damage(state)
-    our_max_effective = _our_max_effective_damage(state)
-    would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
-    can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
-
-    _BALL_GOODS_IDS = ("supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya")
-    if not _is_first_player_first_turn(state):
-        while True:
-            used_ball = False
+        # ふしぎなアメを進化より先に試す（1 進化をとばして進化できるなら、通常進化でたねを消費する前に使う）
+        used_fushiginaame = False
+        if state.turn_count >= 2:
             for i, c in enumerate(p.hand):
-                if not is_goods(c) or getattr(c, "is_tool", False):
+                if not is_goods(c):
                     continue
-                if getattr(c, "id", "") not in _BALL_GOODS_IDS:
+                if getattr(c, "id", "") != "fushiginaame" and getattr(c, "name", "") != "ふしぎなアメ":
                     continue
                 if use_trainer_goods(state, i):
                     acted = True
-                    used_ball = True
+                    used_fushiginaame = True
                     p = state.active_player_state()
                     state._record_frame()
+                    _try_put_bench_until_full()
                     break
-            if not used_ball:
-                break
-        _try_put_bench_until_full()
+            if used_fushiginaame:
+                continue
 
-    if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
-        for i, c in enumerate(p.hand):
-            if is_support(c) and use_support(state, i):
-                acted = True
-                p = state.active_player_state()
-                state._record_frame()
+        # 進化を最優先で行う（先行・後行の 1 ターン目以外）
+        can_evolve = state.turn_count >= 2
+        evolve_rounds = 0
+        while can_evolve:
+            evolve_rounds += 1
+            if evolve_rounds > MAX_EVOLVE_ROUNDS_PER_TURN:
                 break
-        _try_put_bench_until_full()
-
-    # ポケモンいれかえ: 次の相手の番でやられそうなときだけ使う（そうでないときは攻撃を優先）
-    p = state.active_player_state()
-    opp_max_effective = _opponent_max_effective_damage(state)
-    our_max_effective = _our_max_effective_damage(state)
-    would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
-    can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
-    if would_be_koed and p.active and p.bench:
-        for i, c in enumerate(p.hand):
-            if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
-                survives = [(bi, p.bench[bi].hp) for bi in range(len(p.bench)) if p.bench[bi].hp > opp_max_effective]
-                if survives:
-                    best_bench = max(survives, key=lambda x: x[1])[0]
-                else:
-                    best_bench = max(range(len(p.bench)), key=lambda b: p.bench[b].hp, default=None)
-                if best_bench is not None and use_pokemon_swap(state, i, best_bench):
-                    acted = True
-                    p = state.active_player_state()
-                    state._record_frame()
-                break
-
-    # にげる: サポート・ポケモンいれかえの後に判定（ネモで引いたポケモンいれかえを先に使えるように）
-    p = state.active_player_state()
-    opp_max_effective = _opponent_max_effective_damage(state)
-    our_max_effective = _our_max_effective_damage(state)
-    would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
-    can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
-    retreat_cost = getattr(p.active.card, "retreat_cost", 1) if p.active else 0
-    can_retreat = p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
-    if can_retreat and p.active and p.bench and would_be_koed and not can_ko_opponent and p.active.attached_energy >= retreat_cost:
-        # ベンチ候補ごとの最大ダメージを見て、相手をきぜつさせられるベンチを最優先
-        best_idx = None
-        best_score = (-1, -1, -1)  # (can_ko_flag, damage, hp/energyの目安)
-        for i, bp in enumerate(p.bench):
-            dmg = _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player) if opp.active else 0
-            can_ko = int(opp.active is not None and dmg >= opp.active.hp)
-            score = (can_ko, dmg, bp.hp)
-            if score > best_score:
-                best_score = score
-                best_idx = i
-        # それでも候補がなければ、従来どおり生存しやすいベンチを選ぶ
-        if best_idx is None:
-            survivors = [(i, p.bench[i].hp, p.bench[i].attached_energy) for i in range(len(p.bench)) if p.bench[i].hp > opp_max_effective]
-            if survivors:
-                best_idx = max(survivors, key=lambda x: (x[1], x[2]))[0]
-            else:
-                best_idx = max(
-                    range(len(p.bench)),
-                    key=lambda i: (p.bench[i].hp, p.bench[i].attached_energy),
-                    default=None,
-                )
-        if best_idx is not None and retreat(state, best_idx):
-            acted = True
             p = state.active_player_state()
-            state._record_frame()
-
-    # どうぐ（tool）を先に試す（ダメージ軽減など、つけておきたいカードを優先）
-    for i, c in enumerate(p.hand):
-        if not is_goods(c) or not getattr(c, "is_tool", False):
-            continue
-        cond = getattr(c, "tool_condition_type", None)
-        if p.active and getattr(p.active, "attached_tool", None) is None:
-            if cond is None or getattr(p.active.card, "pokemon_type", None) == cond:
-                if attach_tool(state, i, bench_index=None):
-                    acted = True
-                    p = state.active_player_state()
-                    state._record_frame()
-                    break
-        for bi, bp in enumerate(p.bench):
-            if getattr(bp, "attached_tool", None) is not None:
-                continue
-            if cond is not None and getattr(bp.card, "pokemon_type", None) != cond:
-                continue
-            if attach_tool(state, i, bench_index=bi):
-                acted = True
-                p = state.active_player_state()
-                state._record_frame()
-                break
-        else:
-            continue
-        break
-
-    for i, c in enumerate(p.hand):
-        if not is_goods(c) or getattr(c, "effect", None) == "swap_active" or getattr(c, "is_tool", False):
-            continue
-        if getattr(c, "id", None) == "potion" and getattr(c, "effect", None) == "heal":
-            used = use_potion(state, i)
-        elif getattr(c, "effect", None) == "heal":
-            used = False
-        else:
-            used = use_trainer_goods(state, i)
-        if used:
-            acted = True
-            p = state.active_player_state()
-            state._record_frame()
-            break
-    p = state.active_player_state()
-    _try_put_bench_until_full()
-
-    # 進化を最優先で行う（サポートやグッズで手札が変わったあとも再度チェック）
-    can_evolve = state.turn_count >= 2
-    while can_evolve:
-        p = state.active_player_state()
-        evolved_this_round = False
-        for hand_idx, c in enumerate(p.hand):
-            if not is_pokemon(c) or not c.evolves_from:
-                continue
-            if p.active and _can_evolve_onto(p.active.card, c):
-                evolve_pokemon(state, hand_idx, bench_index=None)
-                acted = True
-                evolved_this_round = True
-                state._record_frame()
-                break
-            for bench_idx, bench_poke in enumerate(p.bench):
-                if _can_evolve_onto(bench_poke.card, c):
-                    evolve_pokemon(state, hand_idx, bench_index=bench_idx)
+            evolved_this_round = False
+            for hand_idx, c in enumerate(p.hand):
+                if not is_pokemon(c) or not c.evolves_from:
+                    continue
+                if p.active and _can_evolve_onto(p.active.card, c):
+                    evolve_pokemon(state, hand_idx, bench_index=None)
                     acted = True
                     evolved_this_round = True
                     state._record_frame()
                     break
-            if evolved_this_round:
+                for bench_idx, bench_poke in enumerate(p.bench):
+                    if _can_evolve_onto(bench_poke.card, c):
+                        evolve_pokemon(state, hand_idx, bench_index=bench_idx)
+                        acted = True
+                        evolved_this_round = True
+                        state._record_frame()
+                        break
+                if evolved_this_round:
+                    break
+            if not evolved_this_round:
                 break
-        if not evolved_this_round:
+
+        if not state.energy_attached_this_turn and _try_attach_energy_auto(state):
+            acted = True
+            p = state.active_player_state()
+            state._record_frame()
+
+        opp_max_effective = _opponent_max_effective_damage(state)
+        our_max_effective = _our_max_effective_damage(state)
+        would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
+        can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
+
+        _BALL_GOODS_IDS = ("supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya")
+        if not _is_first_player_first_turn(state):
+            ball_uses = 0
+            while ball_uses < MAX_BALL_USES_PER_TURN:
+                ball_uses += 1
+                used_ball = False
+                for i, c in enumerate(p.hand):
+                    if not is_goods(c) or getattr(c, "is_tool", False):
+                        continue
+                    if getattr(c, "id", "") not in _BALL_GOODS_IDS:
+                        continue
+                    if use_trainer_goods(state, i):
+                        acted = True
+                        used_ball = True
+                        p = state.active_player_state()
+                        state._record_frame()
+                        break
+                if not used_ball:
+                    break
+            _try_put_bench_until_full()
+
+        # 手札が入れ替わる系サポート（たんぱんこぞう等）を手に持っている場合は、その前に使えるグッズ（どうぐ・ふしぎなあめ等）を先に使う
+        _HAND_REFRESH_SUPPORT_IDS = ("tanpankozou", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "kihada")
+        has_hand_refresh_support = any(is_support(c) and getattr(c, "id", "") in _HAND_REFRESH_SUPPORT_IDS for c in p.hand)
+        if not _is_first_player_first_turn(state) and has_hand_refresh_support and not state.support_used_this_turn:
+            used_goods_before_support = False
+            for i, c in enumerate(p.hand):
+                if not is_goods(c) or not getattr(c, "is_tool", False):
+                    continue
+                cond = getattr(c, "tool_condition_type", None)
+                if p.active and getattr(p.active, "attached_tool", None) is None:
+                    if cond is None or getattr(p.active.card, "pokemon_type", None) == cond:
+                        if attach_tool(state, i, bench_index=None):
+                            used_goods_before_support = True
+                            break
+                for bi, bp in enumerate(p.bench):
+                    if getattr(bp, "attached_tool", None) is not None:
+                        continue
+                    if cond is not None and getattr(bp.card, "pokemon_type", None) != cond:
+                        continue
+                    if attach_tool(state, i, bench_index=bi):
+                        used_goods_before_support = True
+                        break
+                else:
+                    continue
+                break
+            if not used_goods_before_support:
+                for i, c in enumerate(p.hand):
+                    if not is_goods(c) or getattr(c, "effect", None) == "swap_active" or getattr(c, "is_tool", False):
+                        continue
+                    if getattr(c, "id", None) == "potion" and getattr(c, "effect", None) == "heal":
+                        used = use_potion(state, i)
+                    elif getattr(c, "effect", None) == "heal":
+                        used = False
+                    else:
+                        used = use_trainer_goods(state, i)
+                    if used:
+                        used_goods_before_support = True
+                        break
+            if used_goods_before_support:
+                acted = True
+                p = state.active_player_state()
+                state._record_frame()
+                _try_put_bench_until_full()
+                continue
+
+        if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
+            used_support = False
+            for i, c in enumerate(p.hand):
+                if is_support(c) and use_support(state, i):
+                    acted = True
+                    used_support = True
+                    p = state.active_player_state()
+                    state._record_frame()
+                    break
+            _try_put_bench_until_full()
+            if used_support:
+                continue
+
+        # ポケモンいれかえ: 次の相手の番でやられそうなときだけ使う。その番で相手をきぜつさせられるなら攻撃を優先するのでいれかえしない。
+        p = state.active_player_state()
+        opp_max_effective = _opponent_max_effective_damage(state)
+        our_max_effective = _our_max_effective_damage(state)
+        would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
+        can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
+        if would_be_koed and not can_ko_opponent and p.active and p.bench:
+            for i, c in enumerate(p.hand):
+                if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
+                    survives = [(bi, p.bench[bi].hp) for bi in range(len(p.bench)) if p.bench[bi].hp > opp_max_effective]
+                    if survives:
+                        best_bench = max(survives, key=lambda x: x[1])[0]
+                    else:
+                        best_bench = max(range(len(p.bench)), key=lambda b: p.bench[b].hp, default=None)
+                    if best_bench is not None and use_pokemon_swap(state, i, best_bench):
+                        acted = True
+                        p = state.active_player_state()
+                        state._record_frame()
+                    break
+
+        # にげる: やられそうで相手を倒せないとき、逃げ先に「相手のダメージで生き残れる」ベンチがいる場合だけ逃げる（出してもやられるなら逃げない）
+        p = state.active_player_state()
+        opp_max_effective = _opponent_max_effective_damage(state)
+        our_max_effective = _our_max_effective_damage(state)
+        would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
+        can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
+        retreat_cost = getattr(p.active.card, "retreat_cost", 1) if p.active else 0
+        can_retreat = p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
+        has_bench_survivor = p.bench and any(bp.hp > opp_max_effective for bp in p.bench)
+        can_ko_from_bench = opp.active and any(
+            _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player) >= opp.active.hp for bp in p.bench
+        )
+        retreat_helps = has_bench_survivor or can_ko_from_bench
+        if can_retreat and p.active and p.bench and would_be_koed and not can_ko_opponent and retreat_helps and p.active.attached_energy >= retreat_cost:
+            # ベンチ候補ごとの最大ダメージを見て、相手をきぜつさせられるベンチを最優先
+            best_idx = None
+            best_score = (-1, -1, -1)  # (can_ko_flag, damage, hp/energyの目安)
+            for i, bp in enumerate(p.bench):
+                dmg = _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player) if opp.active else 0
+                can_ko = int(opp.active is not None and dmg >= opp.active.hp)
+                score = (can_ko, dmg, bp.hp)
+                if score > best_score:
+                    best_score = score
+                    best_idx = i
+            # それでも候補がなければ、従来どおり生存しやすいベンチを選ぶ
+            if best_idx is None:
+                survivors = [(i, p.bench[i].hp, p.bench[i].attached_energy) for i in range(len(p.bench)) if p.bench[i].hp > opp_max_effective]
+                if survivors:
+                    best_idx = max(survivors, key=lambda x: (x[1], x[2]))[0]
+                else:
+                    best_idx = max(
+                        range(len(p.bench)),
+                        key=lambda i: (p.bench[i].hp, p.bench[i].attached_energy),
+                        default=None,
+                    )
+            if best_idx is not None and retreat(state, best_idx):
+                acted = True
+                p = state.active_player_state()
+                state._record_frame()
+
+        # どうぐ（tool）を先に試す（ダメージ軽減など、つけておきたいカードを優先）
+        for i, c in enumerate(p.hand):
+            if not is_goods(c) or not getattr(c, "is_tool", False):
+                continue
+            cond = getattr(c, "tool_condition_type", None)
+            if p.active and getattr(p.active, "attached_tool", None) is None:
+                if cond is None or getattr(p.active.card, "pokemon_type", None) == cond:
+                    if attach_tool(state, i, bench_index=None):
+                        acted = True
+                        p = state.active_player_state()
+                        state._record_frame()
+                        break
+            for bi, bp in enumerate(p.bench):
+                if getattr(bp, "attached_tool", None) is not None:
+                    continue
+                if cond is not None and getattr(bp.card, "pokemon_type", None) != cond:
+                    continue
+                if attach_tool(state, i, bench_index=bi):
+                    acted = True
+                    p = state.active_player_state()
+                    state._record_frame()
+                    break
+            else:
+                continue
             break
+
+        used_goods = False
+        for i, c in enumerate(p.hand):
+            if not is_goods(c) or getattr(c, "effect", None) == "swap_active" or getattr(c, "is_tool", False):
+                continue
+            if getattr(c, "id", None) == "potion" and getattr(c, "effect", None) == "heal":
+                used = use_potion(state, i)
+            elif getattr(c, "effect", None) == "heal":
+                used = False
+            else:
+                used = use_trainer_goods(state, i)
+            if used:
+                acted = True
+                used_goods = True
+                p = state.active_player_state()
+                state._record_frame()
+                break
+        p = state.active_player_state()
+        _try_put_bench_until_full()
+        if used_goods:
+            continue
+
+        # 進化を最優先で行う（サポートやグッズで手札が変わったあとも再度チェック）
+        can_evolve = state.turn_count >= 2
+        evolve_rounds2 = 0
+        while can_evolve:
+            evolve_rounds2 += 1
+            if evolve_rounds2 > MAX_EVOLVE_ROUNDS_PER_TURN:
+                break
+            p = state.active_player_state()
+            evolved_this_round = False
+            for hand_idx, c in enumerate(p.hand):
+                if not is_pokemon(c) or not c.evolves_from:
+                    continue
+                if p.active and _can_evolve_onto(p.active.card, c):
+                    evolve_pokemon(state, hand_idx, bench_index=None)
+                    acted = True
+                    evolved_this_round = True
+                    state._record_frame()
+                    break
+                for bench_idx, bench_poke in enumerate(p.bench):
+                    if _can_evolve_onto(bench_poke.card, c):
+                        evolve_pokemon(state, hand_idx, bench_index=bench_idx)
+                        acted = True
+                        evolved_this_round = True
+                        state._record_frame()
+                        break
+                if evolved_this_round:
+                    break
+            if not evolved_this_round:
+                break
+
+        break  # 優先順位を一通り実行したので攻撃へ
 
     is_game_first_turn = state.turn_count == 0
     can_attack = not is_game_first_turn and p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
