@@ -81,7 +81,7 @@ MARGIN = 24
 PRIZE_TO_BENCH = 12
 BENCH_GAP = 10
 TOOL_OFFSET = 8
-TOOL_VERTICAL_OVERHANG = 36
+TOOL_VERTICAL_OVERHANG = 18
 CARD_W_BENCH = 90
 CARD_H_BENCH = 124
 MIN_HAND_CARD_W = 20
@@ -93,6 +93,41 @@ SLOT_COLOR = (60, 100, 60)
 CARD_BACK_COLOR = (80, 60, 40)
 TEXT_COLOR = (255, 255, 255)
 LABEL_COLOR = (240, 240, 200)
+
+_STATUS_MARKER_FILES = {
+    "poison": _PROJECT_ROOT / "card_images" / "basic" / "pk-svb-032.webp",
+    "burn": _PROJECT_ROOT / "card_images" / "basic" / "38559.jpg",
+}
+_STATUS_MARKER_CACHE: dict[str, Image.Image] | None = None
+
+
+def _simplify_log_text_for_panel(log_text: str | None) -> str:
+    """
+    盤面左側のログパネル用に、詳細なログ文字列から簡易表示用テキストを生成する。
+    - プレイヤー名などのプレフィックス「XX: 」を削除
+    - 「→」「（」以降の細かい情報（手札枚数、HP の推移など）はカット
+    - 先頭・区切り線（==========, ----------）はそのまま残す
+    """
+    if not log_text:
+        return ""
+    lines = [ln.rstrip() for ln in log_text.split("\n") if ln.strip()]
+    simplified: list[str] = []
+    for ln in lines:
+        stripped = ln.strip()
+        if not stripped:
+            continue
+        # ターン見出しやゲーム開始などの区切りはそのまま残す
+        if stripped.startswith("==========") or stripped.startswith("----------"):
+            simplified.append(stripped)
+            continue
+        # 「プレイヤー名: メッセージ」の形なら本体だけを取り出す
+        body = stripped.split(": ", 1)[1] if ": " in stripped else stripped
+        # 「→」「（」以降の細かい説明は描画ログでは省略する
+        for sep in ("→", "（"):
+            if sep in body:
+                body = body.split(sep, 1)[0].rstrip()
+        simplified.append(body)
+    return "\n".join(simplified)
 
 
 def _draw_placeholder(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, label: str = "") -> None:
@@ -123,6 +158,64 @@ def _paste_card_image(bg: Image.Image, card_path: Path | None, x: int, y: int, w
         _draw_placeholder(draw, x, y, w, h, name)
 
 
+def _load_status_markers() -> dict[str, Image.Image]:
+    """どく・やけど用のマーカー画像を読み込んでキャッシュする。"""
+    global _STATUS_MARKER_CACHE
+    if _STATUS_MARKER_CACHE is not None:
+        return _STATUS_MARKER_CACHE
+    out: dict[str, Image.Image] = {}
+    for key, path in _STATUS_MARKER_FILES.items():
+        try:
+            if path.is_file():
+                img = Image.open(path).convert("RGBA")
+                out[key] = img
+        except Exception:
+            continue
+    _STATUS_MARKER_CACHE = out
+    return out
+
+
+def _draw_status_markers(
+    bg: Image.Image,
+    bp: object,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+) -> None:
+    """
+    どく・やけど状態のときに、カード上にマーカーを重ねて表示する。
+    - どく: 紫マーカー
+    - やけど: オレンジマーカー
+    """
+    markers_raw = _load_status_markers()
+    has_poison = getattr(bp, "poison_damage", 0) > 0
+    has_burn = getattr(bp, "burn", False)
+    keys: list[str] = []
+    if has_poison and "poison" in markers_raw:
+        keys.append("poison")
+    if has_burn and "burn" in markers_raw:
+        keys.append("burn")
+    if not keys:
+        return
+
+    size = max(14, min(28, w // 3))
+    pad = 4
+    for idx, key in enumerate(keys):
+        icon = markers_raw.get(key)
+        if not icon:
+            continue
+        iw, ih = icon.size
+        side = min(iw, ih)
+        left = (iw - side) // 2
+        top = (ih - side) // 2
+        cropped = icon.crop((left, top, left + side, top + side))
+        resized = cropped.resize((size, size), Image.Resampling.LANCZOS)
+        px = x + pad + idx * (size + 2)
+        py = y + h - size - pad
+        bg.paste(resized.convert("RGB"), (px, py), resized)
+
+
 def _draw_log_panel(
     draw: ImageDraw.ImageDraw,
     log_text: str,
@@ -136,13 +229,18 @@ def _draw_log_panel(
         font = ImageFont.load_default()
     pad = 8
     max_lines = max(1, (height - pad * 2) // LOG_LINE_HEIGHT)
-    lines = [ln.rstrip() for ln in (log_text or "").split("\n") if ln.strip()]
-    wrapped = []
+    # 1 行 1 ログとしてそのまま表示する（途中で不要な空行は入れない）。
+    # 長すぎる行は描画時に右側をカットする。
+    lines = [ln.rstrip() for ln in (log_text or "").split("\n")]
+    # 空行は「区切り」として 1 行だけ残し、連続する空行は潰す。
+    normalized: list[str] = []
     for ln in lines:
-        chunks = textwrap.wrap(ln, width=20) or [ln[:20]]
-        wrapped.extend(chunks)
-        wrapped.append("")
-    show_lines = wrapped[-max_lines:] if len(wrapped) > max_lines else wrapped
+        if not ln.strip():
+            if normalized and normalized[-1] != "":
+                normalized.append("")
+            continue
+        normalized.append(ln)
+    show_lines = normalized[-max_lines:] if len(normalized) > max_lines else normalized
     y = pad
     for ln in show_lines:
         if y + LOG_LINE_HEIGHT > height - pad:
@@ -161,16 +259,50 @@ def _draw_pokemon_with_tool(
     h: int,
     images_dir: Path,
 ) -> None:
-    """ポケモンカードを描画する。どうぐがついていればその上にはみ出すように重ねて表示する。"""
+    """ポケモンカードを描画する。どうぐがついていればその上にはみ出すように重ねて表示する。
+
+    状態異常に応じてカードの向きを変える（実カードの扱いに合わせた演出）:
+    - ねむり / マヒ: カードを横向きにする
+    - こんらん: カードを逆さまにする
+    """
     tool = getattr(bp, "attached_tool", None)
     if tool:
         tool_path = get_card_image_path(getattr(tool, "id", ""), images_dir)
         tool_name = getattr(tool, "name", "どうぐ")
         _paste_card_image(bg, tool_path, x, y - TOOL_VERTICAL_OVERHANG, w, h, tool_name)
+
+    # カード本体は一旦レイヤーに描画してから、状態異常に応じて回転させて貼り付ける。
+    # 下側に少し余白を持たせて、回転時にもエネルギーなどが切れにくいようにする。
+    extra_bottom = 8
+    card_layer = Image.new("RGBA", (w, h + extra_bottom), (0, 0, 0, 0))
+    card_draw = ImageDraw.Draw(card_layer)
     path = get_card_image_path(getattr(bp.card, "id", ""), images_dir)
-    _paste_card_image(bg, path, x, y, w, h, bp.card.name)
-    _draw_hp_bar(draw, x, y, w, h, bp.hp, bp.max_hp)
-    _draw_energy_on_card(bg, draw, x, y, w, h, getattr(bp, "attached_energy_types", []), images_dir)
+    _paste_card_image(card_layer, path, 0, 0, w, h, bp.card.name)
+    _draw_hp_bar(card_draw, 0, 0, w, h, bp.hp, bp.max_hp)
+    _draw_energy_on_card(card_layer, card_draw, 0, 0, w, h, getattr(bp, "attached_energy_types", []), images_dir)
+    _draw_status_markers(card_layer, bp, 0, 0, w, h)
+
+    status = getattr(bp, "special_state", None)
+    paste_img: Image.Image = card_layer
+    px, py = x, y
+    if status == "confusion":
+        # こんらん: カードを逆さまに回転
+        paste_img = card_layer.rotate(180, expand=True)
+        rw, rh = paste_img.size
+        cx = x + w // 2
+        cy = y + h // 2
+        px = cx - rw // 2
+        py = cy - rh // 2
+    elif status in ("sleep", "paralysis"):
+        # ねむり・マヒ: カードを横向きに回転
+        paste_img = card_layer.rotate(90, expand=True)
+        rw, rh = paste_img.size
+        cx = x + w // 2
+        cy = y + h // 2
+        px = cx - rw // 2
+        py = cy - rh // 2
+
+    bg.paste(paste_img.convert("RGB"), (px, py), paste_img)
 
 
 def _draw_hp_bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, hp: int, max_hp: int) -> None:
@@ -303,13 +435,19 @@ def _render_prize_stack(
     prize_w: int,
     prize_h: int,
     step: int,
+    images_dir: Path,
 ) -> None:
-    """サイドを重ねて描画。左下→右下（半分重ね）→その上に左→右→…の順で束になる。高さは step で重なり量を制御。"""
-    for i in range(len(prize_pile)):
+    """サイドを表向きで重ねて描画。下（画面下・1 枚目が奥）から上（画面上・最後の枚が手前）に重なる。お互い同じ。"""
+    n = len(prize_pile)
+    for i in range(n - 1, -1, -1):
         row, col = divmod(i, 2)
         y = y_bottom - row * step - prize_h
         x = start_px + col * (prize_w // 2)
-        _draw_card_back(bg, draw, x, y, prize_w, prize_h)
+        card = prize_pile[i]
+        card_id = getattr(card, "id", "")
+        card_name = getattr(card, "name", "") or getattr(card, "name_ja", "?")
+        path = get_card_image_path(card_id, images_dir)
+        _paste_card_image(bg, path, x, y, prize_w, prize_h, card_name)
 
 
 def _render_hand_cards(
@@ -380,9 +518,11 @@ def render_board_frame(
     draw = ImageDraw.Draw(bg)
 
     if log_text:
+        # ログファイル用の詳細ログとは別に、描画用には簡易化したテキストを使う
+        panel_text = _simplify_log_text_for_panel(log_text)
         draw.rectangle([0, 0, LOG_PANEL_WIDTH, height], fill=(20, 55, 20))
         draw.line([LOG_PANEL_WIDTH, 0, LOG_PANEL_WIDTH, height], fill=(70, 110, 70))
-        _draw_log_panel(draw, log_text, LOG_PANEL_WIDTH, height)
+        _draw_log_panel(draw, panel_text, LOG_PANEL_WIDTH, height)
 
     cx = board_offset + width // 2
     center_y = height // 2
@@ -430,7 +570,7 @@ def render_board_frame(
     active_y_opp = center_y - CARD_H_BENCH - 16
     bench_y_opp = active_y_opp - 20 - CARD_H_BENCH
     prize_y_bottom_opp = active_y_opp + CARD_H_BENCH
-    _render_prize_stack(bg, draw, opp.prize_pile, start_px_opp, prize_y_bottom_opp, prize_w, prize_h, prize_step)
+    _render_prize_stack(bg, draw, opp.prize_pile, start_px_opp, prize_y_bottom_opp, prize_w, prize_h, prize_step, images_dir)
     prize_block_top_opp = prize_y_bottom_opp - prize_h - 2 * prize_step
     deck_trash_x_opp = start_bx - CARD_W_BENCH - BENCH_GAP
     deck_y_opp = active_y_opp
@@ -512,7 +652,7 @@ def render_board_frame(
         except (TypeError, AttributeError):
             draw.text((cx - 80, turn_y_below_hand), turn_text, fill=LABEL_COLOR, font=font_label)
     prize_y_bottom_self = bench_y_self + CARD_H_BENCH
-    _render_prize_stack(bg, draw, self_p.prize_pile, start_px_self, prize_y_bottom_self, prize_w, prize_h, prize_step)
+    _render_prize_stack(bg, draw, self_p.prize_pile, start_px_self, prize_y_bottom_self, prize_w, prize_h, prize_step, images_dir)
     prize_block_top_self = prize_y_bottom_self - prize_h - 2 * prize_step
     draw.text((board_offset + MARGIN, height - 28), self_label, fill=LABEL_COLOR, font=font_label)
 
