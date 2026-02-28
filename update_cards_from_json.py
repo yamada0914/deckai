@@ -143,6 +143,7 @@ def _pokemon_card_from_json(card: dict) -> str:
     pokemon_type = card.get("pokemon_type")
     weakness = card.get("weakness")
     resistance = card.get("resistance")
+    regulation = card.get("regulation")
     lines = [
         f"# {name_ja}（{card_id}）",
         f"{id_to_var_name(card_id)} = PokemonCard(",
@@ -160,6 +161,8 @@ def _pokemon_card_from_json(card: dict) -> str:
         lines.append(f"    evolution_stage={py_str(evolution_stage)},")
     lines.append(f"    retreat_cost={retreat_cost},")
     lines.append(f"    pokemon_type={py_str(pokemon_type)},")
+    if regulation is not None:
+        lines.append(f"    regulation={py_str(regulation)},")
     if weakness is not None:
         lines.append(f"    weakness={py_str(weakness)},")
     if resistance is not None:

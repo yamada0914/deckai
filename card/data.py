@@ -128,6 +128,7 @@ USOKKI_SVD_058 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=2,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -145,6 +146,7 @@ KAIDEN_SVD_044 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='lightning',
+    regulation='G',
     weakness='lightning',
 )
 
@@ -162,6 +164,7 @@ KARAMINGO_SVD_109 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='colorless',
+    regulation='G',
     weakness='lightning',
 )
 
@@ -179,6 +182,7 @@ GAKEGANI_SVD_067 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=3,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -196,6 +200,7 @@ COIL_SVD_036 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -213,6 +218,7 @@ KORAIDONEX_SVD_068 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=2,
     pokemon_type='fighting',
+    regulation='G',
     weakness='psychic',
     is_ex=True,
 )
@@ -231,6 +237,7 @@ JIBAKOIL_SVD_038 = PokemonCard(
     evolution_stage='stage2',
     retreat_cost=2,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -247,6 +254,7 @@ ZUPIKA_SVD_041 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -264,6 +272,7 @@ NOKOTCHI_SVD_092 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='colorless',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -281,6 +290,7 @@ NONOKURAGE_SVD_065 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -297,6 +307,7 @@ HARABARII_SVD_042 = PokemonCard(
     evolution_stage='stage1',
     retreat_cost=2,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -314,6 +325,7 @@ BACHINUNI_SVD_040 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=3,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -331,6 +343,7 @@ PIKACHIXYUU_SVD_034 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -348,6 +361,7 @@ MIRAIDONEX_SVD_046 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
     is_ex=True,
 )
@@ -366,6 +380,7 @@ MEGUROKO_SVD_062 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=2,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -383,6 +398,7 @@ MOTOTOKAGE_MC_627 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='colorless',
+    regulation='H',
     weakness='fighting',
 )
 
@@ -400,6 +416,7 @@ RAICHIXYUU_SVD_035 = PokemonCard(
     evolution_stage='stage1',
     retreat_cost=1,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -417,6 +434,7 @@ RIORU_SVD_059 = PokemonCard(
     evolution_stage='basic',
     retreat_cost=1,
     pokemon_type='fighting',
+    regulation='G',
     weakness='psychic',
 )
 
@@ -434,6 +452,7 @@ RIKUKURAGE_SVD_066 = PokemonCard(
     evolution_stage='stage1',
     retreat_cost=2,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -451,6 +470,7 @@ RUKARIO_SVD_060 = PokemonCard(
     evolution_stage='stage1',
     retreat_cost=2,
     pokemon_type='fighting',
+    regulation='G',
     weakness='psychic',
 )
 
@@ -468,6 +488,7 @@ RARECOIL_SVD_037 = PokemonCard(
     evolution_stage='stage1',
     retreat_cost=2,
     pokemon_type='lightning',
+    regulation='G',
     weakness='fighting',
 )
 
@@ -485,6 +506,7 @@ WARUBIARU_SVD_064 = PokemonCard(
     evolution_stage='stage2',
     retreat_cost=3,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -502,6 +524,7 @@ WARUBIRU_SVD_063 = PokemonCard(
     evolution_stage='stage1',
     retreat_cost=2,
     pokemon_type='fighting',
+    regulation='G',
     weakness='grass',
 )
 
@@ -558,7 +581,6 @@ JIXYAJJIMAN = SupportCard(
 SUPABORU = GoodsCard(
     id='supaboru',
     name='スーパーボール',
-    effect='',
     description='自分の山札を上から7枚見て、その中からポケモンを1枚選び、相手に見せて、手札に加える。残りのカードは山札にもどして切る。',
 )
 
@@ -580,7 +602,6 @@ NEMOMIRAI = SupportCard(
 HAIPABORU = GoodsCard(
     id='haipaboru',
     name='ハイパーボール',
-    effect='',
     description='このカードは、自分の手札を2枚トラッシュしなければ使えない。自分の山札からポケモンを1枚選び、相手に見せて、手札に加える。そして山札を切る。',
 )
 

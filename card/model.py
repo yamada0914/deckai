@@ -194,6 +194,8 @@ class PokemonCard:
     resistance: PokemonTypeId | None = None
     is_ex: bool = False
     is_mega: bool = False
+    # レギュレーションマーク（例: G, H）。技の効果分岐で「カード名・レギュレーション・技名」の一致に使う。
+    regulation: str | None = None
 
     def copy(self) -> "PokemonCard":
         return PokemonCard(
@@ -212,6 +214,7 @@ class PokemonCard:
             resistance=self.resistance,
             is_ex=self.is_ex,
             is_mega=self.is_mega,
+            regulation=self.regulation,
         )
 
 

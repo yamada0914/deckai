@@ -28,6 +28,30 @@ from .state import (
 _KO_BONUS_FOR_ATTACK = 10000
 
 
+def _attack_key(card, atk) -> tuple[str, str, str]:
+    """(カード名, レギュレーション, 技名)。同じ技名でもカード・レギュで効果が違う場合の分岐用。"""
+    name = getattr(card, "name", "")
+    reg = getattr(card, "regulation", None) or ""
+    return (name, reg, atk.name)
+
+
+# 技の特殊効果は (カード名, レギュレーション, 技名) で識別（ダメージ値の差なども区別できる）
+_TSUIGEKI_BARI_BARI = frozenset({("バチンウニ", "G", "ついげきバリバリ")})
+_SHIPPEGAESHI_PRIZE_BONUS = frozenset({("ワルビル", "G", "しっぺがえし"), ("ワルビル", "", "しっぺがえし")})
+_AVENGE_NAKKLE_KO_BONUS = frozenset({("ルカリオ", "G", "アベンジナックル")})
+_NAGUTTE_KAKURERU = frozenset({("ウソッキー", "G", "なぐってかくれる")})
+_NAKIGOE_DAMAGE_REDUCTION = frozenset({("ピカチュウ", "G", "なきごえ")})
+_KASOKUZUKI_DISABLE = frozenset({("ルカリオ", "G", "かそくづき")})
+_FUKIARASU = frozenset({("カイデン", "G", "ふきあらす")})
+_MAGNEJECT = frozenset({("ジバコイル", "G", "マグネリジェクト")})
+_TOMODACHI_O_SAGASU = frozenset({("ノコッチ", "G", "ともだちをさがす")})
+_QUICK_DRAW = frozenset({("ミライドンex", "G", "クイックドロー")})
+_EREKI_CHARGE = frozenset({("ライチュウ", "G", "エレキチャージ")})
+_10MAN_VOLT = frozenset({("ライチュウ", "G", "10まんボルト")})
+_GABUGABU_BITE = frozenset({("ワルビアル", "G", "ガブガブバイト")})
+_TECHNO_TURBO = frozenset({("ミライドンex", "G", "テクノターボ")})
+
+
 def _handle_bench_ko(
     state: GameState,
     owner: PlayerState,
@@ -97,10 +121,11 @@ def attack(state: GameState, attack_index: int) -> bool:
     if attack_index < 0 or attack_index >= len(pokemon_card.attacks):
         return False
     atk = pokemon_card.attacks[attack_index]
+    atk_key = _attack_key(pokemon_card, atk)  # 効果分岐で何度も使うので 1 回だけ計算
     if getattr(p.active, "disabled_attack_name", None) == atk.name:
         state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} はこのターン「{atk.name}」が使えない")
         return False
-    if atk.name == "ついげきバリバリ":
+    if atk_key in _TSUIGEKI_BARI_BARI:
         last_name = state.last_turn_attack_name[state.current_player]
         last_id = state.last_turn_attack_actor_id[state.current_player]
         actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
@@ -158,10 +183,10 @@ def attack(state: GameState, attack_index: int) -> bool:
             before_t = damage
             damage = max(0, damage - getattr(tool, "tool_damage_reduce", 0))
             state.log(f"{state.player_name(state.current_player)}: {opp.active.card.name} の {tool.name} でダメージ -{before_t - damage}（{before_t} → {damage}）")
-    if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
+    if atk_key in _SHIPPEGAESHI_PRIZE_BONUS and len(opp.prize_pile) == 1:
         damage += 90
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（相手サイド残り 1 枚のため 90 ダメージ追加、相手 HP {opp_before} → {max(0, opp_before - damage)}）")
-    elif atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
+    elif atk_key in _AVENGE_NAKKLE_KO_BONUS and state.our_ko_by_damage_last_turn[state.current_player]:
         damage += 120
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」で相手に {damage} ダメージ（前の相手の番に自分の闘ポケモンがきぜつしたため 120 ダメージ追加、相手 HP {opp_before} → {max(0, opp_before - damage)}）")
     else:
@@ -208,13 +233,13 @@ def attack(state: GameState, attack_index: int) -> bool:
     target_bp = p.active if getattr(atk, "status_effect_target", "opponent") == "self" else (opp.active if opp.active else None)
     _apply_attack_status_effect(state, atk, target_bp, skip_opponent_status, opp)
 
-    if atk.name == "なぐってかくれる" and _flip_coin():
+    if atk_key in _NAGUTTE_KAKURERU and _flip_coin():
         p.active.protected_next_opponent_turn = True
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」コイン表 → 次の相手の番、このポケモンはワザのダメージや効果を受けない")
-    elif atk.name == "なきごえ" and opp.active:
+    elif atk_key in _NAKIGOE_DAMAGE_REDUCTION and opp.active:
         opp.active.damage_reduction_next_turn = 20
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 次の相手の番、相手のワザのダメージが -20 される")
-    if atk.name == "かそくづき":
+    if atk_key in _KASOKUZUKI_DISABLE:
         p.active.disabled_attack_name = "かそくづき"
         state.turn_when_disabled_attack[state.current_player] = state.turn_count
         state.log(f"{state.player_name(state.current_player)}: 次の自分の番、このポケモンは「かそくづき」が使えなくなる")
@@ -222,7 +247,7 @@ def attack(state: GameState, attack_index: int) -> bool:
     state.this_turn_attack_name = atk.name
     state.this_turn_attack_actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
 
-    if atk.name == "ふきあらす":
+    if atk_key in _FUKIARASU:
         n_hand = len(opp.hand)
         opp.deck.extend(opp.hand)
         opp.hand = []
@@ -231,11 +256,11 @@ def attack(state: GameState, attack_index: int) -> bool:
         opp.hand = opp_drawn
         opp_drawn_names = ", ".join(_card_label(c) for c in opp_drawn)
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 相手は手札 {n_hand} 枚を山札にもどして切り、山札から 4 枚ドロー → [{opp_drawn_names}]（手札 {len(opp.hand)} 枚）")
-    elif atk.name == "マグネリジェクト" and opp.active and opp.bench:
+    elif atk_key in _MAGNEJECT and opp.active and opp.bench:
         idx = random.randint(0, len(opp.bench) - 1)
         opp.active, opp.bench[idx] = opp.bench[idx], opp.active
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 相手のバトルポケモンとベンチを入れ替えた（{opp.active.card.name} がバトル場に）")
-    elif atk.name == "ともだちをさがす":
+    elif atk_key in _TOMODACHI_O_SAGASU:
         for i, c in enumerate(p.deck):
             if is_pokemon(c):
                 p.deck.pop(i)
@@ -244,12 +269,12 @@ def attack(state: GameState, attack_index: int) -> bool:
                 random.shuffle(p.deck)
                 state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札からポケモン 1 枚（{_card_label(c)}）を手札に加え、山札を切った")
                 break
-    elif atk.name == "クイックドロー":
+    elif atk_key in _QUICK_DRAW:
         drawn = p.draw(2)
         p.hand.extend(drawn)
         state.drawn_this_turn.extend(drawn)
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から 2 枚ドロー → [{', '.join(_card_label(c) for c in drawn)}]（手札 {len(p.hand)} 枚）")
-    elif atk.name == "エレキチャージ" and p.active:
+    elif atk_key in _EREKI_CHARGE and p.active:
         attached = 0
         for i in range(len(p.deck) - 1, -1, -1):
             if attached >= 2:
@@ -263,14 +288,14 @@ def attack(state: GameState, attack_index: int) -> bool:
         if attached > 0:
             random.shuffle(p.deck)
             state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から基本エネルギー {attached} 枚をこのポケモンにつけた")
-    elif atk.name == "10まんボルト" and p.active:
+    elif atk_key in _10MAN_VOLT and p.active:
         num = p.active.attached_energy
         types_to_discard = list(getattr(p.active, "attached_energy_types", []))
         _put_energy_cards_in_discard(p, types_to_discard, state)
         p.active.attached_energy = 0
         p.active.attached_energy_types = []
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ このポケモンについているエネルギー {num} 個をすべてトラッシュした")
-    elif atk.name == "ガブガブバイト" and opp.active:
+    elif atk_key in _GABUGABU_BITE and opp.active:
         heads = 0
         while _flip_coin():
             heads += 1
@@ -285,7 +310,7 @@ def attack(state: GameState, attack_index: int) -> bool:
             else:
                 opp.active.attached_energy_types = []
             state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ コイン表 {heads} 回、相手のバトルポケモンのエネルギー {discard_n} 個をトラッシュした")
-    elif atk.name == "テクノターボ" and p.discard and p.bench:
+    elif atk_key in _TECHNO_TURBO and p.discard and p.bench:
         lightning_idx = None
         for i, c in enumerate(p.discard):
             if is_energy(c) and getattr(c, "energy_type", None) == "lightning":
@@ -330,16 +355,17 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
             continue
         if getattr(p.active, "disabled_attack_name", None) == atk.name:
             continue
-        if atk.name == "ついげきバリバリ":
+        atk_key = _attack_key(p.active.card, atk)
+        if atk_key in _TSUIGEKI_BARI_BARI:
             last_name = state.last_turn_attack_name[state.current_player]
             last_id = state.last_turn_attack_actor_id[state.current_player]
             actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
             if last_name != "しびれはり" or last_id != actor_id:
                 continue
         base_dmg = _attack_damage_for_eval(atk)
-        if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
+        if atk_key in _SHIPPEGAESHI_PRIZE_BONUS and len(opp.prize_pile) == 1:
             base_dmg += 90
-        if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
+        if atk_key in _AVENGE_NAKKLE_KO_BONUS and state.our_ko_by_damage_last_turn[state.current_player]:
             base_dmg += 120
         effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
         ko_bonus = _KO_BONUS_FOR_ATTACK if (opp.active and effective_dmg >= opp_hp) else 0
