@@ -1,5 +1,5 @@
 """
-ふしぎなアメの挙動確認用スクリプト。
+ふしぎなアメの挙動確認。
 手札に「ふしぎなアメ」「ワルビアル（2進化）」「ワルビル（1進化）」、
 バトル場に「メグロコ（たね）」がある状態でふしぎなアメを使い、
 メグロコがワルビアルに 1 進化をとばして進化することを確認する。
@@ -8,29 +8,34 @@ import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from game import GameState, PlayerState, BattlePokemon, use_trainer_goods
+from game import GameState, BattlePokemon, use_trainer_goods
 from card import get_card_by_id
 
 
-def main() -> None:
+def test_fushiginaame_evolve_basic_to_stage2():
+    """ふしぎなアメでたねポケモンが 2 進化に 1 進化をとばして進化する。"""
+    # ふしぎなアメは turn_count >= 2 でないと使えない（先行・後行の 1 ターン目は不可）
     state = GameState(
         current_player=0,
         first_player=0,
-        turn_count=1,
-        log_fn=print,
+        turn_count=2,
+        log_fn=lambda _: None,
     )
     p0 = state.players[0]
     p1 = state.players[1]
 
-    fushiginaame = get_card_by_id("fushiginaame", "hand-fushiginaame")
-    warubiaru = get_card_by_id("warubiaru-svd-064", "hand-warubiaru")
-    warubiru = get_card_by_id("warubiru-svd-063", "hand-warubiru")
-    p0.hand = [fushiginaame, warubiaru, warubiru]
-
-    meguroko = get_card_by_id("meguroko-svd-062", "active-meguroko")
-    p0.active = BattlePokemon(card=meguroko, put_on_bench_this_turn=False)
+    p0.hand = [
+        get_card_by_id("fushiginaame", "hand-fushiginaame"),
+        get_card_by_id("warubiaru-svd-064", "hand-warubiaru"),
+        get_card_by_id("warubiru-svd-063", "hand-warubiru"),
+    ]
+    p0.active = BattlePokemon(
+        card=get_card_by_id("meguroko-svd-062", "active-meguroko"),
+        put_on_bench_this_turn=False,
+    )
     p0.bench = []
     p0.deck = []
     p0.discard = []
@@ -44,20 +49,7 @@ def main() -> None:
     p1.prize_pile = []
 
     hand_index_fushiginaame = 0
-    assert p0.hand[hand_index_fushiginaame].id == "fushiginaame"
-
-    print("--- 実行前 ---")
-    print(f"バトル場: {p0.active.card.name} (id={p0.active.card.id})")
-    print(f"手札: {[getattr(c, 'name', c.id) for c in p0.hand]}")
-
     ok = use_trainer_goods(state, hand_index_fushiginaame)
-
-    print("\n--- 実行後 ---")
-    print(f"use_trainer_goods 戻り値: {ok}")
-    print(f"バトル場: {p0.active.card.name} (id={getattr(p0.active.card, 'id', '')})")
-    print(f"手札枚数: {len(p0.hand)}")
-    print(f"手札: {[getattr(c, 'name', getattr(c, 'id', '')) for c in p0.hand]}")
-    print(f"捨て札: {[getattr(c, 'name', getattr(c, 'id', '')) for c in p0.discard]}")
 
     assert ok, "ふしぎなアメの使用に失敗"
     assert p0.active is not None, "バトル場が空"
@@ -65,9 +57,3 @@ def main() -> None:
     assert len(p0.hand) == 1, f"手札はワルビル 1 枚のはず: {len(p0.hand)}"
     assert any(getattr(c, "id", "") == "fushiginaame" for c in p0.discard), "ふしぎなアメが捨て札に入っていること"
     assert not any(getattr(c, "name", "") == "ワルビアル" for c in p0.hand), "ワルビアルは場にのったので手札に残っていないこと"
-
-    print("\nOK: ふしぎなアメでメグロコ → ワルビアルに 1 進化をとばして進化できた。")
-
-
-if __name__ == "__main__":
-    main()
