@@ -20,7 +20,14 @@ deckAi/
 │   ├── model.py              # 型（PokemonCard, Attack 等）
 │   └── data.py               # 実データ（一部 JSON から生成）
 ├── deck.py                   # デッキレシピ・生成
-├── game.py                   # ゲーム状態・ターン進行・AI 手番
+├── game/                     # ゲーム状態・ターン進行・AI 手番（パッケージ）
+│   ├── __init__.py
+│   ├── state.py              # 状態・セットアップ・共通ヘルパー
+│   ├── damage.py             # ダメージ計算
+│   ├── evolution.py          # 進化
+│   ├── trainers.py           # トレーナー（グッズ・サポート・どうぐ）
+│   ├── attack.py             # 攻撃
+│   └── turn.py               # ターン進行・run_turn_auto
 ├── board_render.py           # 盤面を 1 枚画像に描画
 ├── read_cards.py             # 画像 or デッキコード → JSON（ルートで実行）
 ├── update_cards_from_json.py # JSON → card/data.py 更新（ルートで実行）
@@ -28,8 +35,12 @@ deckAi/
 │   ├── simulate.py           # 対戦シミュレーション（勝率等）
 │   ├── record_game.py        # 1 試合を記録（ログ + pkl）
 │   └── make_video.py         # pkl から盤面フレーム → MP4
-├── tests/
-│   └── test_fushiginaame.py  # ふしぎなアメの挙動テスト
+├── tests/                    # テスト（pytest）
+│   ├── conftest.py           # 共通フィクスチャ
+│   ├── test_fushiginaame.py  # ふしぎなアメの挙動
+│   ├── test_rules_01_play_supplement.py   # 遊びかた補足に基づくルール
+│   ├── test_rules_02_card_descriptions.py # カード説明文に基づくルール
+│   └── test_rules_advanced.py            # 上級ルールに基づくルール
 ├── read_cards_data/          # カード画像マッピング用 JSON
 │   ├── pokemon.json
 │   ├── trainers.json
@@ -172,6 +183,32 @@ python scripts/make_video.py --battle-id <id> --fps 1.0 -o out.mp4
 
 ---
 
+### D. テスト（pytest）
+
+ルートで pytest を実行し、ゲームルールやカード効果の挙動を検証します。
+
+```bash
+# 全テストを実行
+python -m pytest tests/ -v
+
+# 短い出力で実行
+python -m pytest tests/ -q
+
+# 特定のファイルだけ実行
+python -m pytest tests/test_fushiginaame.py -v
+python -m pytest tests/test_rules_01_play_supplement.py -v
+```
+
+| ファイル | 役割 |
+|----------|------|
+| `tests/conftest.py` | 共通フィクスチャ（最小 GameState など） |
+| `tests/test_fushiginaame.py` | ふしぎなアメで 1 進化とばし進化する挙動を検証 |
+| `tests/test_rules_01_play_supplement.py` | rules/01_play_supplement.md に基づくルール（ワザ・にげる・ベンチ・進化・グッズ・サポート・エネルギー・きぜつ・勝敗・セットアップ等） |
+| `tests/test_rules_02_card_descriptions.py` | rules/02_card_descriptions.md に基づくルール（カード説明文優先・ダメージ計算・効果・用語） |
+| `tests/test_rules_advanced.py` | rules/advanced_rule.md（上級ルール）に基づくルールテスト |
+
+---
+
 ## スクリプト一覧
 
 | ファイル | 役割 |
@@ -181,7 +218,6 @@ python scripts/make_video.py --battle-id <id> --fps 1.0 -o out.mp4
 | `scripts/simulate.py` | 指定デッキで N 回対戦し勝率などを表示 |
 | `scripts/record_game.py` | 1 試合を実行しログ・状態を `battles/<id>/` に保存 |
 | `scripts/make_video.py` | 保存した状態から盤面フレームを描画し MP4 を出力 |
-| `tests/test_fushiginaame.py` | ふしぎなアメの進化挙動を検証 |
 
 ## コアモジュール
 
@@ -189,7 +225,7 @@ python scripts/make_video.py --battle-id <id> --fps 1.0 -o out.mp4
 |----------|------|
 | `card/` | カード型（model）とマスタデータ（data）、get_card_by_id 等 |
 | `deck.py` | デッキレシピ（A〜E）、登録デッキ、create_deck / デッキコードからの生成 |
-| `game.py` | GameState、ターン進行、ドロー・進化・ワザ・アイテム等の処理、AI 手番 |
+| `game/` | GameState、ターン進行、ドロー・進化・ワザ・アイテム等の処理、AI 手番（state / damage / evolution / trainers / attack / turn） |
 | `board_render.py` | GameState を 1 枚画像に描画（動画用フレーム生成） |
 
 ## ルール参照
