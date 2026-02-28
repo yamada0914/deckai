@@ -53,7 +53,6 @@ class TestA01_Waza:
         state = _minimal_state()
         p = state.players[0]
         opp = state.players[1]
-        # 攻撃可能なポケモンと相手を用意
         card = get_card_by_id("mototokage", "active")
         p.active = BattlePokemon(card=card, attached_energy=1, attached_energy_types=["colorless"])
         p.hand = []
@@ -118,7 +117,6 @@ class TestA03_Nigeru:
         p.hand = []
         ok = retreat(state, 0)
         assert ok is True
-        # もともと active だったポケモンは今 bench[0]
         assert getattr(p.bench[0], "disabled_attack_name", None) is None
 
 
@@ -141,10 +139,7 @@ class TestA05_Evolution:
         p.active = BattlePokemon(card=base, put_on_bench_this_turn=False)
         evo = get_card_by_id("warubiru-svd-063", "evo")
         p.hand = [evo]
-        # evolve_pokemon は「その番に進化できるか」の判定に put_on_bench_this_turn / evolved_this_turn を見る。
-        # 先行 1 ターン目は run_turn_auto 側で can_evolve=False にしているので、ここでは「出したばかり」をテスト。
         ok = evolve_pokemon(state, 0, bench_index=None)
-        # 出したばかりでないので進化は通る可能性がある。代わりに「出したばかりでは進化できない」をテスト。
         state2 = _minimal_state(turn_count=2)
         p2 = state2.players[0]
         p2.active = BattlePokemon(card=base, put_on_bench_this_turn=True)
@@ -250,5 +245,4 @@ class TestG_Setup:
         for i in range(2):
             assert len(state.players[i].prize_pile) == PRIZE_COUNT
             assert state.players[i].active is not None
-            # 初手 7 枚引いたあと、バトル場 1 体＋ベンチに出すので手札は 7 未満になる
             assert len(state.players[i].hand) + 1 + len(state.players[i].bench) >= 7

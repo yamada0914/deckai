@@ -131,7 +131,6 @@ def main() -> None:
     for f in frames_dir.glob("frame_*.png"):
         f.unlink()
 
-    # 盤面が同じ連続フレームを間引き、動画の「何も動かない」時間をなくす
     key_indices = _key_frame_indices(states)
     for out_i, state_i in enumerate(key_indices):
         state = states[state_i]

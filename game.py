@@ -17,10 +17,9 @@ BENCH_SIZE = 5
 WIN_KO_COUNT = 3
 PRIZE_COUNT = 6
 MAX_TURNS_SAFETY = 200
-# 1 ターン内のループガード（無限ループ防止）
 MAX_EVOLVE_ROUNDS_PER_TURN = 20
 MAX_BALL_USES_PER_TURN = 30
-MAX_TURN_ACTION_ROUNDS = 10  # サポート・グッズでドローしたあと優先順位に戻る回数上限
+MAX_TURN_ACTION_ROUNDS = 10
 
 SpecialState = Literal["sleep", "paralysis", "confusion"]
 
@@ -324,12 +323,11 @@ def _put_one_pokemon_on_bench(
     existing_names = {getattr(bp.card, "name", "") for bp in player.bench}
     for i, c in enumerate(player.hand):
         if is_pokemon(c) and not c.evolves_from:
-            # すでに同名のポケモンがベンチにいる場合は出さない
             if getattr(c, "name", "") in existing_names:
                 continue
             p = c.copy()
             bp = BattlePokemon(card=p)
-            bp.put_on_bench_this_turn = True  # その番には進化できない（ルール A-05）
+            bp.put_on_bench_this_turn = True
             player.bench.append(bp)
             player.hand.pop(i)
             if log:
@@ -433,7 +431,6 @@ def start_turn(state: GameState) -> None:
     state.our_ko_by_damage_last_turn[state.current_player] = False
     state.drawn_this_turn = []
     p = state.active_player_state()
-    # 「かそくづき」等の「次の自分の番で使えない」は end_turn で解除する（自分の番の終了時）
     turn_label = _turn_label(state)
     state.log(f"---------- {turn_label} ---------- {state.player_name(state.current_player)} のターン")
     drawn = p.draw(1)
@@ -694,10 +691,7 @@ def use_potion(state: GameState, hand_index: int) -> bool:
 
 
 def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
-    """
-    トレーナー（グッズ）の効果を実行。きずぐすり・いれかえ・どうぐ以外のアイテムを id / 名前で判定して処理する。
-    対応: おとどけドローン, エネルギー回収, エレキジェネレーター, スーパーボール, ハイパーボール, ポケモンキャッチャー。
-    """
+    """トレーナー（グッズ）の効果を実行。きずぐすり・いれかえ・どうぐ以外のアイテムを id / 名前で判定して処理する。"""
     p = state.active_player_state()
     if hand_index < 0 or hand_index >= len(p.hand):
         return False
@@ -709,8 +703,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         return False
     name_ja = getattr(card, "name", "")
 
-    # ふしぎなアメ：手札の 2 進化 1 枚を、場のたねポケモンにのせて 1 進化をとばして進化
-    # 先行・後行とも、そのプレイヤーの 1 ターン目は進化できない。
     if cid == "fushiginaame":
         if state.turn_count < 2:
             return False
@@ -734,7 +726,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
                 )
             if not stage1_ref or not is_pokemon(stage1_ref):
                 continue
-            # 2 進化の判定: evolution_stage が "stage2" か、または進化元が 1 進化（evolves_from を持つ）か
             is_stage2 = is_stage2_pokemon(c) or bool(getattr(stage1_ref, "evolves_from", None))
             if not is_stage2:
                 continue
@@ -759,7 +750,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         if not stage1_ref:
             return False
         target_bp = None
-        # 対象はバトル場・ベンチのたねポケモン（このターンに出したばかりは除く）
         if p.active and is_basic_pokemon(p.active.card) and not getattr(p.active, "put_on_bench_this_turn", False):
             if _can_evolve_onto(p.active.card, stage1_ref):
                 target_bp = p.active
@@ -801,7 +791,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         state.log(f"{state.player_name(state.current_player)}: おとどけドローンを使用（コイン裏）→ 効果なし")
         return True
 
-    # エネルギー回収: トラッシュから基本エネルギーを 2 枚まで選び手札に加える。
     _basic_energy_types = ("grass", "fire", "water", "lightning", "psychic", "fighting", "darkness", "metal", "fairy")
     _is_enerugikaishixyuu = (cid == "unknown" and name_ja == "エネルギー回収") or cid == "enerugikaishixyuu" or name_ja == "エネルギー回収"
     if _is_enerugikaishixyuu:
@@ -821,7 +810,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
             return True
         return False
 
-    # エレキジェネレーター: 山札上から 5 枚見て、その中から基本エネルギーを 2 枚まで選びベンチにつける。残りは山札にもどして切る。
     _is_erekijienereta = cid == "erekijienereta" or name_ja == "エレキジェネレーター"
     _basic_energy_types = ("grass", "fire", "water", "lightning", "psychic", "fighting", "darkness", "metal", "fairy")
     if _is_erekijienereta and p.bench and p.deck:
@@ -864,13 +852,11 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
         return True
 
     if cid == "haipaboru" and len(p.hand) >= 3 and p.deck:
-        # 手札 2 枚をトラッシュ
         to_discard_idx = [i for i in range(len(p.hand)) if i != hand_index][:2]
         for i in sorted(to_discard_idx, reverse=True):
             p.discard.append(p.hand.pop(i))
         new_hi = p.hand.index(card)
 
-        # まずはバトル場のポケモンの進化先を優先して探す
         pokemon_found: tuple[int, object] | None = None
         if p.active:
             for i, c in enumerate(p.deck):
@@ -878,7 +864,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
                     pokemon_found = (i, c)
                     break
 
-        # 見つからなければ、ベンチポケモンの誰かの進化先を探す
         if pokemon_found is None and p.bench:
             for bp in p.bench:
                 for i, c in enumerate(p.deck):
@@ -888,7 +873,6 @@ def use_trainer_goods(state: "GameState", hand_index: int) -> bool:
                 if pokemon_found is not None:
                     break
 
-        # それでも無ければ、従来通り最初のポケモン 1 枚を持ってくる
         if pokemon_found is None:
             for i, c in enumerate(p.deck):
                 if is_pokemon(c):
@@ -1093,8 +1077,8 @@ def _apply_evolution(
     target.card.hp = max(0, min(evolved.max_hp, evolved.max_hp - damage_taken))
     target.attached_energy = old_energy
     target.attached_energy_types = list(old_energy_types)
-    target.evolved_this_turn = True  # 同一ターンでの 2 進化を禁止するため
-    _clear_status(target)  # 進化したとき特殊状態・ワザの効果はなくなる（ルール A-05）
+    target.evolved_this_turn = True
+    _clear_status(target)
     state.log(f"{log_prefix}{old_name} を {evolved.name} に進化（HP {target.hp}/{target.max_hp}）")
 
 
@@ -1107,7 +1091,6 @@ def _can_evolve_onto(field_card, evolution_card) -> bool:
     fname = (getattr(field_card, "name", "") or getattr(field_card, "name_ja", "") or "").strip()
     if fid == base or fname == base:
         return True
-    # 進化元が短い id（例: meguroko）で、場のカードがセット付き id（例: meguroko-svd-062）のときも一致
     if base and (fid.startswith(base + "-") or fid.startswith(base + "_")):
         return True
     return False
@@ -1129,10 +1112,8 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
     if bench_index is None:
         if not p.active or not _can_evolve_onto(p.active.card, evolution_card):
             return False
-        # 2 進化：そのターンに 1 進化していたら同じターンには 2 進化できない（ルール A-05）
         if getattr(p.active.card, "evolves_from", None) is not None and getattr(p.active, "evolved_this_turn", False):
             return False
-        # 場に出したばかりのポケモンはその番には進化できない（ルール A-05）
         if getattr(p.active, "put_on_bench_this_turn", False):
             return False
         _apply_evolution(
@@ -1146,10 +1127,8 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
     bench_pokemon = p.bench[bench_index]
     if not _can_evolve_onto(bench_pokemon.card, evolution_card):
         return False
-    # 2 進化：そのターンに 1 進化していたら同じターンには 2 進化できない（ルール A-05）
     if getattr(bench_pokemon.card, "evolves_from", None) is not None and getattr(bench_pokemon, "evolved_this_turn", False):
         return False
-    # 場に出したばかりのポケモンはその番には進化できない（ルール A-05）
     if getattr(bench_pokemon, "put_on_bench_this_turn", False):
         return False
     _apply_evolution(
@@ -1458,7 +1437,6 @@ def attack(
     return True
 
 
-# 攻撃選択で KO を最優先するためのボーナス（有效ダメージは通常 300 以下なので十分大きい値）
 _KO_BONUS_FOR_ATTACK = 10000
 
 
@@ -1490,7 +1468,6 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
         if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
             base_dmg += 120
         effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
-        # きぜつさせられる技を最優先、否則有效ダメージで比較
         ko_bonus = _KO_BONUS_FOR_ATTACK if (opp.active and effective_dmg >= opp_hp) else 0
         score = effective_dmg + ko_bonus
         if score > best_score:
@@ -1734,7 +1711,6 @@ def end_turn(state: GameState) -> None:
     state.last_turn_attack_actor_id[cp] = state.this_turn_attack_actor_id
     state.this_turn_attack_name = None
     state.this_turn_attack_actor_id = None
-    # 「次の自分の番で使えない」（かそくづき等）は、自分の番を終えたときに解除する
     leaving = state.players[cp]
     for bp in ([leaving.active] if leaving.active else []) + list(leaving.bench):
         if bp:
@@ -1769,12 +1745,10 @@ def run_turn_auto(state: GameState) -> bool:
 
     _try_put_bench_until_full()
 
-    # サポート・グッズでドローした場合は優先順位 1（進化）から手札を再確認する
     action_round = 0
     while action_round < MAX_TURN_ACTION_ROUNDS:
         action_round += 1
 
-        # ふしぎなアメを進化より先に試す（1 進化をとばして進化できるなら、通常進化でたねを消費する前に使う）
         used_fushiginaame = False
         if state.turn_count >= 2:
             for i, c in enumerate(p.hand):
@@ -1792,7 +1766,6 @@ def run_turn_auto(state: GameState) -> bool:
             if used_fushiginaame:
                 continue
 
-        # 進化を最優先で行う（先行・後行の 1 ターン目以外）
         can_evolve = state.turn_count >= 2
         evolve_rounds = 0
         while can_evolve:
@@ -1853,7 +1826,6 @@ def run_turn_auto(state: GameState) -> bool:
                     break
             _try_put_bench_until_full()
 
-        # 手札が入れ替わる系サポート（たんぱんこぞう等）を手に持っている場合は、その前に使えるグッズ（どうぐ・ふしぎなあめ等）を先に使う
         _HAND_REFRESH_SUPPORT_IDS = ("tanpankozou", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "kihada")
         has_hand_refresh_support = any(is_support(c) and getattr(c, "id", "") in _HAND_REFRESH_SUPPORT_IDS for c in p.hand)
         if not _is_first_player_first_turn(state) and has_hand_refresh_support and not state.support_used_this_turn:
@@ -1911,7 +1883,6 @@ def run_turn_auto(state: GameState) -> bool:
             if used_support:
                 continue
 
-        # ポケモンいれかえ: 次の相手の番でやられそうなときだけ使う。その番で相手をきぜつさせられるなら攻撃を優先するのでいれかえしない。
         p = state.active_player_state()
         opp_max_effective = _opponent_max_effective_damage(state)
         our_max_effective = _our_max_effective_damage(state)
@@ -1931,7 +1902,6 @@ def run_turn_auto(state: GameState) -> bool:
                         state._record_frame()
                     break
 
-        # にげる: やられそうで相手を倒せないとき、逃げ先に「相手のダメージで生き残れる」ベンチがいる場合だけ逃げる（出してもやられるなら逃げない）
         p = state.active_player_state()
         opp_max_effective = _opponent_max_effective_damage(state)
         our_max_effective = _our_max_effective_damage(state)
@@ -1945,9 +1915,8 @@ def run_turn_auto(state: GameState) -> bool:
         )
         retreat_helps = has_bench_survivor or can_ko_from_bench
         if can_retreat and p.active and p.bench and would_be_koed and not can_ko_opponent and retreat_helps and p.active.attached_energy >= retreat_cost:
-            # ベンチ候補ごとの最大ダメージを見て、相手をきぜつさせられるベンチを最優先
             best_idx = None
-            best_score = (-1, -1, -1)  # (can_ko_flag, damage, hp/energyの目安)
+            best_score = (-1, -1, -1)
             for i, bp in enumerate(p.bench):
                 dmg = _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player) if opp.active else 0
                 can_ko = int(opp.active is not None and dmg >= opp.active.hp)
@@ -1955,7 +1924,6 @@ def run_turn_auto(state: GameState) -> bool:
                 if score > best_score:
                     best_score = score
                     best_idx = i
-            # それでも候補がなければ、従来どおり生存しやすいベンチを選ぶ
             if best_idx is None:
                 survivors = [(i, p.bench[i].hp, p.bench[i].attached_energy) for i in range(len(p.bench)) if p.bench[i].hp > opp_max_effective]
                 if survivors:
@@ -1971,7 +1939,6 @@ def run_turn_auto(state: GameState) -> bool:
                 p = state.active_player_state()
                 state._record_frame()
 
-        # どうぐ（tool）を先に試す（ダメージ軽減など、つけておきたいカードを優先）
         for i, c in enumerate(p.hand):
             if not is_goods(c) or not getattr(c, "is_tool", False):
                 continue
@@ -2018,7 +1985,6 @@ def run_turn_auto(state: GameState) -> bool:
         if used_goods:
             continue
 
-        # 進化を最優先で行う（サポートやグッズで手札が変わったあとも再度チェック）
         can_evolve = state.turn_count >= 2
         evolve_rounds2 = 0
         while can_evolve:
@@ -2048,7 +2014,7 @@ def run_turn_auto(state: GameState) -> bool:
             if not evolved_this_round:
                 break
 
-        break  # 優先順位を一通り実行したので攻撃へ
+        break
 
     is_game_first_turn = state.turn_count == 0
     can_attack = not is_game_first_turn and p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")

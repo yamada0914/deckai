@@ -38,8 +38,6 @@ class TestA_CardTextPriority:
 
     def test_card_effect_overrides_general_rule(self):
         """カードの説明文が基本ルールと違う場合はカードを優先（実装がカード効果を正しく扱う前提）。"""
-        # 例: 「次の自分の番で使えない」はカード効果で、実装では disabled_attack_name で表現される
-        # ルカリオ（rukario-svd-060）が「かそくづき」を持つ
         card = get_card_by_id("rukario-svd-060", "c")
         attacks = getattr(card, "attacks", [])
         kasokuzuki = next((a for a in attacks if getattr(a, "name", "") == "かそくづき"), None)
@@ -57,7 +55,6 @@ class TestB_DamageCalculation:
         attacker = get_card_by_id("mototokage", "att")
         defender_card = get_card_by_id("mototokage", "def")
         defender = BattlePokemon(card=defender_card)
-        # 弱点・抵抗が無いカードならそのまま
         dmg = _effective_damage_to_defender(attacker, defender, atk_dmg)
         assert dmg >= 0
 
@@ -79,7 +76,6 @@ class TestC_Effects:
         state = _minimal_state()
         p = state.players[0]
         opp = state.players[1]
-        # ルカリオ（かそくづきを持つ）
         card = get_card_by_id("rukario-svd-060", "active")
         p.active = BattlePokemon(
             card=card,

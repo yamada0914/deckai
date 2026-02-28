@@ -116,13 +116,10 @@ def _simplify_log_text_for_panel(log_text: str | None) -> str:
         stripped = ln.strip()
         if not stripped:
             continue
-        # ターン見出しやゲーム開始などの区切りはそのまま残す
         if stripped.startswith("==========") or stripped.startswith("----------"):
             simplified.append(stripped)
             continue
-        # 「プレイヤー名: メッセージ」の形なら本体だけを取り出す
         body = stripped.split(": ", 1)[1] if ": " in stripped else stripped
-        # 「→」「（」以降の細かい説明は描画ログでは省略する
         for sep in ("→", "（"):
             if sep in body:
                 body = body.split(sep, 1)[0].rstrip()
@@ -229,10 +226,7 @@ def _draw_log_panel(
         font = ImageFont.load_default()
     pad = 8
     max_lines = max(1, (height - pad * 2) // LOG_LINE_HEIGHT)
-    # 1 行 1 ログとしてそのまま表示する（途中で不要な空行は入れない）。
-    # 長すぎる行は描画時に右側をカットする。
     lines = [ln.rstrip() for ln in (log_text or "").split("\n")]
-    # 空行は「区切り」として 1 行だけ残し、連続する空行は潰す。
     normalized: list[str] = []
     for ln in lines:
         if not ln.strip():
@@ -271,8 +265,6 @@ def _draw_pokemon_with_tool(
         tool_name = getattr(tool, "name", "どうぐ")
         _paste_card_image(bg, tool_path, x, y - TOOL_VERTICAL_OVERHANG, w, h, tool_name)
 
-    # カード本体は一旦レイヤーに描画してから、状態異常に応じて回転させて貼り付ける。
-    # 下側に少し余白を持たせて、回転時にもエネルギーなどが切れにくいようにする。
     extra_bottom = 8
     card_layer = Image.new("RGBA", (w, h + extra_bottom), (0, 0, 0, 0))
     card_draw = ImageDraw.Draw(card_layer)
@@ -286,7 +278,6 @@ def _draw_pokemon_with_tool(
     paste_img: Image.Image = card_layer
     px, py = x, y
     if status == "confusion":
-        # こんらん: カードを逆さまに回転
         paste_img = card_layer.rotate(180, expand=True)
         rw, rh = paste_img.size
         cx = x + w // 2
@@ -294,7 +285,6 @@ def _draw_pokemon_with_tool(
         px = cx - rw // 2
         py = cy - rh // 2
     elif status in ("sleep", "paralysis"):
-        # ねむり・マヒ: カードを横向きに回転
         paste_img = card_layer.rotate(90, expand=True)
         rw, rh = paste_img.size
         cx = x + w // 2
@@ -518,7 +508,6 @@ def render_board_frame(
     draw = ImageDraw.Draw(bg)
 
     if log_text:
-        # ログファイル用の詳細ログとは別に、描画用には簡易化したテキストを使う
         panel_text = _simplify_log_text_for_panel(log_text)
         draw.rectangle([0, 0, LOG_PANEL_WIDTH, height], fill=(20, 55, 20))
         draw.line([LOG_PANEL_WIDTH, 0, LOG_PANEL_WIDTH, height], fill=(70, 110, 70))

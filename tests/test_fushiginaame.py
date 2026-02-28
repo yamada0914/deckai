@@ -17,7 +17,6 @@ from card import get_card_by_id
 
 def test_fushiginaame_evolve_basic_to_stage2():
     """ふしぎなアメでたねポケモンが 2 進化に 1 進化をとばして進化する。"""
-    # ふしぎなアメは turn_count >= 2 でないと使えない（先行・後行の 1 ターン目は不可）
     state = GameState(
         current_player=0,
         first_player=0,
