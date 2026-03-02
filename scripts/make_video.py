@@ -73,7 +73,7 @@ def main() -> None:
     parser.add_argument("--battle-id", type=str, default=None, metavar="ID", help="対戦 ID（指定時は battles/<ID>/ 内の pkl → battle.mp4, フレームは frames/）")
     parser.add_argument("--states", type=Path, default=None, metavar="PATH", help="状態 pickle（--battle-id 未指定時のデフォルト: battle_states.pkl）")
     parser.add_argument("-o", "--output", type=Path, default=None, metavar="PATH", help="出力動画（--battle-id 未指定時のデフォルト: battle.mp4）")
-    parser.add_argument("--fps", type=float, default=0.5, help="動画の FPS（デフォルト: 0.5 = 1 フレーム 2 秒表示）")
+    parser.add_argument("--fps", type=float, default=0.33, help="動画の FPS（デフォルト: 0.33 = 1 フレーム約 3 秒表示。小さくするほどフレーム間の間隔が長い）")
     parser.add_argument("--frames-dir", type=Path, default=None, help="フレーム画像を残すディレクトリ（省略時: battle-id なら battles/<ID>/frames/）")
     args = parser.parse_args()
 
