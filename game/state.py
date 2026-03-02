@@ -349,10 +349,24 @@ def _fill_bench_from_hand(
 
 
 def _promote_from_bench(player: PlayerState, state: GameState, player_index: int) -> bool:
-    """バトル場が空のとき、ベンチから 1 体をバトル場に出す。HP が一番高いポケモンを選ぶ。"""
+    """
+    バトル場が空のとき、ベンチから 1 体をバトル場に出す。
+    次の自分のターンに相手のバトル場をきぜつさせられるポケモンがいればそれを優先し、いなければ HP が一番高いポケモンを選ぶ。
+    """
     if player.active is not None or not player.bench:
         return False
-    best_idx = max(range(len(player.bench)), key=lambda i: player.bench[i].hp)
+    opp = state.players[1 - player_index]
+    best_idx = None
+    if opp.active and opp.active.hp > 0:
+        from .damage import _max_effective_damage_for_attacker
+        can_ko_indices = [
+            i for i in range(len(player.bench))
+            if _max_effective_damage_for_attacker(state, player.bench[i], opp.active, player_index) >= opp.active.hp
+        ]
+        if can_ko_indices:
+            best_idx = max(can_ko_indices, key=lambda i: player.bench[i].hp)
+    if best_idx is None:
+        best_idx = max(range(len(player.bench)), key=lambda i: player.bench[i].hp)
     player.active = player.bench.pop(best_idx)
     state.log(f"{state.player_name(player_index)}: ベンチから {player.active.card.name} をバトル場に出す（HP {player.active.hp}/{player.active.max_hp}）")
     return True

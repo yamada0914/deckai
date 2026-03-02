@@ -3,6 +3,7 @@ import random
 
 from card import (
     get_card_by_id,
+    get_card_by_name,
     is_basic_pokemon,
     is_energy,
     is_goods,
@@ -125,14 +126,16 @@ def use_trainer_goods(state: GameState, hand_index: int) -> bool:
                 stage1_ref = get_card_by_id((c.evolves_from or "").strip())
             except ValueError:
                 base = (c.evolves_from or "").strip()
-                stage1_ref = next(
-                    (h for h in p.hand if is_pokemon(h) and (
-                        (getattr(h, "id", "") or "").strip() == base
-                        or (getattr(h, "id", "") or "").startswith(base + "-")
-                        or (getattr(h, "name", "") or "").strip() == base
-                    )),
-                    None,
-                )
+                stage1_ref = get_card_by_name(base)
+                if stage1_ref is None:
+                    stage1_ref = next(
+                        (h for h in p.hand if is_pokemon(h) and (
+                            (getattr(h, "id", "") or "").strip() == base
+                            or (getattr(h, "id", "") or "").startswith(base + "-")
+                            or (getattr(h, "name", "") or "").strip() == base
+                        )),
+                        None,
+                    )
             if not stage1_ref or not is_pokemon(stage1_ref):
                 continue
             is_stage2 = is_stage2_pokemon(c) or bool(getattr(stage1_ref, "evolves_from", None))
@@ -148,14 +151,16 @@ def use_trainer_goods(state: GameState, hand_index: int) -> bool:
             stage1_ref = get_card_by_id(stage2_card.evolves_from.strip())
         except ValueError:
             base = (stage2_card.evolves_from or "").strip()
-            stage1_ref = next(
-                (h for h in p.hand if is_pokemon(h) and (
-                    (getattr(h, "id", "") or "").strip() == base
-                    or (getattr(h, "id", "") or "").startswith(base + "-")
-                    or (getattr(h, "name", "") or "").strip() == base
-                )),
-                None,
-            )
+            stage1_ref = get_card_by_name(base)
+            if stage1_ref is None:
+                stage1_ref = next(
+                    (h for h in p.hand if is_pokemon(h) and (
+                        (getattr(h, "id", "") or "").strip() == base
+                        or (getattr(h, "id", "") or "").startswith(base + "-")
+                        or (getattr(h, "name", "") or "").strip() == base
+                    )),
+                    None,
+                )
         if not stage1_ref:
             return False
         target_bp = None
@@ -400,7 +405,6 @@ def use_support(state: GameState, hand_index: int) -> bool:
         opp_drawn = opp.draw(4)
         opp.hand = opp_drawn
         opp_drawn_names = ", ".join(_card_label(c) for c in opp_drawn)
-        state.log(f"{state.player_name(state.opponent())}: ジャッジマンの効果で手札を山札にもどして切り、山札から 4 枚ドロー → [{opp_drawn_names}]（手札 {len(opp.hand)} 枚）")
         p.hand.pop(hand_index)
         p.deck.extend(p.hand)
         p.hand = []
@@ -410,7 +414,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         state.drawn_this_turn.extend(p_drawn)
         p.discard.append(card)
         p_drawn_names = ", ".join(_card_label(c) for c in p_drawn)
-        state.log(f"{state.player_name(state.current_player)}: ジャッジマンの効果で手札を山札にもどして切り、山札から 4 枚ドロー → [{p_drawn_names}]（手札 {len(p.hand)} 枚）")
+        state.log(f"{state.player_name(state.current_player)}: ジャッジマン使用")
         state.support_used_this_turn = True
         return True
     if cid == "kihada":
@@ -418,7 +422,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
             return False
         kihada_card = p.hand.pop(hand_index)
         card_to_bottom = p.hand.pop(0)
-        p.deck.append(card_to_bottom)
+        p.deck.insert(0, card_to_bottom)
         need = 5 - len(p.hand)
         drawn = p.draw(need)
         p.hand.extend(drawn)
