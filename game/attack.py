@@ -242,7 +242,7 @@ def attack(state: GameState, attack_index: int) -> bool:
     if atk_key in _KASOKUZUKI_DISABLE:
         p.active.disabled_attack_name = "かそくづき"
         state.turn_when_disabled_attack[state.current_player] = state.turn_count
-        state.log(f"{state.player_name(state.current_player)}: 次の自分の番、このポケモンは「かそくづき」が使えなくなる")
+        state.log(f"{state.player_name(state.current_player)}: 次の番、このポケモンは「かそくづき」が使えなくなる")
 
     state.this_turn_attack_name = atk.name
     state.this_turn_attack_actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
@@ -260,6 +260,13 @@ def attack(state: GameState, attack_index: int) -> bool:
         idx = random.randint(0, len(opp.bench) - 1)
         opp.active, opp.bench[idx] = opp.bench[idx], opp.active
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 相手のバトルポケモンとベンチを入れ替えた（{opp.active.card.name} がバトル場に）")
+        # ベンチに移ったポケモンが HP 0 以下ならきぜつ処理
+        for i in range(len(opp.bench) - 1, -1, -1):
+            if i < len(opp.bench) and opp.bench[i].hp <= 0:
+                koed_bench_bp = opp.bench[i]
+                opp.bench.pop(i)
+                if _handle_bench_ko(state, opp, koed_bench_bp, False, p, opp):
+                    return True
     elif atk_key in _TOMODACHI_O_SAGASU:
         for i, c in enumerate(p.deck):
             if is_pokemon(c):
@@ -327,7 +334,7 @@ def attack(state: GameState, attack_index: int) -> bool:
     if opp.active and opp.active.hp <= 0:
         koed_active = opp.active
         state.our_ko_by_damage_last_turn[state.opponent()] = True
-        state.log(f"{state.player_name(state.opponent())} のバトル場の {koed_active.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
+        state.log(f"バトル場の {koed_active.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
         if _handle_opponent_ko(opp, state, koed_active):
             return True
 
