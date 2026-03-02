@@ -5,6 +5,10 @@ from card import is_energy, is_goods, is_pokemon, is_support
 
 _BALL_GOODS_IDS = ("supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya")
 _HAND_REFRESH_SUPPORT_IDS = ("tanpankozou", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "kihada")
+# 手札を捨てないサポート（ネモ・キハダ）→ 複数あるとき優先
+_SUPPORT_IDS_NO_DISCARD = ("nemo", "nemokako", "nemomirai", "kihada")
+# 手札をすべて捨てるサポート（博士の研究）→ 手札 5 枚以上なら勿体無いので後回し
+_SUPPORT_IDS_DISCARD_ALL = ("hakasenokenkyuu", "hakasenokenkyuufutouhakase")
 
 from .attack import _choose_best_attack_index, attack
 from .damage import (
@@ -64,7 +68,7 @@ def retreat(state: GameState, bench_index: int) -> bool:
     p.bench[bench_index] = old_active
     _clear_status(old_active)
     state.log(
-        f"{state.player_name(state.current_player)}: {old_active.card.name} をベンチに退き、"
+        f"{state.player_name(state.current_player)}: {old_active.card.name} をベンチに戻し、"
         f"{p.active.card.name} をバトル場に出す（HP {p.active.hp}/{p.active.max_hp}）"
     )
     return True
@@ -139,6 +143,28 @@ def _try_attach_one_tool(state: GameState) -> bool:
             if attach_tool(state, i, bench_index=bi):
                 return True
     return False
+
+
+def _support_try_order(p) -> list[int]:
+    """
+    サポートを試す順序。手札を捨てないもの優先。
+    手札がネモと博士の研究だけのときは博士の研究を先に。手札 5 枚以上なら博士の研究は後回し。
+    """
+    support_indices = [(i, p.hand[i]) for i in range(len(p.hand)) if is_support(p.hand[i])]
+    if not support_indices:
+        return []
+    n_hand = len(p.hand)
+    no_discard = [i for i, c in support_indices if getattr(c, "id", "") in _SUPPORT_IDS_NO_DISCARD]
+    discard_all = [i for i, c in support_indices if getattr(c, "id", "") in _SUPPORT_IDS_DISCARD_ALL]
+    other = [i for i, c in support_indices if i not in no_discard and i not in discard_all]
+    # 手札がネモと博士の研究だけ → 博士の研究を先に（手札刷新）
+    if n_hand == 2 and len(no_discard) == 1 and len(discard_all) == 1 and not other:
+        return discard_all + no_discard
+    # 手札 5 枚以上 → 博士の研究は勿体無いので最後に試す
+    if n_hand >= 5:
+        return no_discard + other + discard_all
+    # 通常: 手札を捨てないものから
+    return no_discard + other + discard_all
 
 
 def _try_goods_before_hand_refresh(state: GameState) -> bool:
@@ -379,25 +405,26 @@ def run_turn_auto(state: GameState) -> bool:
         would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
         can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
 
-        if not _is_first_player_first_turn(state):
-            ball_uses = 0
-            while ball_uses < MAX_BALL_USES_PER_TURN:
-                ball_uses += 1
-                used_ball = False
-                for i, c in enumerate(p.hand):
-                    if not is_goods(c) or getattr(c, "is_tool", False):
-                        continue
-                    if getattr(c, "id", "") not in _BALL_GOODS_IDS:
-                        continue
-                    if use_trainer_goods(state, i):
-                        acted = True
-                        used_ball = True
-                        p = state.active_player_state()
-                        state._record_frame()
-                        break
-                if not used_ball:
+        # ボール系どうぐ（スーパーボール等）は先行 1 ターン目でも使用可（制限されるのはサポートのみ）
+        ball_uses = 0
+        while ball_uses < MAX_BALL_USES_PER_TURN:
+            ball_uses += 1
+            used_ball = False
+            for i, c in enumerate(p.hand):
+                if not is_goods(c) or getattr(c, "is_tool", False):
+                    continue
+                if getattr(c, "id", "") not in _BALL_GOODS_IDS:
+                    continue
+                if use_trainer_goods(state, i):
+                    acted = True
+                    used_ball = True
+                    p = state.active_player_state()
+                    state._record_frame()
                     break
-            _try_put_bench_until_full()
+            if not used_ball:
+                break
+        _try_put_bench_until_full()
+        if not _is_first_player_first_turn(state):
             evolve_after_ball = 0
             while evolve_after_ball < MAX_EVOLVE_ROUNDS_PER_TURN and state.turn_count >= 2:
                 evolve_after_ball += 1
@@ -419,8 +446,8 @@ def run_turn_auto(state: GameState) -> bool:
 
         if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
             used_support = False
-            for i, c in enumerate(p.hand):
-                if is_support(c) and use_support(state, i):
+            for i in _support_try_order(p):
+                if use_support(state, i):
                     acted = True
                     used_support = True
                     p = state.active_player_state()
