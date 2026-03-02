@@ -6,7 +6,7 @@ card パッケージ。
 
 利用側は「from card import PokemonCard, get_card_by_id」のようにパッケージから import すればよい。
 """
-from card.data import CARD_ID_TO_NAME, get_card_by_id, get_trainer_id_by_name
+from card.data import CARD_ID_TO_NAME, get_card_by_id, get_card_by_name, get_trainer_id_by_name
 from card.model import (
     Attack,
     CardType,
@@ -46,6 +46,7 @@ __all__ = [
     "POKEMON_TYPES",
     "SupportCard",
     "get_card_by_id",
+    "get_card_by_name",
     "get_trainer_id_by_name",
     "is_basic_pokemon",
     "is_energy",

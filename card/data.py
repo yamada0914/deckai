@@ -854,3 +854,16 @@ def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyC
     c = deepcopy(_CARD_REGISTRY[card_id])
     c.instance_id = instance_id
     return c
+
+
+def get_card_by_name(name_ja: str, instance_id: str = "") -> PokemonCard | EnergyCard | GoodsCard | SupportCard | None:
+    """名前（日本語）が一致するカードをレジストリから探しコピーを返す。見つからなければ None。"""
+    name_ja = (name_ja or "").strip()
+    if not name_ja:
+        return None
+    for c in _CARD_REGISTRY.values():
+        if getattr(c, "name", "") == name_ja:
+            out = deepcopy(c)
+            out.instance_id = instance_id
+            return out
+    return None
