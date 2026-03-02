@@ -73,7 +73,7 @@ def get_card_image_path(card_id: str, images_dir: Path | str) -> Path | None:
     return p if p.is_file() else None
 
 
-BOARD_WIDTH = 1100
+BOARD_WIDTH = 900
 BOARD_HEIGHT = 980
 PRIZE_SLOTS = 6
 BENCH_SLOTS = 5
@@ -85,9 +85,9 @@ TOOL_VERTICAL_OVERHANG = 18
 CARD_W_BENCH = 90
 CARD_H_BENCH = 124
 MIN_HAND_CARD_W = 20
-LOG_PANEL_WIDTH = 280
-LOG_LINE_HEIGHT = 16
-LOG_FONT_SIZE = 11
+LOG_PANEL_WIDTH = 350
+LOG_LINE_HEIGHT = 20
+LOG_FONT_SIZE = 14
 BG_COLOR = (30, 80, 30)
 SLOT_COLOR = (60, 100, 60)
 CARD_BACK_COLOR = (80, 60, 40)
@@ -565,7 +565,10 @@ def render_board_frame(
     deck_y_opp = active_y_opp
     trash_y_opp = bench_y_opp
     draw.text((deck_trash_x_opp, deck_y_opp - 14), f"山札 {len(opp.deck)}", fill=TEXT_COLOR, font=font_small)
-    _draw_card_back(bg, draw, deck_trash_x_opp, deck_y_opp, CARD_W_BENCH, CARD_H_BENCH)
+    if opp.deck:
+        _draw_card_back(bg, draw, deck_trash_x_opp, deck_y_opp, CARD_W_BENCH, CARD_H_BENCH)
+    else:
+        _draw_placeholder(draw, deck_trash_x_opp, deck_y_opp, CARD_W_BENCH, CARD_H_BENCH, "")
     draw.text((deck_trash_x_opp, trash_y_opp - 14), f"トラッシュ {len(opp.discard)}", fill=TEXT_COLOR, font=font_small)
     if opp.discard:
         top_card = opp.discard[-1]
@@ -613,7 +616,10 @@ def render_board_frame(
     deck_y_self = bench_y_self - CARD_H_BENCH - 8
     trash_y_self = bench_y_self
     draw.text((deck_trash_x_self, deck_y_self - 14), f"山札 {len(self_p.deck)}", fill=TEXT_COLOR, font=font_small)
-    _draw_card_back(bg, draw, deck_trash_x_self, deck_y_self, CARD_W_BENCH, CARD_H_BENCH)
+    if self_p.deck:
+        _draw_card_back(bg, draw, deck_trash_x_self, deck_y_self, CARD_W_BENCH, CARD_H_BENCH)
+    else:
+        _draw_placeholder(draw, deck_trash_x_self, deck_y_self, CARD_W_BENCH, CARD_H_BENCH, "")
     if self_p.discard:
         top_card = self_p.discard[-1]
         path = get_card_image_path(getattr(top_card, "id", ""), images_dir)
