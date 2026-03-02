@@ -10,8 +10,10 @@ _SUPPORT_IDS_NO_DISCARD = ("nemo", "nemokako", "nemomirai", "kihada")
 # 手札をすべて捨てるサポート（博士の研究）→ 手札 5 枚以上なら勿体無いので後回し
 _SUPPORT_IDS_DISCARD_ALL = ("hakasenokenkyuu", "hakasenokenkyuufutouhakase")
 
-from .attack import _choose_best_attack_index, attack
+from .attack import _choose_best_attack_index, attack, attack_has_merit_effect_at_zero_damage
 from .damage import (
+    _attack_damage_for_eval,
+    _effective_damage_to_defender,
     _max_effective_damage_for_attacker,
     _max_effective_damage_if_attach,
     _opponent_max_effective_damage,
@@ -116,6 +118,92 @@ def _can_active_use_any_attack(p: PlayerState) -> bool:
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
             return True
+    return False
+
+
+def _min_energy_for_any_attack(card) -> int:
+    """そのカードの技のうち、必要エネルギー数が最小の値を返す（技が遅い＝大きいほど良い）。"""
+    if not getattr(card, "attacks", None):
+        return 0
+    return max(
+        (len(getattr(a, "energy_cost_typed", []) or []) or getattr(a, "energy_cost", 0) for a in card.attacks),
+        default=0,
+    )
+
+
+def _best_opponent_bench_index_for_catcher(state: GameState) -> int | None:
+    """
+    ポケモンキャッチャーで引きたい相手ベンチのインデックスを返す。
+    逃げにくく・技が遅い（retreat_cost 大、技に必要エネルギー大）ポケモンを優先する。
+    """
+    opp = state.defending_player_state()
+    if not opp.bench or not opp.active:
+        return None
+    best_idx = None
+    best_score = (-1, -1)
+    for i, bp in enumerate(opp.bench):
+        card = bp.card
+        retreat = getattr(card, "retreat_cost", 0)
+        min_energy = _min_energy_for_any_attack(card)
+        score = (retreat, min_energy)
+        if score > best_score:
+            best_score = score
+            best_idx = i
+    return best_idx
+
+
+# 生贄に出す候補のカード名（ここに追加すれば種類を増やせる）。いなければ「相手を倒せない・HP 低い」ベンチを候補にする。
+_SACRIFICE_POKEMON_NAMES = frozenset({"カラミンゴ"})
+
+
+def _best_sacrifice_bench_index(state: GameState) -> int | None:
+    """
+    生贄に出すベンチのインデックスを返す。
+    まず _SACRIFICE_POKEMON_NAMES に名前があるポケモンを優先し、いなければ
+    「今のエネルギーでは相手を倒せない」ベンチのうち max_hp が最小の 1 体を選ぶ（カード追加に強い）。
+    """
+    p = state.active_player_state()
+    opp = state.defending_player_state()
+    if not p.bench:
+        return None
+    for i, bp in enumerate(p.bench):
+        if getattr(bp.card, "name", "") in _SACRIFICE_POKEMON_NAMES:
+            return i
+    if not opp.active:
+        return None
+    cannot_ko = []
+    for i, bp in enumerate(p.bench):
+        dmg = _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player)
+        if dmg < opp.active.hp:
+            cannot_ko.append((i, getattr(bp.card, "max_hp", 60)))
+    if not cannot_ko:
+        return None
+    return min(cannot_ko, key=lambda x: x[1])[0]
+
+
+def _has_bench_that_can_ko_after_one_attach(state: GameState) -> bool:
+    """
+    手札のエネルギーを 1 つ付けたときに相手をきぜつさせられるベンチが 1 体でもいれば True。
+    カード名に依存せず、どのデッキでも使える。
+    """
+    p = state.active_player_state()
+    opp = state.defending_player_state()
+    if not opp.active or not p.bench:
+        return False
+    types_to_try = list({getattr(c, "energy_type", "colorless") for c in p.hand if is_energy(c)} or ["colorless"])
+    for bp in p.bench:
+        for et in types_to_try:
+            dmg = _max_effective_damage_if_attach(
+                state,
+                bp.card,
+                bp.attached_energy,
+                getattr(bp, "attached_energy_types", []),
+                et,
+                opp.active,
+                state.current_player,
+            )
+            if dmg >= opp.active.hp:
+                return True
     return False
 
 
@@ -405,17 +493,26 @@ def run_turn_auto(state: GameState) -> bool:
         would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
         can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
 
-        # ボール系どうぐ（スーパーボール等）は先行 1 ターン目でも使用可（制限されるのはサポートのみ）
+        # ボール系どうぐ（スーパーボール等）は先行 1 ターン目でも使用可。ポケモンキャッチャーは優先し、相手の「逃げにくい・技が遅い」ベンチを狙う。
         ball_uses = 0
         while ball_uses < MAX_BALL_USES_PER_TURN:
             ball_uses += 1
             used_ball = False
-            for i, c in enumerate(p.hand):
-                if not is_goods(c) or getattr(c, "is_tool", False):
-                    continue
-                if getattr(c, "id", "") not in _BALL_GOODS_IDS:
-                    continue
-                if use_trainer_goods(state, i):
+            ball_candidates = [
+                (i, c)
+                for i, c in enumerate(p.hand)
+                if is_goods(c)
+                and not getattr(c, "is_tool", False)
+                and getattr(c, "id", "") in _BALL_GOODS_IDS
+            ]
+            ball_candidates.sort(key=lambda x: (0 if getattr(x[1], "id", "") == "pokemonkixyatchixya" else 1, x[0]))
+            for i, c in ball_candidates:
+                if getattr(c, "id", "") == "pokemonkixyatchixya":
+                    catcher_idx = _best_opponent_bench_index_for_catcher(state)
+                    used = use_trainer_goods(state, i, pokemon_catcher_bench_index=catcher_idx)
+                else:
+                    used = use_trainer_goods(state, i)
+                if used:
                     acted = True
                     used_ball = True
                     p = state.active_player_state()
@@ -557,9 +654,39 @@ def run_turn_auto(state: GameState) -> bool:
     if can_attack:
         best_idx = _choose_best_attack_index(state, p, opp)
         if best_idx is not None:
-            attack(state, best_idx)
-            acted = True
-            state._record_frame()
+            atk = p.active.card.attacks[best_idx]
+            base_dmg = _attack_damage_for_eval(atk)
+            effective_dmg = (
+                _effective_damage_to_defender(p.active.card, opp.active, base_dmg)
+                if opp.active
+                else base_dmg
+            )
+            retreat_cost = getattr(p.active.card, "retreat_cost", 1)
+            can_retreat_here = (
+                p.bench
+                and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
+                and p.active.attached_energy >= retreat_cost
+            )
+            sacrifice_idx = _best_sacrifice_bench_index(state)
+            if (
+                opp.active
+                and effective_dmg <= 0
+                and attack_has_merit_effect_at_zero_damage(p.active.card, atk)
+                and can_retreat_here
+                and sacrifice_idx is not None
+                and _has_bench_that_can_ko_after_one_attach(state)
+            ):
+                if retreat(state, sacrifice_idx):
+                    acted = True
+                    state._record_frame()
+                else:
+                    attack(state, best_idx)
+                    acted = True
+                    state._record_frame()
+            else:
+                attack(state, best_idx)
+                acted = True
+                state._record_frame()
 
     if not acted:
         state.log(f"{state.player_name(state.current_player)}: 実行できるアクションなし（パス）")

@@ -93,6 +93,8 @@ SLOT_COLOR = (60, 100, 60)
 CARD_BACK_COLOR = (80, 60, 40)
 TEXT_COLOR = (255, 255, 255)
 LABEL_COLOR = (240, 240, 200)
+CURRENT_PLAYER_FRAME_COLOR = (255, 105, 180)
+CURRENT_PLAYER_FRAME_WIDTH = 5
 
 _STATUS_MARKER_FILES = {
     "poison": _PROJECT_ROOT / "card_images" / "basic" / "pk-svb-032.webp",
@@ -650,6 +652,18 @@ def render_board_frame(
     _render_prize_stack(bg, draw, self_p.prize_pile, start_px_self, prize_y_bottom_self, prize_w, prize_h, prize_step, images_dir)
     prize_block_top_self = prize_y_bottom_self - prize_h - 2 * prize_step
     draw.text((board_offset + MARGIN, height - 28), self_label, fill=LABEL_COLOR, font=font_label)
+
+    # その番のプレイヤーのフィールドをピンクで囲む
+    pad = MARGIN
+    if state.current_player == 0:
+        frame_rect = [board_offset + pad, center_y + 2, total_width - pad, height - pad]
+    else:
+        frame_rect = [board_offset + pad, pad, total_width - pad, center_y - 2]
+    draw.rectangle(
+        frame_rect,
+        outline=CURRENT_PLAYER_FRAME_COLOR,
+        width=CURRENT_PLAYER_FRAME_WIDTH,
+    )
 
     if output_path is not None:
         out = Path(output_path)

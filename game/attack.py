@@ -35,7 +35,8 @@ def _attack_key(card, atk) -> tuple[str, str, str]:
     return (name, reg, atk.name)
 
 
-# 技の特殊効果は (カード名, レギュレーション, 技名) で識別（ダメージ値の差なども区別できる）
+# 技の特殊効果は (カード名, レギュレーション, 技名) で識別（ダメージ値の差なども区別できる）。
+# 新カード追加時: 同じ効果の技なら既存の frozenset にタプルを 1 つ追加。新効果なら新 frozenset を作り attack() 内の分岐と _ATTACK_HAS_MERIT_EFFECT に追加する。
 _TSUIGEKI_BARI_BARI = frozenset({("バチンウニ", "G", "ついげきバリバリ")})
 _SHIPPEGAESHI_PRIZE_BONUS = frozenset({("ワルビル", "G", "しっぺがえし"), ("ワルビル", "", "しっぺがえし")})
 _AVENGE_NAKKLE_KO_BONUS = frozenset({("ルカリオ", "G", "アベンジナックル")})
@@ -50,6 +51,32 @@ _EREKI_CHARGE = frozenset({("ライチュウ", "G", "エレキチャージ")})
 _10MAN_VOLT = frozenset({("ライチュウ", "G", "10まんボルト")})
 _GABUGABU_BITE = frozenset({("ワルビアル", "G", "ガブガブバイト")})
 _TECHNO_TURBO = frozenset({("ミライドンex", "G", "テクノターボ")})
+
+# メリット効果がある技のみ 0 ダメージでも選択可能（自傷・コストのみの技は除く）。
+# 上記の「効果用 frozenset」のうち、0 ダメージでも打つ価値があるものを | でまとめている。新規効果を追加したらここにも追加する。
+_ATTACK_HAS_MERIT_EFFECT = (
+    _NAGUTTE_KAKURERU
+    | _NAKIGOE_DAMAGE_REDUCTION
+    | _FUKIARASU
+    | _MAGNEJECT
+    | _TOMODACHI_O_SAGASU
+    | _QUICK_DRAW
+    | _EREKI_CHARGE
+    | _GABUGABU_BITE
+    | _TECHNO_TURBO
+)
+
+
+def attack_has_merit_effect_at_zero_damage(card, atk) -> bool:
+    """0 ダメージでも打つメリットがある技か（生贄を出す代わりに打たない判断に利用）。"""
+    atk_key = _attack_key(card, atk)
+    if atk_key in _ATTACK_HAS_MERIT_EFFECT:
+        return True
+    if getattr(atk, "status_effect", None) and getattr(atk, "status_effect_target", "opponent") != "self":
+        return True
+    if getattr(atk, "bench_damage", 0) > 0 and getattr(atk, "bench_damage_target", "opponent") != "self":
+        return True
+    return False
 
 
 def _handle_bench_ko(
@@ -375,6 +402,20 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
         if atk_key in _AVENGE_NAKKLE_KO_BONUS and state.our_ko_by_damage_last_turn[state.current_player]:
             base_dmg += 120
         effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
+        if opp.active and effective_dmg <= 0:
+            has_merit = (
+                atk_key in _ATTACK_HAS_MERIT_EFFECT
+                or (
+                    getattr(atk, "status_effect", None)
+                    and getattr(atk, "status_effect_target", "opponent") != "self"
+                )
+                or (
+                    getattr(atk, "bench_damage", 0) > 0
+                    and getattr(atk, "bench_damage_target", "opponent") != "self"
+                )
+            )
+            if not has_merit:
+                continue
         ko_bonus = _KO_BONUS_FOR_ATTACK if (opp.active and effective_dmg >= opp_hp) else 0
         score = effective_dmg + ko_bonus
         if score > best_score:

@@ -100,7 +100,12 @@ def use_potion(state: GameState, hand_index: int) -> bool:
     return True
 
 
-def use_trainer_goods(state: GameState, hand_index: int) -> bool:
+def use_trainer_goods(
+    state: GameState,
+    hand_index: int,
+    *,
+    pokemon_catcher_bench_index: int | None = None,
+) -> bool:
     """トレーナー（グッズ）の効果を実行。きずぐすり・いれかえ・どうぐ以外のアイテムを id / 名前で判定して処理する。"""
     p = state.active_player_state()
     if hand_index < 0 or hand_index >= len(p.hand):
@@ -292,10 +297,15 @@ def use_trainer_goods(state: GameState, hand_index: int) -> bool:
     if cid == "pokemonkixyatchixya":
         opp = state.defending_player_state()
         if opp.bench and opp.active and _flip_coin():
-            idx = random.randint(0, len(opp.bench) - 1)
+            idx = (
+                pokemon_catcher_bench_index
+                if pokemon_catcher_bench_index is not None
+                and 0 <= pokemon_catcher_bench_index < len(opp.bench)
+                else random.randint(0, len(opp.bench) - 1)
+            )
             opp.active, opp.bench[idx] = opp.bench[idx], opp.active
             p.discard.append(p.hand.pop(hand_index))
-            state.log(f"{state.player_name(state.current_player)}: ポケモンキャッチャーを使用（コイン表）→ 相手のベンチとバトルポケモンを入れ替えた")
+            state.log(f"{state.player_name(state.current_player)}: ポケモンキャッチャーを使用（コイン表）→ 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
             return True
         p.discard.append(p.hand.pop(hand_index))
         state.log(f"{state.player_name(state.current_player)}: ポケモンキャッチャーを使用（コイン裏）→ 効果なし")
