@@ -16,6 +16,7 @@ _BASIC_ENERGY_TYPES = ("grass", "fire", "water", "lightning", "psychic", "fighti
 
 from .damage import _max_effective_damage_for_attacker
 from .evolution import _apply_evolution, _can_evolve_onto
+from .weights import get_haipaboru_discard_weight
 from .state import (
     GameState,
     PlayerState,
@@ -24,24 +25,67 @@ from .state import (
     _clear_status,
     _flip_coin,
     _is_first_player_first_turn,
+    _log_choice,
 )
 
 
-def _find_pokemon_for_haipaboru(p: PlayerState) -> tuple[int, object] | None:
-    """ハイパーボール用：山札から優先度（進化可能→任意ポケモン）で 1 枚を探し (deck_index, card) を返す。"""
+def would_haipaboru_fetch_evolution(p: PlayerState) -> bool:
+    """ハイパーボールを使ったときに山札から取ってくる 1 枚が進化ポケモンかどうか。"""
+    found = _find_pokemon_for_haipaboru(p)
+    if not found:
+        return False
+    return bool(getattr(found[1], "evolves_from", None))
+
+
+def _haipaboru_already_have(p: PlayerState, card) -> bool:
+    """手札・バトル場・ベンチに同じ id または名前のポケモンがいるか。"""
+    cid = getattr(card, "id", None) or ""
+    cname = getattr(card, "name", "") or ""
+    for h in p.hand:
+        if is_pokemon(h) and ((getattr(h, "id", None) or "") == cid or (getattr(h, "name", "") or "") == cname):
+            return True
     if p.active:
-        for i, c in enumerate(p.deck):
-            if is_pokemon(c) and getattr(c, "evolves_from", None) and _can_evolve_onto(p.active.card, c):
-                return (i, c)
-    if p.bench:
-        for bp in p.bench:
-            for i, c in enumerate(p.deck):
-                if is_pokemon(c) and getattr(c, "evolves_from", None) and _can_evolve_onto(bp.card, c):
-                    return (i, c)
-    for i, c in enumerate(p.deck):
-        if is_pokemon(c):
-            return (i, c)
-    return None
+        if (getattr(p.active.card, "id", None) or "") == cid or (getattr(p.active.card, "name", "") or "") == cname:
+            return True
+    for bp in p.bench:
+        if (getattr(bp.card, "id", None) or "") == cid or (getattr(bp.card, "name", "") or "") == cname:
+            return True
+    return False
+
+
+def _haipaboru_strength(card) -> float:
+    """強さスコア（HP と ex ボーナス）。"""
+    hp = getattr(card, "max_hp", 0) or 0
+    ex = getattr(card, "is_ex", False) or ("ex" in (getattr(card, "name", "") or ""))
+    return hp + (5000.0 if ex else 0.0)
+
+
+def _find_pokemon_for_haipaboru(p: PlayerState) -> tuple[int, object] | None:
+    """
+    ハイパーボール用：山札から 1 枚を選び (deck_index, card) を返す。
+    手札・場に既にいるポケモンは避け、優先度は
+    (1) 2進化で場にのせられる (2) 1進化で場にのせられる (3) たね (4) 強さ（HP・ex）。
+    """
+    candidates = [(i, c) for i, c in enumerate(p.deck) if is_pokemon(c)]
+    if not candidates:
+        return None
+    preferred = [(i, c) for i, c in candidates if not _haipaboru_already_have(p, c)]
+    pool = preferred if preferred else candidates
+
+    def score(deck_idx: int, c) -> float:
+        strength = _haipaboru_strength(c)
+        field_cards = ([p.active.card] if p.active else []) + [bp.card for bp in p.bench]
+        for field_card in field_cards:
+            if _can_evolve_onto(field_card, c):
+                if is_stage2_pokemon(c):
+                    return 10000.0 + strength
+                return 5000.0 + strength
+        if is_basic_pokemon(c) or not getattr(c, "evolves_from", None):
+            return 1000.0 + strength
+        return strength
+
+    best = max(pool, key=lambda x: (score(x[0], x[1]), -x[0]))
+    return best
 
 
 def attach_energy(state: GameState, hand_index: int, bench_index: int | None = None) -> bool:
@@ -272,9 +316,28 @@ def use_trainer_goods(
         return True
 
     if cid == "haipaboru" and len(p.hand) >= 3 and p.deck:
-        to_discard_idx = [i for i in range(len(p.hand)) if i != hand_index][:2]
+        weights = state.get_weights_for_player(state.current_player)
+        hand_without_haipaboru = [(i, p.hand[i]) for i in range(len(p.hand)) if i != hand_index]
+        name_counts = {}
+        for _i, c in hand_without_haipaboru:
+            n = getattr(c, "name", "") or getattr(c, "id", "") or ""
+            name_counts[n] = name_counts.get(n, 0) + 1
+        support_count = sum(1 for _i, c in hand_without_haipaboru if is_support(c))
+        scored = []
+        for i, c in hand_without_haipaboru:
+            discard_score = get_haipaboru_discard_weight(weights, c)
+            if name_counts.get(getattr(c, "name", "") or getattr(c, "id", "") or "", 0) >= 2:
+                discard_score += 500
+            if is_support(c) and support_count >= 2:
+                discard_score += 300
+            scored.append((i, discard_score))
+        scored.sort(key=lambda x: -x[1])
+        to_discard_idx = [scored[0][0], scored[1][0]]
+        cards_to_log = [p.hand[i] for i in to_discard_idx]
         for i in sorted(to_discard_idx, reverse=True):
             p.discard.append(p.hand.pop(i))
+        for c in cards_to_log:
+            _log_choice(state, "haipaboru_discard", card_id=getattr(c, "id", None) or getattr(c, "name", ""))
         new_hi = p.hand.index(card)
 
         pokemon_found = _find_pokemon_for_haipaboru(p)
@@ -429,6 +492,8 @@ def use_support(state: GameState, hand_index: int) -> bool:
         return True
     if cid == "kihada":
         if len(p.hand) <= 1:
+            return False
+        if len(p.hand) >= 5:
             return False
         kihada_card = p.hand.pop(hand_index)
         card_to_bottom = p.hand.pop(0)
