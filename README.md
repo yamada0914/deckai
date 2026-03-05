@@ -7,6 +7,7 @@
 - **カードデータ**: 画像を OpenAI Vision API で解析し、JSON → `card/data.py` へ反映するパイプライン
 - **対戦シミュレーション**: 複数デッキで自動対戦を繰り返し、勝率などを集計
 - **対戦記録・動画**: 1 試合を実行してログと状態を保存し、盤面画像をフレーム化して MP4 を生成
+- **重みと学習**: 技選択・エネルギー付与先・にげる／いれかえなどの選択に重みを付け、記録した対戦から勝率ベースで重みを学習し JSON で保存・読み込み可能
 
 ## ディレクトリ構成
 
@@ -27,14 +28,16 @@ deckAi/
 │   ├── evolution.py          # 進化
 │   ├── trainers.py           # トレーナー（グッズ・サポート・どうぐ）
 │   ├── attack.py             # 攻撃
-│   └── turn.py               # ターン進行・run_turn_auto
+│   ├── turn.py               # ターン進行・run_turn_auto
+│   └── weights.py            # 選択肢への重み（学習用）・保存・読み込み
 ├── board_render.py           # 盤面を 1 枚画像に描画
 ├── read_cards.py             # 画像 or デッキコード → JSON（ルートで実行）
 ├── update_cards_from_json.py # JSON → card/data.py 更新（ルートで実行）
-├── scripts/                   # シミュレーション・記録・動画用 CLI
+├── scripts/                   # シミュレーション・記録・動画・学習用 CLI
 │   ├── simulate.py           # 対戦シミュレーション（勝率等）
 │   ├── record_game.py        # 1 試合を記録（ログ + pkl）
-│   └── make_video.py         # pkl から盤面フレーム → MP4
+│   ├── make_video.py         # pkl から盤面フレーム → MP4
+│   └── train_weights.py      # 対戦 pkl から重みを学習し JSON で保存
 ├── tests/                    # テスト（pytest）
 │   ├── conftest.py           # 共通フィクスチャ
 │   ├── test_fushiginaame.py  # ふしぎなアメの挙動
@@ -52,6 +55,8 @@ deckAi/
 │       ├── battle.log
 │       ├── battle_states.pkl
 │       └── (make_video で battle.mp4)
+├── weights/                  # 学習した重み（train_weights で作成、任意）
+│   └── weights.json
 └── rules/                    # ルール参照（上級ルールガイド整理）
     ├── README.md
     ├── 01_play_supplement.md
@@ -183,7 +188,80 @@ python scripts/make_video.py --battle-id <id> --fps 1.0 -o out.mp4
 
 ---
 
-### D. テスト（pytest）
+### D. 重みと学習（機械学習）
+
+技選択・エネルギー付与先・にげる／いれかえ／きぜつ時の繰り出しなどに「重み」を付け、記録した対戦の勝率から重みを学習して JSON で保存・読み込みできます。重みなしのときは従来どおりのルールベースの選択になります。
+
+#### 1. 対戦を記録する
+
+`scripts/record_game.py` で試合を記録すると、各ターンの選択（エネルギー付与先・にげる先・いれかえ先・繰り出し・技）が `choice_log` として最後の状態に含まれます。
+
+```bash
+python scripts/record_game.py
+# 複数試合・シードを変えて記録すると学習に使えるデータが増える
+```
+
+#### 2. 重みを学習する（scripts/train_weights.py）
+
+`battles/` 配下の `*/battle_states.pkl` を読み、選択ごとの勝率から重みを計算し JSON で保存します。勝率 0.5 を 0 とし、勝率が高い選択ほど正の重みになります。
+
+```bash
+# 既定: battles/ を検索し weights/weights.json に出力
+python scripts/train_weights.py
+
+# 出力先・スケール・既存重みとのマージを指定
+python scripts/train_weights.py --output weights/weights.json --scale 10
+python scripts/train_weights.py --merge weights/weights.json --output weights/weights.json
+```
+
+- `--battles-dir`: 対戦 pkl が入ったディレクトリ（既定: `battles/`）
+- `--output`: 出力する重み JSON のパス
+- `--scale`: 勝率を重みに変換するスケール（既定: 10）
+- `--min-samples`: 重みを付けるのに必要な最小選択回数
+- `--merge`: 既存の重み JSON を読み、学習結果で上書きマージ
+
+#### 3. 学習した重みで対戦する
+
+**コマンドラインから**（プロジェクトルートで実行）:
+
+```bash
+# 1 試合を記録（重み付き）
+python scripts/record_game.py --weights weights/weights.json
+
+# 複数回シミュレーション（重み付き）
+python scripts/simulate.py 100 --weights weights/weights.json
+```
+
+**Python から**:
+
+```python
+from game import setup_game, load_weights, run_game_auto
+
+w = load_weights("weights/weights.json")
+state = setup_game(seed=42, deck0=0, deck1=0, weights=w)
+winner = run_game_auto(state)
+```
+
+#### 4. 学習の効果の見方
+
+**重みの内容**: `weights/weights.json` を開くと、カード ID や技ごとに正・負の数値が付いている。正の重みは「その選択をした試合で勝ちが多かった」、負は「負けが多かった」傾向。
+
+**勝率の差**: 重みあり vs 重みなしで同じ対戦を繰り返し、デッキごとの勝率を比較できる。
+
+```bash
+# 各 300 試合ずつ実行し、重みなしと重みありの勝率を表示
+python scripts/compare_weights.py --n 300 --deck0 5 --deck1 6
+```
+
+- 重みは**両プレイヤー**に同じようにかかるため、どちらか一方だけが強くなるわけではない。学習データの偏りや「勝ちやすい手」の傾向が、両者に反映された結果の差として出る。
+
+- 重みの保存・読み込み: `game.weights.save_weights(weights, path)` / `load_weights(path)`
+- 設計メモ: `docs/weight_design_energy_retreat_swap.md`
+- **重みを効かせるコツ**（同じ対戦だけで学習・スケール上げ・min-samples）: `docs/weight_usage_tips.md`
+
+---
+
+### E. テスト（pytest）
 
 ルートで pytest を実行し、ゲームルールやカード効果の挙動を検証します。
 
@@ -218,6 +296,8 @@ python -m pytest tests/test_rules_01_play_supplement.py -v
 | `scripts/simulate.py` | 指定デッキで N 回対戦し勝率などを表示 |
 | `scripts/record_game.py` | 1 試合を実行しログ・状態を `battles/<id>/` に保存 |
 | `scripts/make_video.py` | 保存した状態から盤面フレームを描画し MP4 を出力 |
+| `scripts/train_weights.py` | 対戦 pkl から選択ごとの勝率を集計し重みを JSON で保存 |
+| `scripts/compare_weights.py` | 重みあり vs なしで同じ対戦を繰り返し、勝率の差を表示 |
 
 ## コアモジュール
 
@@ -225,7 +305,7 @@ python -m pytest tests/test_rules_01_play_supplement.py -v
 |----------|------|
 | `card/` | カード型（model）とマスタデータ（data）、get_card_by_id 等 |
 | `deck.py` | デッキレシピ（A〜E）、登録デッキ、create_deck / デッキコードからの生成 |
-| `game/` | GameState、ターン進行、ドロー・進化・ワザ・アイテム等の処理、AI 手番（state / damage / evolution / trainers / attack / turn） |
+| `game/` | GameState、ターン進行、ドロー・進化・ワザ・アイテム等の処理、AI 手番（state / damage / evolution / trainers / attack / turn）、重み（weights） |
 | `board_render.py` | GameState を 1 枚画像に描画（動画用フレーム生成） |
 
 ## ルール参照
