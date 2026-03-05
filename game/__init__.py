@@ -20,6 +20,7 @@ from .state import (
     start_turn,
     _check_game_end,
 )
+from .weights import GameWeights, load_weights, save_weights
 from .evolution import evolve_pokemon
 from .trainers import (
     attach_energy,
@@ -31,6 +32,7 @@ from .trainers import (
 )
 from .attack import attack
 from .damage import _effective_damage_to_defender
+from .evaluate import evaluate_board
 from .turn import retreat, end_turn, run_turn_auto, run_game_auto
 
 __all__ = [
@@ -40,6 +42,7 @@ __all__ = [
     "MAX_TURNS_SAFETY",
     "BattlePokemon",
     "GameState",
+    "GameWeights",
     "PlayerState",
     "setup_game",
     "start_turn",
@@ -53,6 +56,9 @@ __all__ = [
     "run_turn_auto",
     "run_game_auto",
     "end_turn",
+    "evaluate_board",
     "_check_game_end",
     "_effective_damage_to_defender",
+    "load_weights",
+    "save_weights",
 ]

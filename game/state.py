@@ -3,6 +3,7 @@
 
 ポケカ風ルール: 初手 7 枚、ベンチ最大 5 体、相手を 3 回きぜつで勝ち。
 """
+import copy
 import random
 from collections import Counter
 from dataclasses import dataclass, field
@@ -10,6 +11,7 @@ from typing import Callable, Literal
 
 from card import PokemonCard, get_card_by_id, is_basic_pokemon, is_energy, is_goods, is_pokemon, is_stage2_pokemon, is_support
 from deck import STARTING_HAND_SIZE, create_deck, create_deck_from_deck_code, get_deck_name
+from .weights import GameWeights, get_promote_weight
 
 BENCH_SIZE = 5
 WIN_KO_COUNT = 3
@@ -194,6 +196,18 @@ class GameState:
     drawn_this_turn: list = field(default_factory=list)
     record_frame_fn: Callable[["GameState"], None] | None = field(default=None, repr=False)
     turn_when_disabled_attack: list = field(default_factory=lambda: [None, None])
+    weights: GameWeights | None = None
+    # プレイヤーごとの重み（指定時はこちらを優先）。未指定なら weights を共通で使う。
+    weights_by_player: list = field(default_factory=lambda: [None, None], repr=False)
+    # 学習用：選択の記録。各要素は {"type", "player", "turn", "card_id"?, "attack_name"?}
+    choice_log: list = field(default_factory=list, repr=False)
+    # 攻撃選択で minimax（2 手読み）を使うか。False だと 1 手評価のみ（学習用 --fast で短時間化）
+    use_attack_minimax: bool = True
+
+    def get_weights_for_player(self, player_index: int) -> GameWeights | None:
+        """そのプレイヤーの選択に使う重み。weights_by_player が指定されていればそれ、否则 weights。"""
+        w = self.weights_by_player[player_index]
+        return w if w is not None else self.weights
 
     def log(self, msg: str) -> None:
         if self.log_fn:
@@ -215,6 +229,35 @@ class GameState:
     def player_name(self, i: int) -> str:
         return _player_name(self, i)
 
+    def copy_for_simulation(self) -> "GameState":
+        """minimax 等のシミュレーション用に状態を deep copy する。log / record_frame は無効化する。"""
+        c = copy.deepcopy(self)
+        c.log_fn = None
+        c.record_frame_fn = None
+        c.use_attack_minimax = False
+        return c
+
+
+def _log_choice(
+    state: "GameState",
+    choice_type: str,
+    *,
+    card_id: str | None = None,
+    attack_name: str | None = None,
+    player: int | None = None,
+) -> None:
+    """学習用に選択を記録する。"""
+    entry = {
+        "type": choice_type,
+        "player": state.current_player if player is None else player,
+        "turn": state.turn_count,
+    }
+    if card_id is not None:
+        entry["card_id"] = card_id
+    if attack_name is not None:
+        entry["attack_name"] = attack_name
+    state.choice_log.append(entry)
+
 
 def setup_game(
     seed: int | None = None,
@@ -224,15 +267,24 @@ def setup_game(
     deck1: int = 1,
     deck_code0: str | None = None,
     deck_code1: str | None = None,
+    weights: GameWeights | None = None,
+    weights_player0: GameWeights | None = None,
+    weights_player1: GameWeights | None = None,
+    use_attack_minimax: bool = True,
 ) -> GameState:
     """
     デッキを組んで初手 7 枚をセット。
     deck0 / deck1 で固定デッキ番号（0=A, 1=B, 2=C, 3=D, 4=E）。
     deck_code0 / deck_code1 を指定すると read_cards_result.json のそのデッキコードの一覧でデッキを組む（未指定なら deck0 / deck1 を使用）。
+    weights_player0 / weights_player1 を指定すると、そのプレイヤーだけにその重みを適用する（重みあり vs 重みなしの対戦に使う）。
     """
     if seed is not None:
         random.seed(seed)
-    state = GameState(log_fn=log_fn, record_frame_fn=record_frame_fn, deck_indices=(deck0, deck1))
+    state = GameState(log_fn=log_fn, record_frame_fn=record_frame_fn, deck_indices=(deck0, deck1), weights=weights, use_attack_minimax=use_attack_minimax)
+    if weights_player0 is not None:
+        state.weights_by_player[0] = weights_player0
+    if weights_player1 is not None:
+        state.weights_by_player[1] = weights_player1
     state.log("========== ゲーム開始 ==========")
     deck_specs: list[tuple[int, str | None]] = [(deck0, deck_code0), (deck1, deck_code1)]
     for i in range(2):
@@ -348,25 +400,59 @@ def _fill_bench_from_hand(
         pass
 
 
+# 繰り出しスコアで can_ko を HP より優先するためのスケール（HP は数百程度）
+_PROMOTE_CAN_KO_SCALE = 10000
+# 手札に進化がある・次ターン強い攻撃が打てそうなときのボーナス
+_PROMOTE_EVOLUTION_READY_SCALE = 3000
+_PROMOTE_DAMAGE_POTENTIAL_SCALE = 10
+
+
 def _promote_from_bench(player: PlayerState, state: GameState, player_index: int) -> bool:
     """
     バトル場が空のとき、ベンチから 1 体をバトル場に出す。
-    次の自分のターンに相手のバトル場をきぜつさせられるポケモンがいればそれを優先し、いなければ HP が一番高いポケモンを選ぶ。
+    次の自分のターンに相手をきぜつさせられるポケモンを最優先し、手札（進化・エネルギー）を見て
+    次ターン強い攻撃ができそうな候補を優先する。否則は HP が高いほう。重みで補正。
     """
     if player.active is not None or not player.bench:
         return False
     opp = state.players[1 - player_index]
-    best_idx = None
-    if opp.active and opp.active.hp > 0:
-        from .damage import _max_effective_damage_for_attacker
-        can_ko_indices = [
-            i for i in range(len(player.bench))
-            if _max_effective_damage_for_attacker(state, player.bench[i], opp.active, player_index) >= opp.active.hp
-        ]
-        if can_ko_indices:
-            best_idx = max(can_ko_indices, key=lambda i: player.bench[i].hp)
-    if best_idx is None:
-        best_idx = max(range(len(player.bench)), key=lambda i: player.bench[i].hp)
+    from .damage import _max_effective_damage_for_attacker, _max_effective_damage_if_attach
+    from .evolution import _can_evolve_onto
+    scored = []
+    for i, bp in enumerate(player.bench):
+        can_ko = (
+            opp.active is not None
+            and opp.active.hp > 0
+            and _max_effective_damage_for_attacker(state, bp, opp.active, player_index) >= opp.active.hp
+        )
+        base = (_PROMOTE_CAN_KO_SCALE if can_ko else 0) + bp.hp
+
+        # 手札にのせられる進化があればボーナス（次ターン進化して攻撃したい）
+        evolution_bonus = 0.0
+        for c in player.hand:
+            if is_pokemon(c) and getattr(c, "evolves_from", None) and _can_evolve_onto(bp.card, c):
+                evolution_bonus = _PROMOTE_EVOLUTION_READY_SCALE
+                break
+
+        # 手札のエネルギーを 1 つ付けたときの有効ダメージで「次ターン攻撃力」を加味
+        damage_potential = 0
+        types = getattr(bp, "attached_energy_types", [])
+        for c in player.hand:
+            if not is_energy(c):
+                continue
+            etype = getattr(c, "energy_type", None) or "colorless"
+            dmg = _max_effective_damage_if_attach(
+                state, bp.card, bp.attached_energy, list(types), etype, opp.active, player_index
+            )
+            damage_potential = max(damage_potential, dmg)
+        base += damage_potential * _PROMOTE_DAMAGE_POTENTIAL_SCALE
+        base += evolution_bonus
+
+        score = base + get_promote_weight(state.get_weights_for_player(player_index), bp.card)
+        scored.append((i, score))
+    best_idx = max(scored, key=lambda x: x[1])[0]
+    promoted_card = player.bench[best_idx].card
+    _log_choice(state, "promote", card_id=getattr(promoted_card, "id", None) or getattr(promoted_card, "name", ""), player=player_index)
     player.active = player.bench.pop(best_idx)
     state.log(f"{state.player_name(player_index)}: ベンチから {player.active.card.name} をバトル場に出す（HP {player.active.hp}/{player.active.max_hp}）")
     return True
@@ -477,7 +563,7 @@ def start_turn(state: GameState) -> None:
     """ターン開始：ドロー 1 枚、サポート・エネルギー付与未使用にリセット。ねむりならコインで解除判定。"""
     state.support_used_this_turn = False
     state.energy_attached_this_turn = False
-    state.our_ko_by_damage_last_turn[state.current_player] = False
+    # our_ko_by_damage_last_turn は「前の相手の番に自分がきぜつしたか」なので、自分のターン終了時にクリア（end_turn で実施）
     state.drawn_this_turn = []
     p = state.active_player_state()
     turn_label = _turn_label(state)

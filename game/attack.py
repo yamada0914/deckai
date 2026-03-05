@@ -24,6 +24,7 @@ from .state import (
     _handle_own_active_ko,
     _log_prize_count_for_ko,
 )
+from .weights import get_attack_weight
 
 _KO_BONUS_FOR_ATTACK = 10000
 
@@ -309,19 +310,21 @@ def attack(state: GameState, attack_index: int) -> bool:
         state.drawn_this_turn.extend(drawn)
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から 2 枚ドロー → [{', '.join(_card_label(c) for c in drawn)}]（手札 {len(p.hand)} 枚）")
     elif atk_key in _EREKI_CHARGE and p.active:
+        lightning_in_deck = [
+            i for i, c in enumerate(p.deck)
+            if is_energy(c) and getattr(c, "energy_type", None) == "lightning"
+        ]
+        to_attach_count = min(2, len(lightning_in_deck))
         attached = 0
-        for i in range(len(p.deck) - 1, -1, -1):
-            if attached >= 2:
-                break
-            if is_energy(p.deck[i]):
-                p.active.attached_energy += 1
-                et = getattr(p.deck[i], "energy_type", None) or "colorless"
-                p.active.attached_energy_types.append(et)
-                p.deck.pop(i)
-                attached += 1
+        for idx in sorted(lightning_in_deck[:to_attach_count], reverse=True):
+            c = p.deck.pop(idx)
+            p.active.attached_energy += 1
+            et = getattr(c, "energy_type", None) or "lightning"
+            p.active.attached_energy_types.append(et)
+            attached += 1
         if attached > 0:
             random.shuffle(p.deck)
-            state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から基本エネルギー {attached} 枚をこのポケモンにつけた")
+            state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 山札から基本雷エネルギー {attached} 枚をこのポケモンにつけた")
     elif atk_key in _10MAN_VOLT and p.active:
         num = p.active.attached_energy
         types_to_discard = list(getattr(p.active, "attached_energy_types", []))
@@ -360,7 +363,9 @@ def attack(state: GameState, attack_index: int) -> bool:
 
     if opp.active and opp.active.hp <= 0:
         koed_active = opp.active
-        state.our_ko_by_damage_last_turn[state.opponent()] = True
+        # アベンジナックル用：きぜつしたのが闘ポケモンのときだけフラグを立てる
+        if getattr(koed_active.card, "pokemon_type", None) == "fighting":
+            state.our_ko_by_damage_last_turn[state.opponent()] = True
         state.log(f"バトル場の {koed_active.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
         if _handle_opponent_ko(opp, state, koed_active):
             return True
@@ -371,6 +376,51 @@ def attack(state: GameState, attack_index: int) -> bool:
             return True
         state._record_frame()
     return True
+
+
+def get_legal_attack_indices(state: GameState, p: PlayerState, opp: PlayerState) -> list[int]:
+    """出せる技のインデックス一覧を返す（minimax 用）。"""
+    if not p.active or not p.active.card.attacks:
+        return []
+    types = getattr(p.active, "attached_energy_types", [])
+    legal = []
+    for idx, atk in enumerate(p.active.card.attacks):
+        if not _can_pay_energy_cost(
+            p.active.attached_energy, types,
+            atk.energy_cost, getattr(atk, "energy_cost_typed", None),
+        ):
+            continue
+        if getattr(p.active, "disabled_attack_name", None) == atk.name:
+            continue
+        atk_key = _attack_key(p.active.card, atk)
+        if atk_key in _TSUIGEKI_BARI_BARI:
+            last_name = state.last_turn_attack_name[state.current_player]
+            last_id = state.last_turn_attack_actor_id[state.current_player]
+            actor_id = getattr(p.active.card, "id", getattr(p.active.card, "name", ""))
+            if last_name != "しびれはり" or last_id != actor_id:
+                continue
+        base_dmg = _attack_damage_for_eval(atk)
+        if atk_key in _SHIPPEGAESHI_PRIZE_BONUS and len(opp.prize_pile) == 1:
+            base_dmg += 90
+        if atk_key in _AVENGE_NAKKLE_KO_BONUS and state.our_ko_by_damage_last_turn[state.current_player]:
+            base_dmg += 120
+        effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
+        if opp.active and effective_dmg <= 0:
+            has_merit = (
+                atk_key in _ATTACK_HAS_MERIT_EFFECT
+                or (
+                    getattr(atk, "status_effect", None)
+                    and getattr(atk, "status_effect_target", "opponent") != "self"
+                )
+                or (
+                    getattr(atk, "bench_damage", 0) > 0
+                    and getattr(atk, "bench_damage_target", "opponent") != "self"
+                )
+            )
+            if not has_merit:
+                continue
+        legal.append(idx)
+    return legal
 
 
 def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState) -> int | None:
@@ -417,7 +467,7 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
             if not has_merit:
                 continue
         ko_bonus = _KO_BONUS_FOR_ATTACK if (opp.active and effective_dmg >= opp_hp) else 0
-        score = effective_dmg + ko_bonus
+        score = effective_dmg + ko_bonus + get_attack_weight(state.get_weights_for_player(state.current_player), p.active.card, atk)
         if score > best_score:
             best_score = score
             best_idx = idx
