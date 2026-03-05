@@ -10,7 +10,9 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
 import random
-from game import setup_game, run_game_auto
+from pathlib import Path
+
+from game import load_weights, setup_game, run_game_auto
 from deck import get_deck_count, get_deck_name
 
 
@@ -21,6 +23,8 @@ def run_simulation(
     deck0: int = 0,
     deck1: int = 1,
     log_when_deck_loses: int | None = None,
+    weights_path: Path | None = None,
+    weight_scale: float = 1.0,
 ) -> dict:
     """
     n_games 回対戦し、結果を返す。deck0 / deck1 で使用デッキを指定（0=A, 1=B, 2=C, 3=D, 4=E）。
@@ -41,7 +45,12 @@ def run_simulation(
             log_fn = print
         else:
             log_fn = None
-        state = setup_game(seed=None, log_fn=log_fn, deck0=deck0, deck1=deck1)
+        weights = (
+            load_weights(weights_path, scale=weight_scale)
+            if weights_path and weights_path.is_file()
+            else None
+        )
+        state = setup_game(seed=None, log_fn=log_fn, deck0=deck0, deck1=deck1, weights=weights)
         first_player = state.current_player
         winner = run_game_auto(state)
         if state.shippegaeshi_120_used:
@@ -90,10 +99,25 @@ def main() -> None:
             deck1 = max(0, min(max_deck, deck1))
         except ValueError:
             pass
+    weights_path: Path | None = None
+    weight_scale = 1.0
+    if "--weights" in sys.argv:
+        i = sys.argv.index("--weights")
+        if i + 1 < len(sys.argv):
+            weights_path = Path(sys.argv[i + 1])
+    if "--weight-scale" in sys.argv:
+        i = sys.argv.index("--weight-scale")
+        if i + 1 < len(sys.argv):
+            try:
+                weight_scale = float(sys.argv[i + 1])
+            except ValueError:
+                pass
     if "--help" in sys.argv or "-h" in sys.argv:
-        print("使い方: python scripts/simulate.py [対戦数] [デッキ0] [デッキ1]")
+        print("使い方: python scripts/simulate.py [対戦数] [デッキ0] [デッキ1] [--weights 重み.json] [--weight-scale X]")
         print("  デッキ: 0=オタチ, 1=ワニ, 2=カエル, 3=ワルビアル, 4=ジバコイル, 5以降=登録デッキ")
         print("  例: python scripts/simulate.py 1000 3 4  → 1000 回、ワルビアル vs ジバコイル")
+        print("  例: python scripts/simulate.py 100 --weights weights/weights.json  → 重み付きで 100 回")
+        print("  例: python scripts/simulate.py 100 --weights weights/weights.json --weight-scale 2  → 重みを 2 倍で適用")
         return
     if deck0 == deck1:
         print(f"{get_deck_name(deck0)}どうし、{n} 回シミュレートします。")
@@ -107,6 +131,8 @@ def main() -> None:
         deck0=deck0,
         deck1=deck1,
         log_when_deck_loses=1 if log_wani_loss else None,
+        weights_path=weights_path,
+        weight_scale=weight_scale,
     )
     first_win = results["first_win"]
     second_win = results["second_win"]

@@ -28,6 +28,9 @@ def _run_and_record(
     battle_id: str | None = None,
     log_path: Path | None = None,
     states_path: Path | None = None,
+    weights_path: Path | None = None,
+    weight_scale: float = 1.0,
+    fast: bool = False,
 ) -> tuple[list, str]:
     """
     1 試合を実行し、ログを書きつつターン開始ごとの状態をリストに溜める。
@@ -36,6 +39,7 @@ def _run_and_record(
     from game import (
         _check_game_end,
         end_turn,
+        load_weights,
         run_turn_auto,
         setup_game,
         start_turn,
@@ -64,7 +68,20 @@ def _run_and_record(
     log_lines.append(f"対戦 ID: {bid}")
     log_lines.append("")
 
-    state = setup_game(seed=seed, log_fn=log_fn, record_frame_fn=record_frame, deck0=deck0, deck1=deck1)
+    weights = (
+        load_weights(weights_path, scale=weight_scale)
+        if weights_path and weights_path.is_file()
+        else None
+    )
+    state = setup_game(
+        seed=seed,
+        log_fn=log_fn,
+        record_frame_fn=record_frame,
+        deck0=deck0,
+        deck1=deck1,
+        weights=weights,
+        use_attack_minimax=not fast,
+    )
 
     while True:
         start_turn(state)
@@ -112,6 +129,9 @@ def main() -> None:
     parser.add_argument("--deck1", type=int, default=6, help="プレイヤー1 のデッキ番号（6=ミライドン）")
     parser.add_argument("--log", type=Path, default=None, metavar="PATH", help="ログ出力先（省略時は battles/<ID>/battle.log）")
     parser.add_argument("--states", type=Path, default=None, metavar="PATH", help="状態 pickle 出力先（省略時は battles/<ID>/battle_states.pkl）")
+    parser.add_argument("--weights", type=Path, default=None, metavar="PATH", help="学習した重み JSON（指定するとその重みで選択が補正される）")
+    parser.add_argument("--weight-scale", type=float, default=1.0, metavar="X", help="重みを X 倍して使う（既定 1.0）")
+    parser.add_argument("--fast", action="store_true", help="攻撃選択で minimax をオフにして短時間で記録（学習用）")
     args = parser.parse_args()
 
     _run_and_record(
@@ -121,6 +141,9 @@ def main() -> None:
         battle_id=args.battle_id,
         log_path=args.log,
         states_path=args.states,
+        weights_path=args.weights,
+        weight_scale=args.weight_scale,
+        fast=args.fast,
     )
 
 
