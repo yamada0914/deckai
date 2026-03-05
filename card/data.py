@@ -166,6 +166,7 @@ KARAMINGO_SVD_109 = PokemonCard(
     pokemon_type='colorless',
     regulation='G',
     weakness='lightning',
+    resistance='fighting',
 )
 
 # ガケガニ（gakegani-svd-067）
