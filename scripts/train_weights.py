@@ -55,7 +55,7 @@ def _aggregate_from_pkl(pkl_path: Path) -> tuple[dict[str, list[bool]], int]:
         if typ is None:
             continue
         won = e.get("player") == winner
-        key_for_weight = (typ, k)  # (type, key) で区別
+        key_for_weight = (typ, k)
         sk = f"{typ}:{k}"
         if sk not in agg:
             agg[sk] = []

@@ -149,7 +149,7 @@ def attack(state: GameState, attack_index: int) -> bool:
     if attack_index < 0 or attack_index >= len(pokemon_card.attacks):
         return False
     atk = pokemon_card.attacks[attack_index]
-    atk_key = _attack_key(pokemon_card, atk)  # 効果分岐で何度も使うので 1 回だけ計算
+    atk_key = _attack_key(pokemon_card, atk)
     if getattr(p.active, "disabled_attack_name", None) == atk.name:
         state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} はこのターン「{atk.name}」が使えない")
         return False

@@ -8,7 +8,6 @@ _BALL_GOODS_IDS = ("supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya
 _HAND_REFRESH_SUPPORT_IDS = ("tanpankozou", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "kihada")
 # 手札を捨てないサポート（ネモ・キハダ）→ エネルギー付与前に試すブロックで使用
 _SUPPORT_IDS_NO_DISCARD = ("nemo", "nemokako", "nemomirai", "kihada")
-# 手札をすべて捨てるサポート（博士の研究）→ エネルギー付与前に試すブロックで使用（w_support_use > 0 のとき）
 _SUPPORT_IDS_DISCARD_ALL = ("hakasenokenkyuu", "hakasenokenkyuufutouhakase")
 
 from .attack import (
@@ -673,7 +672,6 @@ def run_turn_auto(state: GameState) -> bool:
         would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
         can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
 
-        # ボール系どうぐ（スーパーボール等）は先行 1 ターン目でも使用可。ポケモンキャッチャーは優先し、相手の「逃げにくい・技が遅い」ベンチを狙う。
         ball_uses = 0
         while ball_uses < MAX_BALL_USES_PER_TURN:
             ball_uses += 1
@@ -761,7 +759,6 @@ def run_turn_auto(state: GameState) -> bool:
         if would_be_koed and not can_ko_opponent and p.active and p.bench:
             for i, c in enumerate(p.hand):
                 if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
-                    # 生存優先、次に HP、重みで補正
                     _SWAP_SURVIVE_SCALE = 10000
                     def _swap_score(bi: int) -> float:
                         bp = p.bench[bi]
@@ -789,7 +786,6 @@ def run_turn_auto(state: GameState) -> bool:
         )
         retreat_helps = has_bench_survivor or can_ko_from_bench
         if can_retreat and p.active and p.bench and would_be_koed and not can_ko_opponent and retreat_helps and p.active.attached_energy >= retreat_cost:
-            # スコア = (can_ko, dmg, hp) をスカラー化 + 重み。既存優先順位を保つため can_ko >> dmg >> hp
             _RETREAT_C_KO, _RETREAT_C_DMG = 1_000_000, 1000
             best_idx = None
             best_score = -1.0
@@ -841,7 +837,6 @@ def run_turn_auto(state: GameState) -> bool:
             (i, c) = x
             w = get_goods_use_weight(state.get_weights_for_player(state.current_player), c)
             cid = getattr(c, "id", None) or ""
-            # エレキジェネレーターはベンチ・山札があれば優先して試す（他グッズで 1 枚だけ使って break するため）
             if (cid == "erekijienereta" or getattr(c, "name", "") == "エレキジェネレーター") and p.bench and p.deck:
                 return (0, -w, i)
             return (1, -w, i)
@@ -849,7 +844,6 @@ def run_turn_auto(state: GameState) -> bool:
         goods_order.sort(key=_goods_sort_key)
         p = state.active_player_state()
         for i, c in goods_order:
-            # ベンチ補充などで手札が変わっているので、使用時点の手札インデックスを参照する
             try_idx = next((j for j, h in enumerate(p.hand) if h is c), -1)
             if try_idx < 0:
                 continue

@@ -15,11 +15,10 @@ import subprocess
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_BATTLES_SUBDIR = "train_weights"  # battles/<これ>/ に保存
+_BATTLES_SUBDIR = "train_weights"
 
 
 def _run_record(battle_id: str, deck0: int, deck1: int, seed: int | None, fast: bool = True) -> bool:
-    # record_game は battles/<id>/ に保存するので、id に "train_weights/train_5v6_0000" のように付ける
     cmd = [
         sys.executable,
         str(_REPO_ROOT / "scripts" / "record_game.py"),
@@ -65,7 +64,6 @@ def main() -> None:
         prefix = battles_dir.name if battles_dir != _REPO_ROOT / "battles" else "train_weights"
         for label, d0, d1 in configs:
             for i in range(n):
-                # battles/<prefix>/<prefix>_5v6_0000 になるよう id を指定
                 bid = f"{prefix}/train_{label}_{i:04d}" if prefix != "battles" else f"train_{label}_{i:04d}"
                 ok = _run_record(bid, d0, d1, seed=None, fast=args.fast)
                 done += 1
