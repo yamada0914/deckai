@@ -85,9 +85,9 @@ TOOL_VERTICAL_OVERHANG = 18
 CARD_W_BENCH = 90
 CARD_H_BENCH = 124
 MIN_HAND_CARD_W = 20
-LOG_PANEL_WIDTH = 350
-LOG_LINE_HEIGHT = 20
-LOG_FONT_SIZE = 14
+LOG_PANEL_WIDTH = 700
+LOG_LINE_HEIGHT = 40
+LOG_FONT_SIZE = 28
 BG_COLOR = (30, 80, 30)
 SLOT_COLOR = (60, 100, 60)
 CARD_BACK_COLOR = (80, 60, 40)
@@ -221,13 +221,14 @@ def _draw_log_panel(
     panel_width: int,
     height: int,
 ) -> None:
-    """左側にログテキストを描画する。収まらない行は末尾のみ表示。"""
+    """左側にログテキストを描画する。長い行は最大 2 行に折り返す。"""
     try:
         font = ImageFont.truetype("/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc", LOG_FONT_SIZE)
     except OSError:
         font = ImageFont.load_default()
     pad = 8
-    max_lines = max(1, (height - pad * 2) // LOG_LINE_HEIGHT)
+    chars_per_line = 25
+    max_draw_lines = max(1, (height - pad * 2) // LOG_LINE_HEIGHT)
     lines = [ln.rstrip() for ln in (log_text or "").split("\n")]
     normalized: list[str] = []
     for ln in lines:
@@ -236,12 +237,16 @@ def _draw_log_panel(
                 normalized.append("")
             continue
         normalized.append(ln)
-    show_lines = normalized[-max_lines:] if len(normalized) > max_lines else normalized
+    expanded: list[str] = []
+    for ln in normalized:
+        wrapped = textwrap.wrap(ln, width=chars_per_line)[:2]
+        expanded.extend(wrapped if wrapped else [""])
+    show_lines = expanded[-max_draw_lines:] if len(expanded) > max_draw_lines else expanded
     y = pad
     for ln in show_lines:
         if y + LOG_LINE_HEIGHT > height - pad:
             break
-        draw.text((pad, y), ln[:28], fill=TEXT_COLOR, font=font)
+        draw.text((pad, y), ln, fill=TEXT_COLOR, font=font)
         y += LOG_LINE_HEIGHT
 
 
@@ -654,11 +659,10 @@ def render_board_frame(
     draw.text((board_offset + MARGIN, height - 28), self_label, fill=LABEL_COLOR, font=font_label)
 
     # その番のプレイヤーのフィールドをピンクで囲む
-    pad = MARGIN
     if state.current_player == 0:
-        frame_rect = [board_offset + pad, center_y + 2, total_width - pad, height - pad]
+        frame_rect = [board_offset, center_y, total_width, height]
     else:
-        frame_rect = [board_offset + pad, pad, total_width - pad, center_y - 2]
+        frame_rect = [board_offset, 0, total_width, center_y]
     draw.rectangle(
         frame_rect,
         outline=CURRENT_PLAYER_FRAME_COLOR,
