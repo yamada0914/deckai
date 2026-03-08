@@ -19,9 +19,13 @@ def _attack_damage_for_eval(atk) -> int:
 
 
 def _effective_damage_to_defender(
-    attacker_card: PokemonCard, defender: BattlePokemon, base_damage: int
+    attacker_card: PokemonCard,
+    defender: BattlePokemon,
+    base_damage: int,
+    state: GameState | None = None,
+    attacker_bp: BattlePokemon | None = None,
 ) -> int:
-    """弱点・抵抗力・どうぐを考慮した、守備側が受けるダメージを返す。"""
+    """弱点・抵抗力・どうぐ・パワープロテイン・マキシマムベルトを考慮した、守備側が受けるダメージを返す。"""
     defender_card = defender.card
     damage = base_damage
     if (
@@ -41,6 +45,14 @@ def _effective_damage_to_defender(
         cond = getattr(tool, "tool_condition_type", None)
         if cond is None or getattr(defender_card, "pokemon_type", None) == cond:
             damage = max(0, damage - getattr(tool, "tool_damage_reduce", 0))
+    n = getattr(state, "fighting_damage_plus_30_count_this_turn", 0) if state else 0
+    if n > 0 and getattr(attacker_card, "pokemon_type", None) == "fighting":
+        damage += 30 * n
+    if attacker_bp:
+        atk_tool = getattr(attacker_bp, "attached_tool", None)
+        if atk_tool and (getattr(atk_tool, "id", "") or "") == "makishimamuberuto":
+            if getattr(defender_card, "is_ex", False) or ("ex" in (getattr(defender_card, "name", "") or "")):
+                damage += 50
     return damage
 
 
@@ -79,7 +91,7 @@ def _opponent_max_effective_damage(state: GameState) -> int:
             base = _attack_damage_for_eval(atk)
             if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
                 base += 90
-            eff = _effective_damage_to_defender(opp.active.card, p.active, base)
+            eff = _effective_damage_to_defender(opp.active.card, p.active, base, state=state, attacker_bp=opp.active)
             max_dmg = max(max_dmg, eff)
     return max_dmg
 
@@ -124,7 +136,7 @@ def _our_max_effective_damage(state: GameState) -> int:
                 base += 90
             if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
                 base += 120
-            eff = _effective_damage_to_defender(p.active.card, opp.active, base)
+            eff = _effective_damage_to_defender(p.active.card, opp.active, base, state=state, attacker_bp=p.active)
             max_dmg = max(max_dmg, eff)
     return max_dmg
 
@@ -152,7 +164,7 @@ def _max_effective_damage_for_attacker(
             base += 90
         if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[player_index]:
             base += 120
-        eff = _effective_damage_to_defender(attacker_bp.card, defender_bp, base)
+        eff = _effective_damage_to_defender(attacker_bp.card, defender_bp, base, state=state, attacker_bp=attacker_bp)
         max_dmg = max(max_dmg, eff)
     return max_dmg
 

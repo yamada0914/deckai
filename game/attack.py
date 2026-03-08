@@ -27,6 +27,7 @@ from .state import (
 from .weights import get_attack_weight
 
 _KO_BONUS_FOR_ATTACK = 10000
+_ATTACK_BIAS = 5
 
 
 def _attack_key(card, atk) -> tuple[str, str, str]:
@@ -36,8 +37,6 @@ def _attack_key(card, atk) -> tuple[str, str, str]:
     return (name, reg, atk.name)
 
 
-# 技の特殊効果は (カード名, レギュレーション, 技名) で識別（ダメージ値の差なども区別できる）。
-# 新カード追加時: 同じ効果の技なら既存の frozenset にタプルを 1 つ追加。新効果なら新 frozenset を作り attack() 内の分岐と _ATTACK_HAS_MERIT_EFFECT に追加する。
 _TSUIGEKI_BARI_BARI = frozenset({("バチンウニ", "G", "ついげきバリバリ")})
 _SHIPPEGAESHI_PRIZE_BONUS = frozenset({("ワルビル", "G", "しっぺがえし"), ("ワルビル", "", "しっぺがえし")})
 _AVENGE_NAKKLE_KO_BONUS = frozenset({("ルカリオ", "G", "アベンジナックル")})
@@ -53,8 +52,6 @@ _10MAN_VOLT = frozenset({("ライチュウ", "G", "10まんボルト")})
 _GABUGABU_BITE = frozenset({("ワルビアル", "G", "ガブガブバイト")})
 _TECHNO_TURBO = frozenset({("ミライドンex", "G", "テクノターボ")})
 
-# メリット効果がある技のみ 0 ダメージでも選択可能（自傷・コストのみの技は除く）。
-# 上記の「効果用 frozenset」のうち、0 ダメージでも打つ価値があるものを | でまとめている。新規効果を追加したらここにも追加する。
 _ATTACK_HAS_MERIT_EFFECT = (
     _NAGUTTE_KAKURERU
     | _NAKIGOE_DAMAGE_REDUCTION
@@ -288,7 +285,6 @@ def attack(state: GameState, attack_index: int) -> bool:
         idx = random.randint(0, len(opp.bench) - 1)
         opp.active, opp.bench[idx] = opp.bench[idx], opp.active
         state.log(f"{state.player_name(state.current_player)}: 「{atk.name}」→ 相手のバトルポケモンとベンチを入れ替えた（{opp.active.card.name} がバトル場に）")
-        # ベンチに移ったポケモンが HP 0 以下ならきぜつ処理
         for i in range(len(opp.bench) - 1, -1, -1):
             if i < len(opp.bench) and opp.bench[i].hp <= 0:
                 koed_bench_bp = opp.bench[i]
@@ -363,7 +359,6 @@ def attack(state: GameState, attack_index: int) -> bool:
 
     if opp.active and opp.active.hp <= 0:
         koed_active = opp.active
-        # アベンジナックル用：きぜつしたのが闘ポケモンのときだけフラグを立てる
         if getattr(koed_active.card, "pokemon_type", None) == "fighting":
             state.our_ko_by_damage_last_turn[state.opponent()] = True
         state.log(f"バトル場の {koed_active.card.name} がきぜつ！（{opp.knockouts_suffered + 1} 回目）")
@@ -404,7 +399,7 @@ def get_legal_attack_indices(state: GameState, p: PlayerState, opp: PlayerState)
             base_dmg += 90
         if atk_key in _AVENGE_NAKKLE_KO_BONUS and state.our_ko_by_damage_last_turn[state.current_player]:
             base_dmg += 120
-        effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
+        effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg, state=state, attacker_bp=p.active) if opp.active else base_dmg
         if opp.active and effective_dmg <= 0:
             has_merit = (
                 atk_key in _ATTACK_HAS_MERIT_EFFECT
@@ -424,12 +419,13 @@ def get_legal_attack_indices(state: GameState, p: PlayerState, opp: PlayerState)
 
 
 def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState) -> int | None:
-    """出せる技のうち、相手をきぜつさせられる技を最優先し、否則有效ダメージが最大のインデックスを返す。"""
+    """出せる技のうち、相手をきぜつさせられる技を最優先し、否則有效ダメージが最大のインデックスを返す。出せる技が 1 本でもあれば必ずどれか選ぶ（0 ダメージでも攻撃する）。"""
     if not p.active or not p.active.card.attacks:
         return None
     opp_hp = opp.active.hp if opp.active else 0
     best_idx = None
     best_score = -1
+    first_legal_idx = None
     types = getattr(p.active, "attached_energy_types", [])
     for idx, atk in enumerate(p.active.card.attacks):
         if not _can_pay_energy_cost(
@@ -439,6 +435,8 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
             continue
         if getattr(p.active, "disabled_attack_name", None) == atk.name:
             continue
+        if first_legal_idx is None:
+            first_legal_idx = idx
         atk_key = _attack_key(p.active.card, atk)
         if atk_key in _TSUIGEKI_BARI_BARI:
             last_name = state.last_turn_attack_name[state.current_player]
@@ -451,7 +449,7 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
             base_dmg += 90
         if atk_key in _AVENGE_NAKKLE_KO_BONUS and state.our_ko_by_damage_last_turn[state.current_player]:
             base_dmg += 120
-        effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg) if opp.active else base_dmg
+        effective_dmg = _effective_damage_to_defender(p.active.card, opp.active, base_dmg, state=state, attacker_bp=p.active) if opp.active else base_dmg
         if opp.active and effective_dmg <= 0:
             has_merit = (
                 atk_key in _ATTACK_HAS_MERIT_EFFECT
@@ -467,8 +465,10 @@ def _choose_best_attack_index(state: GameState, p: PlayerState, opp: PlayerState
             if not has_merit:
                 continue
         ko_bonus = _KO_BONUS_FOR_ATTACK if (opp.active and effective_dmg >= opp_hp) else 0
-        score = effective_dmg + ko_bonus + get_attack_weight(state.get_weights_for_player(state.current_player), p.active.card, atk)
+        score = effective_dmg + ko_bonus + _ATTACK_BIAS + get_attack_weight(state.get_weights_for_player(state.current_player), p.active.card, atk)
         if score > best_score:
             best_score = score
             best_idx = idx
+    if best_idx is None and first_legal_idx is not None:
+        return first_legal_idx
     return best_idx
