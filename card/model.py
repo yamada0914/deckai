@@ -9,7 +9,7 @@
 from dataclasses import dataclass, field
 from typing import Literal
 
-CardType = Literal["pokemon", "energy", "goods", "support"]
+CardType = Literal["pokemon", "energy", "goods", "support", "stadium"]
 
 EvolutionStage = Literal["basic", "stage1", "stage2"]
 
@@ -196,6 +196,14 @@ class PokemonCard:
     is_mega: bool = False
     # レギュレーションマーク（例: G, H）。技の効果分岐で「カード名・レギュレーション・技名」の一致に使う。
     regulation: str | None = None
+    # 特性（宣言して使う／自動的にはたらく）。画像認識・ルールは rules/01_play_supplement.md A-02、rules/advanced_rule.md A-02 参照。
+    ability_name: str | None = None
+    ability_description: str | None = None
+
+    @property
+    def has_rule(self) -> bool:
+        """ルールを持つポケモン（きぜつ時にサイドを2枚以上取られる＝ex・メガ進化）。ポケパッドの対象外。"""
+        return self.is_ex or self.is_mega
 
     def copy(self) -> "PokemonCard":
         return PokemonCard(
@@ -215,6 +223,8 @@ class PokemonCard:
             is_ex=self.is_ex,
             is_mega=self.is_mega,
             regulation=self.regulation,
+            ability_name=self.ability_name,
+            ability_description=self.ability_description,
         )
 
 
@@ -254,6 +264,20 @@ class SupportCard:
     instance_id: str = ""
 
 
+@dataclass
+class StadiumCard:
+    """
+    スタジアム。自分の番に 1 枚だけ手札から場に出せる。
+    別名のスタジアムを出すとそれまで出ていたスタジアムはトラッシュ。同名のスタジアムは出せない。
+    """
+    id: str
+    name: str
+    type: CardType = "stadium"
+    effect: str = ""
+    description: str = ""
+    instance_id: str = ""
+
+
 def is_pokemon(card) -> bool:
     return getattr(card, "type", None) == "pokemon"
 
@@ -268,6 +292,10 @@ def is_goods(card) -> bool:
 
 def is_support(card) -> bool:
     return getattr(card, "type", None) == "support"
+
+
+def is_stadium(card) -> bool:
+    return getattr(card, "type", None) == "stadium"
 
 
 def is_basic_pokemon(card) -> bool:

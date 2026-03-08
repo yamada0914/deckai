@@ -5,7 +5,7 @@
 """
 from copy import deepcopy
 
-from card.model import Attack, EnergyCard, GoodsCard, is_goods, is_support, PokemonCard, SupportCard
+from card.model import Attack, EnergyCard, GoodsCard, is_goods, is_stadium, is_support, PokemonCard, StadiumCard, SupportCard
 
 # ----- マスタカード -----
 
@@ -166,7 +166,6 @@ KARAMINGO_SVD_109 = PokemonCard(
     pokemon_type='colorless',
     regulation='G',
     weakness='lightning',
-    resistance='fighting',
 )
 
 # ガケガニ（gakegani-svd-067）
@@ -185,6 +184,13 @@ GAKEGANI_SVD_067 = PokemonCard(
     pokemon_type='fighting',
     regulation='G',
     weakness='grass',
+)
+
+# グラビティーマウンテン（gurabiteiimaunten）
+GURABITEIIMAUNTEN = StadiumCard(
+    id='gurabiteiimaunten',
+    name='グラビティーマウンテン',
+    description='おたがいの場の2進化ポケモン全員の最大HPは、それぞれ「-30」される。スタジアムは、自分の番に1枚、バトル場の横に出せる。別のスタジアムが場に出たなら、このカードをトラッシュする。同じ名前のスタジアムは場に出せない。',
 )
 
 # コイル（coil-svd-036）
@@ -259,6 +265,23 @@ ZUPIKA_SVD_041 = PokemonCard(
     weakness='fighting',
 )
 
+# ソルロック（sorurokku-mc-372）
+SORUROKKU_MC_372 = PokemonCard(
+    id='sorurokku-mc-372',
+    name='ソルロック',
+    hp=110,
+    max_hp=110,
+    attacks=[
+        Attack('コスモビーム', 1, 70, 0, 0, '自分のベンチに「ルナトーン」がいないなら、このワザは失敗。このワザのダメージは弱点・抵抗力を計算しない。', bench_damage_target='self', energy_cost_typed=['fighting']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='fighting',
+    regulation='E',
+    weakness='grass',
+)
+
 # ノコッチ（nokotchi-svd-092）
 NOKOTCHI_SVD_092 = PokemonCard(
     id='nokotchi-svd-092',
@@ -312,6 +335,25 @@ HARABARII_SVD_042 = PokemonCard(
     weakness='fighting',
 )
 
+# ハリテヤマ（hariteyama-mil-025）
+HARITEYAMA_MIL_025 = PokemonCard(
+    id='hariteyama-mil-025',
+    name='ハリテヤマ',
+    hp=150,
+    max_hp=150,
+    attacks=[
+        Attack('ワイルドプレス', 3, 210, 70, 0, 'このポケモンにも70ダメージ。', energy_cost_typed=['fighting', 'fighting', 'fighting']),
+    ],
+    evolves_from='makunoshita',
+    evolution_stage='stage1',
+    retreat_cost=3,
+    pokemon_type='fighting',
+    regulation='G',
+    weakness='psychic',
+    ability_name='どすこいキャッチャー',
+    ability_description='自分の番に、このカードを手札から出して進化させたとき、1回使える。相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。',
+)
+
 # バチンウニ（bachinuni-svd-040）
 BACHINUNI_SVD_040 = PokemonCard(
     id='bachinuni-svd-040',
@@ -348,6 +390,42 @@ PIKACHIXYUU_SVD_034 = PokemonCard(
     weakness='fighting',
 )
 
+# マクノシタ（makunoshita-mil-024）
+MAKUNOSHITA_MIL_024 = PokemonCard(
+    id='makunoshita-mil-024',
+    name='マクノシタ',
+    hp=80,
+    max_hp=80,
+    attacks=[
+        Attack('どつく', 1, 10, 0, 0, '', energy_cost_typed=['fighting']),
+        Attack('がちんこ', 2, 30, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    regulation='G',
+    weakness='psychic',
+)
+
+# マクノシタ（makunoshita）
+MAKUNOSHITA = PokemonCard(
+    id='makunoshita',
+    name='マクノシタ',
+    hp=80,
+    max_hp=80,
+    attacks=[
+        Attack('どつく', 1, 10, 0, 0, '', energy_cost_typed=['fighting']),
+        Attack('がちんこ', 2, 30, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    regulation='G',
+    weakness='psychic',
+)
+
 # ミライドンex（miraidonex-svd-046）
 MIRAIDONEX_SVD_046 = PokemonCard(
     id='miraidonex-svd-046',
@@ -365,6 +443,45 @@ MIRAIDONEX_SVD_046 = PokemonCard(
     regulation='G',
     weakness='fighting',
     is_ex=True,
+)
+
+# メガルカリオ（mrukarioex-m1l-078）
+MRUKARIOEX_M1L_078 = PokemonCard(
+    id='mrukarioex-m1l-078',
+    name='メガルカリオ',
+    hp=340,
+    max_hp=340,
+    attacks=[
+        Attack('はどうづき', 2, 130, 0, 0, '自分のトラッシュから「基本闘エネルギー」を3枚まで選び、ベンチポケモンに好きなようにつける。', energy_cost_typed=['fighting', 'fighting']),
+        Attack('メガブレイブ', 3, 270, 0, 0, '次の自分の番、このポケモンは「メガブレイブ」が使えない。', energy_cost_typed=['fighting', 'fighting', 'fighting']),
+    ],
+    evolves_from='リオル',
+    evolution_stage='stage1',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    regulation='G',
+    weakness='psychic',
+    is_mega=True,
+)
+
+# メガルカリオex（mrukarioex-m1-029）
+MRUKARIOEX_M1_029 = PokemonCard(
+    id='mrukarioex-m1-029',
+    name='メガルカリオex',
+    hp=340,
+    max_hp=340,
+    attacks=[
+        Attack('はどうづき', 1, 130, 0, 0, '自分のトラッシュから「基本闘エネルギー」を3枚まで選び、ベンチポケモンに好きなようにつける。', energy_cost_typed=['fighting']),
+        Attack('メガブレイブ', 2, 270, 0, 0, '次の自分の番、このポケモンは「メガブレイブ」が使えない。', energy_cost_typed=['fighting', 'fighting']),
+    ],
+    evolves_from='リオル',
+    evolution_stage='stage1',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    regulation='G',
+    weakness='psychic',
+    is_ex=True,
+    is_mega=True,
 )
 
 # メグロコ（meguroko-svd-062）
@@ -439,6 +556,40 @@ RIORU_SVD_059 = PokemonCard(
     weakness='psychic',
 )
 
+# リオル（rioru-sv1a-091）
+RIORU_SV1A_091 = PokemonCard(
+    id='rioru-sv1a-091',
+    name='リオル',
+    hp=80,
+    max_hp=80,
+    attacks=[
+        Attack('かそくづき', 1, 30, 0, 0, '次の自分の番、このポケモンは「かそくづき」が使えない。', energy_cost_typed=['fighting']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    regulation='H',
+    weakness='psychic',
+)
+
+# リオル（rioru-mil-068）
+RIORU_MIL_068 = PokemonCard(
+    id='rioru-mil-068',
+    name='リオル',
+    hp=80,
+    max_hp=80,
+    attacks=[
+        Attack('かそくづき', 1, 30, 0, 0, '次の自分の番、このポケモンは「かそくづき」が使えない。', energy_cost_typed=['fighting']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=2,
+    pokemon_type='fighting',
+    regulation='G',
+    weakness='psychic',
+)
+
 # リククラゲ（rikukurage-svd-066）
 RIKUKURAGE_SVD_066 = PokemonCard(
     id='rikukurage-svd-066',
@@ -473,6 +624,25 @@ RUKARIO_SVD_060 = PokemonCard(
     pokemon_type='fighting',
     regulation='G',
     weakness='psychic',
+)
+
+# ルナトーン（runaton）
+RUNATON = PokemonCard(
+    id='runaton',
+    name='ルナトーン',
+    hp=110,
+    max_hp=110,
+    attacks=[
+        Attack('パワージェム', 2, 50, 0, 0, '', energy_cost_typed=['fighting', 'fighting']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='fighting',
+    regulation='C',
+    weakness='grass',
+    ability_name='ルナサイクル',
+    ability_description='自分の場に「ソルロック」がいて、自分の番に、自分の手札から「基本闘エネルギー」を1枚トラッシュするなら、1回使える。自分の山札を3枚引く。この特性は別の「ルナサイクル」を使った番は使えない。',
 )
 
 # レアコイル（rarecoil-svd-037）
@@ -533,6 +703,7 @@ WARUBIRU_SVD_063 = PokemonCard(
 OTODOKEDORON = GoodsCard(
     id='otodokedoron',
     name='おとどけドローン',
+    effect='',
     description='コインを2回投げ、すべてオモテなら、自分の山札から好きなカードを1枚選び、手札に加える。そして山札を切る。',
 )
 
@@ -543,17 +714,38 @@ TANPANKOZOU = SupportCard(
     description='自分の手札をすべて山札にもどして切る。その後、山札を5枚引く。',
 )
 
+# ふうせん（fuusen）
+FUUSEN = GoodsCard(
+    id='fuusen',
+    name='ふうせん',
+    effect='tool',
+    description='このカードをつけているポケモンは、にげるためのエネルギーが2個ぶん少なくなる。',
+    is_tool=True,
+    tool_damage_reduce=0,
+    tool_condition_type=None,
+)
+
 # ふしぎなアメ（fushiginaame）
 FUSHIGINAAME = GoodsCard(
     id='fushiginaame',
     name='ふしぎなアメ',
+    effect='',
     description='自分の手札から2進化ポケモンを1枚選び、そのポケモンへと進化する自分の場のたねポケモンにのせ、1進化をとばして進化させる。（最初の自分の番や、出したばかりのポケモンには使えない。）',
+)
+
+# アンフェアスタンプ（anfeasutanpu）
+ANFEASUTANPU = GoodsCard(
+    id='anfeasutanpu',
+    name='アンフェアスタンプ',
+    effect='',
+    description='このカードは、前の相手の番に、自分のポケモンがきぜつしていなければ使えない。おたがいのプレイヤーは、それぞれ手札をすべて山札にもどして切る。その後、自分は5枚、相手は2枚、山札を引く。',
 )
 
 # エネルギー回収（unknown）
 UNKNOWN = GoodsCard(
     id='unknown',
     name='エネルギー回収',
+    effect='',
     description='自分のトラッシュから基本エネルギーを2枚まで選び、相手に見せて、手札に加える。',
 )
 
@@ -561,6 +753,7 @@ UNKNOWN = GoodsCard(
 EREKIJIENERETA = GoodsCard(
     id='erekijienereta',
     name='エレキジェネレーター',
+    effect='',
     description='自分の山札を上から5枚見て、その中から「基本エネルギー」を2枚まで選び、ベンチのポケモンに好きなようにつける。残りのカードは山札にもどして切る。',
 )
 
@@ -582,7 +775,15 @@ JIXYAJJIMAN = SupportCard(
 SUPABORU = GoodsCard(
     id='supaboru',
     name='スーパーボール',
+    effect='',
     description='自分の山札を上から7枚見て、その中からポケモンを1枚選び、相手に見せて、手札に加える。残りのカードは山札にもどして切る。',
+)
+
+# ゼイユ（zeiyu）
+ZEIYU = SupportCard(
+    id='zeiyu',
+    name='ゼイユ',
+    description='このカードは、先攻プレイヤーの最初の番でも使える。自分の手札をすべてトラッシュし、山札を5枚引く。',
 )
 
 # ネモ（nemokako）
@@ -603,13 +804,46 @@ NEMOMIRAI = SupportCard(
 HAIPABORU = GoodsCard(
     id='haipaboru',
     name='ハイパーボール',
+    effect='',
     description='このカードは、自分の手札を2枚トラッシュしなければ使えない。自分の山札からポケモンを1枚選び、相手に見せて、手札に加える。そして山札を切る。',
+)
+
+# パワープロテイン（pawaapurotein）
+PAWAAPUROTEIN = GoodsCard(
+    id='pawaapurotein',
+    name='パワープロテイン',
+    effect='',
+    description='この番、自分の闘ポケモンが使うワザの、相手のバトルポケモンへのダメージは「+30」される。',
+)
+
+# ファイトゴング（faitogongu）
+FAITOGONGU = GoodsCard(
+    id='faitogongu',
+    name='ファイトゴング',
+    effect='',
+    description='自分の山札から闘タイプのたねポケモンまたは「基本闘エネルギー」を1枚選び、相手に見せて、手札に加える。そして山札を切る。',
+)
+
+# ボスの指令（bosunoshirei）
+BOSUNOSHIREI = SupportCard(
+    id='bosunoshirei',
+    name='ボスの指令',
+    description='相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。',
+)
+
+# ポケパッド（pokepaddo）
+POKEPADDO = GoodsCard(
+    id='pokepaddo',
+    name='ポケパッド',
+    effect='',
+    description='自分の山札からポケモン（「ルールを持つポケモン」をのぞく）を1枚選び、相手に見せて、手札に加える。そして山札を切る。',
 )
 
 # ポケモンいれかえ（pokemonirekae）
 POKEMONIREKAE = GoodsCard(
     id='pokemonirekae',
     name='ポケモンいれかえ',
+    effect='swap_active',
     description='自分のバトルポケモンをベンチポケモンと入れ替える。',
 )
 
@@ -617,7 +851,41 @@ POKEMONIREKAE = GoodsCard(
 POKEMONKIXYATCHIXYA = GoodsCard(
     id='pokemonkixyatchixya',
     name='ポケモンキャッチャー',
+    effect='',
     description='コインを1回投げオモテなら、相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。',
+)
+
+# マキシマムベルト（makishimamuberuto）
+MAKISHIMAMUBERUTO = GoodsCard(
+    id='makishimamuberuto',
+    name='マキシマムベルト',
+    effect='tool',
+    description='このカードをつけているポケモンが使うワザの、相手のバトル場の「ポケモンex」へのダメージは「+50」される。',
+    is_tool=True,
+    tool_damage_reduce=0,
+    tool_condition_type=None,
+)
+
+# ミツルの思いやり（mitsurunoomoiyari）
+MITSURUNOOMOIYARI = SupportCard(
+    id='mitsurunoomoiyari',
+    name='ミツルの思いやり',
+    description='自分の「メガシンカex」1匹のHPを、すべて回復する。その後、回復したポケモンについているエネルギーを、すべて手札にもどす。',
+)
+
+# リーリエの決心（riirienokesshin）
+RIIRIENOKESSHIN = SupportCard(
+    id='riirienokesshin',
+    name='リーリエの決心',
+    description='自分の手札をすべて山札にもどして切る。その後、山札を6枚引く。自分のサイドの残り枚数が6枚なら、引く枚数は8枚になる。',
+)
+
+# ロケット団の監視塔（rokettodannokanshitou）
+ROKETTODANNOKANSHITOU = GoodsCard(
+    id='rokettodannokanshitou',
+    name='ロケット団の監視塔',
+    effect='',
+    description='おたがいの場のポケモン全員の特性は、すべてなくなる。',
 )
 
 # 博士の研究（hakasenokenkyuu）
@@ -634,6 +902,14 @@ HAKASENOKENKIXYUUFUTOUHAKASE = SupportCard(
     description='自分の手札をすべてトラッシュし、山札を7枚引く。',
 )
 
+# 夜のタンカ（yorunotanka）
+YORUNOTANKA = GoodsCard(
+    id='yorunotanka',
+    name='夜のタンカ',
+    effect='',
+    description='自分のトラッシュからポケモンまたは基本エネルギーを1枚選び、相手に見せて、手札に加える。',
+)
+
 # 岩のむねあて（iwanomuneate）
 IWANOMUNEATE = GoodsCard(
     id='iwanomuneate',
@@ -643,6 +919,20 @@ IWANOMUNEATE = GoodsCard(
     is_tool=True,
     tool_damage_reduce=30,
     tool_condition_type='fighting',
+)
+
+# 暗号マニアの解読（angoumanianokaidoku）
+ANGOUMANIANOKAIDOKU = SupportCard(
+    id='angoumanianokaidoku',
+    name='暗号マニアの解読',
+    description='自分の山札から好きなカードを2枚選ぶ。残りの山札を切り、選んだカードを好きな順番に入れ替えて、山札の上に戻す。',
+)
+
+# ロックエネルギー（rokkutouenerugi）
+ROKKUTOUENERUGI = EnergyCard(
+    id='rokkutouenerugi',
+    name='ロックエネルギー',
+    energy_type=None,
 )
 
 # 基本闘エネルギー（kihontouenerugi）
@@ -735,58 +1025,82 @@ CARD_ID_TO_NAME = {
     "kaiden-svd-044": 'カイデン',
     "karamingo-svd-109": 'カラミンゴ',
     "gakegani-svd-067": 'ガケガニ',
+    "gurabiteiimaunten": 'グラビティーマウンテン',
     "coil-svd-036": 'コイル',
     "koraidonex-svd-068": 'コライドンex',
     "jibakoil-svd-038": 'ジバコイル',
     "zupika-svd-041": 'ズピカ',
+    "sorurokku-mc-372": 'ソルロック',
     "nokotchi-svd-092": 'ノコッチ',
     "nonokurage-svd-065": 'ノノクラゲ',
     "harabarii-svd-042": 'ハラバリー',
+    "hariteyama-mil-025": 'ハリテヤマ',
     "bachinuni-svd-040": 'バチンウニ',
     "pikachixyuu-svd-034": 'ピカチュウ',
+    "makunoshita-mil-024": 'マクノシタ',
+    "makunoshita": 'マクノシタ',
     "miraidonex-svd-046": 'ミライドンex',
+    "mrukarioex-m1l-078": 'メガルカリオ',
+    "mrukarioex-m1-029": 'メガルカリオex',
     "meguroko-svd-062": 'メグロコ',
     "mototokage-mc-627": 'モトトカゲ',
     "raichixyuu-svd-035": 'ライチュウ',
     "rioru-svd-059": 'リオル',
+    "rioru-sv1a-091": 'リオル',
+    "rioru-mil-068": 'リオル',
     "rikukurage-svd-066": 'リククラゲ',
     "rukario-svd-060": 'ルカリオ',
+    "runaton": 'ルナトーン',
     "rarecoil-svd-037": 'レアコイル',
     "warubiaru-svd-064": 'ワルビアル',
     "warubiru-svd-063": 'ワルビル',
     "otodokedoron": 'おとどけドローン',
     "tanpankozou": 'たんぱんこぞう',
+    "fuusen": 'ふうせん',
     "fushiginaame": 'ふしぎなアメ',
+    "anfeasutanpu": 'アンフェアスタンプ',
     "unknown": 'エネルギー回収',
     "erekijienereta": 'エレキジェネレーター',
     "kihada": 'キハダ',
     "jixyajjiman": 'ジャッジマン',
     "supaboru": 'スーパーボール',
+    "zeiyu": 'ゼイユ',
     "nemokako": 'ネモ',
     "nemomirai": 'ネモ',
     "haipaboru": 'ハイパーボール',
+    "pawaapurotein": 'パワープロテイン',
+    "faitogongu": 'ファイトゴング',
+    "bosunoshirei": 'ボスの指令',
+    "pokepaddo": 'ポケパッド',
     "pokemonirekae": 'ポケモンいれかえ',
     "pokemonkixyatchixya": 'ポケモンキャッチャー',
+    "makishimamuberuto": 'マキシマムベルト',
+    "mitsurunoomoiyari": 'ミツルの思いやり',
+    "riirienokesshin": 'リーリエの決心',
+    "rokettodannokanshitou": 'ロケット団の監視塔',
     "hakasenokenkyuu": '博士の研究',
     "hakasenokenkixyuufutouhakase": '博士の研究',
+    "yorunotanka": '夜のタンカ',
     "iwanomuneate": '岩のむねあて',
+    "angoumanianokaidoku": '暗号マニアの解読',
+    "rokkutouenerugi": 'ロックエネルギー',
     "kihontouenerugi": '基本闘エネルギー',
     "kihonkaminarienerugi": '基本雷エネルギー',
     # ----- 以上 JSON から生成 -----
 }
 
 def get_trainer_id_by_name(name_ja: str) -> str | None:
-    """トレーナー（グッズ・サポート）の名前からレジストリの id を返す。見つからなければ None。"""
+    """トレーナー（グッズ・サポート・スタジアム）の名前からレジストリの id を返す。見つからなければ None。"""
     name = (name_ja or "").strip()
     if not name:
         return None
     for cid, card in _CARD_REGISTRY.items():
-        if (is_goods(card) or is_support(card)) and (getattr(card, "name", "") or "").strip() == name:
+        if (is_goods(card) or is_support(card) or is_stadium(card)) and (getattr(card, "name", "") or "").strip() == name:
             return cid
     return None
 
 
-_CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | SupportCard] = {
+_CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | StadiumCard | SupportCard] = {
     "otachi": OTACHI,
     "ootachi": OOTACHI,
     "mototokage": MOTOTOKAGE,
@@ -807,48 +1121,72 @@ _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | SupportCard] = 
     "kaiden-svd-044": KAIDEN_SVD_044,
     "karamingo-svd-109": KARAMINGO_SVD_109,
     "gakegani-svd-067": GAKEGANI_SVD_067,
+    "gurabiteiimaunten": GURABITEIIMAUNTEN,
     "coil-svd-036": COIL_SVD_036,
     "koraidonex-svd-068": KORAIDONEX_SVD_068,
     "jibakoil-svd-038": JIBAKOIL_SVD_038,
     "zupika-svd-041": ZUPIKA_SVD_041,
+    "sorurokku-mc-372": SORUROKKU_MC_372,
     "nokotchi-svd-092": NOKOTCHI_SVD_092,
     "nonokurage-svd-065": NONOKURAGE_SVD_065,
     "harabarii-svd-042": HARABARII_SVD_042,
+    "hariteyama-mil-025": HARITEYAMA_MIL_025,
     "bachinuni-svd-040": BACHINUNI_SVD_040,
     "pikachixyuu-svd-034": PIKACHIXYUU_SVD_034,
+    "makunoshita-mil-024": MAKUNOSHITA_MIL_024,
+    "makunoshita": MAKUNOSHITA,
     "miraidonex-svd-046": MIRAIDONEX_SVD_046,
+    "mrukarioex-m1l-078": MRUKARIOEX_M1L_078,
+    "mrukarioex-m1-029": MRUKARIOEX_M1_029,
     "meguroko-svd-062": MEGUROKO_SVD_062,
     "mototokage-mc-627": MOTOTOKAGE_MC_627,
     "raichixyuu-svd-035": RAICHIXYUU_SVD_035,
     "rioru-svd-059": RIORU_SVD_059,
+    "rioru-sv1a-091": RIORU_SV1A_091,
+    "rioru-mil-068": RIORU_MIL_068,
     "rikukurage-svd-066": RIKUKURAGE_SVD_066,
     "rukario-svd-060": RUKARIO_SVD_060,
+    "runaton": RUNATON,
     "rarecoil-svd-037": RARECOIL_SVD_037,
     "warubiaru-svd-064": WARUBIARU_SVD_064,
     "warubiru-svd-063": WARUBIRU_SVD_063,
     "otodokedoron": OTODOKEDORON,
     "tanpankozou": TANPANKOZOU,
+    "fuusen": FUUSEN,
     "fushiginaame": FUSHIGINAAME,
+    "anfeasutanpu": ANFEASUTANPU,
     "unknown": UNKNOWN,
     "erekijienereta": EREKIJIENERETA,
     "kihada": KIHADA,
     "jixyajjiman": JIXYAJJIMAN,
     "supaboru": SUPABORU,
+    "zeiyu": ZEIYU,
     "nemokako": NEMOKAKO,
     "nemomirai": NEMOMIRAI,
     "haipaboru": HAIPABORU,
+    "pawaapurotein": PAWAAPUROTEIN,
+    "faitogongu": FAITOGONGU,
+    "bosunoshirei": BOSUNOSHIREI,
+    "pokepaddo": POKEPADDO,
     "pokemonirekae": POKEMONIREKAE,
     "pokemonkixyatchixya": POKEMONKIXYATCHIXYA,
+    "makishimamuberuto": MAKISHIMAMUBERUTO,
+    "mitsurunoomoiyari": MITSURUNOOMOIYARI,
+    "riirienokesshin": RIIRIENOKESSHIN,
+    "rokettodannokanshitou": ROKETTODANNOKANSHITOU,
     "hakasenokenkyuu": HAKASENOKENKYUU,
     "hakasenokenkixyuufutouhakase": HAKASENOKENKIXYUUFUTOUHAKASE,
+    "yorunotanka": YORUNOTANKA,
     "iwanomuneate": IWANOMUNEATE,
+    "angoumanianokaidoku": ANGOUMANIANOKAIDOKU,
+    "rokkutouenerugi": ROKKUTOUENERUGI,
     "kihontouenerugi": KIHONTOUENERUGI,
     "kihonkaminarienerugi": KIHONKAMINARIENERUGI,
     # ----- 以上 JSON から生成 -----
 }
 
 
-def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyCard | GoodsCard | SupportCard:
+def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyCard | GoodsCard | StadiumCard | SupportCard:
     """カード ID からマスタのコピーを生成する。instance_id を付与。"""
     if card_id not in _CARD_REGISTRY:
         raise ValueError(f"Unknown card id: {card_id}")
@@ -857,7 +1195,7 @@ def get_card_by_id(card_id: str, instance_id: str = "") -> PokemonCard | EnergyC
     return c
 
 
-def get_card_by_name(name_ja: str, instance_id: str = "") -> PokemonCard | EnergyCard | GoodsCard | SupportCard | None:
+def get_card_by_name(name_ja: str, instance_id: str = "") -> PokemonCard | EnergyCard | GoodsCard | StadiumCard | SupportCard | None:
     """名前（日本語）が一致するカードをレジストリから探しコピーを返す。見つからなければ None。"""
     name_ja = (name_ja or "").strip()
     if not name_ja:

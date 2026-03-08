@@ -1,6 +1,13 @@
 [
   {
     "card_type": "energy",
+    "name_ja": "ロックエネルギー",
+    "energy_type": null,
+    "_source_image": "049713_E_ROKKUTOUENERUGI.jpg",
+    "id": "rokkutouenerugi"
+  },
+  {
+    "card_type": "energy",
     "name_ja": "基本闘エネルギー",
     "energy_type": "fighting",
     "_source_image": "042784_E_KIHONTOUENERUGI.jpg",

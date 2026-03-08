@@ -14,11 +14,25 @@
     "id": "tanpankozou"
   },
   {
+    "card_type": "tool",
+    "name_ja": "ふうせん",
+    "description": "このカードをつけているポケモンは、にげるためのエネルギーが2個ぶん少なくなる。",
+    "_source_image": "049404_T_FUUSEN.jpg",
+    "id": "fuusen"
+  },
+  {
     "card_type": "goods",
     "name_ja": "ふしぎなアメ",
     "description": "自分の手札から2進化ポケモンを1枚選び、そのポケモンへと進化する自分の場のたねポケモンにのせ、1進化をとばして進化させる。（最初の自分の番や、出したばかりのポケモンには使えない。）",
     "_source_image": "043822_T_FUSHIGINAAME.jpg",
     "id": "fushiginaame"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "アンフェアスタンプ",
+    "description": "このカードは、前の相手の番に、自分のポケモンがきぜつしていなければ使えない。おたがいのプレイヤーは、それぞれ手札をすべて山札にもどして切る。その後、自分は5枚、相手は2枚、山札を引く。",
+    "_source_image": "049349_T_ANFUEASUTANPU.jpg",
+    "id": "anfeasutanpu"
   },
   {
     "card_type": "goods",
@@ -57,6 +71,13 @@
   },
   {
     "card_type": "support",
+    "name_ja": "ゼイユ",
+    "description": "このカードは、先攻プレイヤーの最初の番でも使える。自分の手札をすべてトラッシュし、山札を5枚引く。",
+    "_source_image": "049431_T_ZEIYU.jpg",
+    "id": "zeiyu"
+  },
+  {
+    "card_type": "support",
     "name_ja": "ネモ",
     "description": "自分の山札を3枚引く。",
     "_source_image": "043835_T_NEMOKAKO.jpg",
@@ -78,6 +99,34 @@
   },
   {
     "card_type": "goods",
+    "name_ja": "パワープロテイン",
+    "description": "この番、自分の闘ポケモンが使うワザの、相手のバトルポケモンへのダメージは「+30」される。",
+    "_source_image": "049368_T_PAWAPUROTEIN.jpg",
+    "id": "pawaapurotein"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ファイトゴング",
+    "description": "自分の山札から闘タイプのたねポケモンまたは「基本闘エネルギー」を1枚選び、相手に見せて、手札に加える。そして山札を切る。",
+    "_source_image": "049370_T_FUAITOGONGU.jpg",
+    "id": "faitogongu"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ボスの指令",
+    "description": "相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。",
+    "_source_image": "049440_T_BOSUNOSHIREI.jpg",
+    "id": "bosunoshirei"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ポケパッド",
+    "description": "自分の山札からポケモン（「ルールを持つポケモン」をのぞく）を1枚選び、相手に見せて、手札に加える。そして山札を切る。",
+    "_source_image": "049601_T_POKEPADDO.jpg",
+    "id": "pokepaddo"
+  },
+  {
+    "card_type": "goods",
     "name_ja": "ポケモンいれかえ",
     "description": "自分のバトルポケモンをベンチポケモンと入れ替える。",
     "_source_image": "043824_T_POKEMONIREKAE.jpg",
@@ -89,6 +138,34 @@
     "description": "コインを1回投げオモテなら、相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。",
     "_source_image": "043825_T_POKEMONKIXYATCHIXYA.jpg",
     "id": "pokemonkixyatchixya"
+  },
+  {
+    "card_type": "tool",
+    "name_ja": "マキシマムベルト",
+    "description": "このカードをつけているポケモンが使うワザの、相手のバトル場の「ポケモンex」へのダメージは「+50」される。",
+    "_source_image": "046820_T_MAKISHIMAMUBERUTO.jpg",
+    "id": "makishimamuberuto"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ミツルの思いやり",
+    "description": "自分の「メガシンカex」1匹のHPを、すべて回復する。その後、回復したポケモンについているエネルギーを、すべて手札にもどす。",
+    "_source_image": "047899_T_MITSURUNOOMOIYARI.jpg",
+    "id": "mitsurunoomoiyari"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "リーリエの決心",
+    "description": "自分の手札をすべて山札にもどして切る。その後、山札を6枚引く。自分のサイドの残り枚数が6枚なら、引く枚数は8枚になる。",
+    "_source_image": "049609_T_RIRIENOKESSHIN.jpg",
+    "id": "riirienokesshin"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ロケット団の監視塔",
+    "description": "おたがいの場のポケモン全員の特性は、すべてなくなる。",
+    "_source_image": "048711_T_ROKETTODANNOKANSHITOU.jpg",
+    "id": "rokettodannokanshitou"
   },
   {
     "card_type": "support",
@@ -105,10 +182,24 @@
     "id": "hakasenokenkixyuufutouhakase"
   },
   {
+    "card_type": "goods",
+    "name_ja": "夜のタンカ",
+    "description": "自分のトラッシュからポケモンまたは基本エネルギーを1枚選び、相手に見せて、手札に加える。",
+    "_source_image": "049386_T_YORUNOTANKA.jpg",
+    "id": "yorunotanka"
+  },
+  {
     "card_type": "tool",
     "name_ja": "岩のむねあて",
     "description": "このカードをつけている闘ポケモンが、相手のポケモンから受けるワザのダメージは「-30」される。",
     "_source_image": "043826_T_IWANOMUNEATE.jpg",
     "id": "iwanomuneate"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "暗号マニアの解読",
+    "description": "自分の山札から好きなカードを2枚選ぶ。残りの山札を切り、選んだカードを好きな順番に入れ替えて、山札の上に戻す。",
+    "_source_image": "049581_T_ANGOUMANIANOKAIDOKU.jpg",
+    "id": "angoumanianokaidoku"
   }
 ]

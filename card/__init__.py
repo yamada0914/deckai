@@ -20,6 +20,7 @@ from card.model import (
     PokemonTypeId,
     PokemonTypeInfo,
     POKEMON_TYPES,
+    StadiumCard,
     SupportCard,
     is_basic_pokemon,
     is_energy,
@@ -27,6 +28,7 @@ from card.model import (
     is_pokemon,
     is_stage1_pokemon,
     is_stage2_pokemon,
+    is_stadium,
     is_support,
 )
 
@@ -44,6 +46,7 @@ __all__ = [
     "PokemonTypeId",
     "PokemonTypeInfo",
     "POKEMON_TYPES",
+    "StadiumCard",
     "SupportCard",
     "get_card_by_id",
     "get_card_by_name",
@@ -54,5 +57,6 @@ __all__ = [
     "is_pokemon",
     "is_stage1_pokemon",
     "is_stage2_pokemon",
+    "is_stadium",
     "is_support",
 ]

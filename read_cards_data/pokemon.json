@@ -166,6 +166,13 @@
     "_source_image": "043769_P_GAKEGANI.jpg"
   },
   {
+    "card_type": "stadium",
+    "name_ja": "グラビティーマウンテン",
+    "description": "おたがいの場の2進化ポケモン全員の最大HPは、それぞれ「-30」される。スタジアムは、自分の番に1枚、バトル場の横に出せる。別のスタジアムが場に出たなら、このカードをトラッシュする。同じ名前のスタジアムは場に出せない。",
+    "_source_image": "046446_T_GURABITEIMAUNTEN.jpg",
+    "id": "gurabiteiimaunten"
+  },
+  {
     "name_ja": "コイル",
     "hp": 60,
     "pokemon_type": "lightning",
@@ -314,6 +321,34 @@
   },
   {
     "card_type": "pokemon",
+    "name_ja": "ソルロック",
+    "hp": 110,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "E",
+    "set_code": "MC",
+    "card_number": "372/742",
+    "attacks": [
+      {
+        "name": "コスモビーム",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 70,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分のベンチに「ルナトーン」がいないなら、このワザは失敗。このワザのダメージは弱点・抵抗力を計算しない。"
+      }
+    ],
+    "_source_image": "049088_P_SORUROKKU.jpg",
+    "id": "sorurokku-mc-372"
+  },
+  {
+    "card_type": "pokemon",
     "name_ja": "ノコッチ",
     "hp": 70,
     "pokemon_type": "colorless",
@@ -419,6 +454,40 @@
   },
   {
     "card_type": "pokemon",
+    "name_ja": "ハリテヤマ",
+    "hp": 150,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 3,
+    "evolves_from": "makunoshita",
+    "evolution_stage": "stage1",
+    "regulation": "G",
+    "set_code": "MIL",
+    "card_number": "025/063",
+    "ability": {
+      "name": "どすこいキャッチャー",
+      "description": "自分の番に、このカードを手札から出して進化させたとき、1回使える。相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。"
+    },
+    "attacks": [
+      {
+        "name": "ワイルドプレス",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting",
+          "fighting"
+        ],
+        "damage": 210,
+        "self_damage": 70,
+        "bench_damage": 0,
+        "description": "このポケモンにも70ダメージ。"
+      }
+    ],
+    "_source_image": "047758_P_HARITEYAMA.jpg",
+    "id": "hariteyama-mil-025"
+  },
+  {
+    "card_type": "pokemon",
     "name_ja": "バチンウニ",
     "hp": 90,
     "pokemon_type": "lightning",
@@ -500,6 +569,86 @@
   },
   {
     "card_type": "pokemon",
+    "name_ja": "マクノシタ",
+    "hp": 80,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "G",
+    "set_code": "MIL",
+    "card_number": "024/063",
+    "attacks": [
+      {
+        "name": "どつく",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "がちんこ",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "047757_P_MAKUNOSHITA.jpg",
+    "id": "makunoshita-mil-024"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "マクノシタ",
+    "hp": 80,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "G",
+    "set_code": "004/M-P",
+    "card_number": null,
+    "attacks": [
+      {
+        "name": "どつく",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "がちんこ",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "048250_P_MAKUNOSHITA.jpg",
+    "id": "makunoshita"
+  },
+  {
+    "card_type": "pokemon",
     "name_ja": "ミライドンex",
     "hp": 220,
     "pokemon_type": "lightning",
@@ -538,6 +687,88 @@
     ],
     "_source_image": "043748_P_MIRAIDONEX.jpg",
     "id": "miraidonex-svd-046"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "メガルカリオ",
+    "hp": 340,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": "リオル",
+    "evolution_stage": "stage1",
+    "regulation": "G",
+    "set_code": "M1L",
+    "card_number": "078/063",
+    "attacks": [
+      {
+        "name": "はどうづき",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 130,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分のトラッシュから「基本闘エネルギー」を3枚まで選び、ベンチポケモンに好きなようにつける。"
+      },
+      {
+        "name": "メガブレイブ",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting",
+          "fighting"
+        ],
+        "damage": 270,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の自分の番、このポケモンは「メガブレイブ」が使えない。"
+      }
+    ],
+    "_source_image": "048435_P_MRUKARIOEX.jpg",
+    "id": "mrukarioex-m1l-078"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "メガルカリオex",
+    "hp": 340,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": "リオル",
+    "evolution_stage": "stage1",
+    "regulation": "G",
+    "set_code": "M1",
+    "card_number": "029/063",
+    "attacks": [
+      {
+        "name": "はどうづき",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 130,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分のトラッシュから「基本闘エネルギー」を3枚まで選び、ベンチポケモンに好きなようにつける。"
+      },
+      {
+        "name": "メガブレイブ",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 270,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の自分の番、このポケモンは「メガブレイブ」が使えない。"
+      }
+    ],
+    "_source_image": "047762_P_MRUKARIOEX.jpg",
+    "id": "mrukarioex-m1-029"
   },
   {
     "name_ja": "メグロコ",
@@ -694,6 +925,62 @@
     "id": "rioru-svd-059"
   },
   {
+    "card_type": "pokemon",
+    "name_ja": "リオル",
+    "hp": 80,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "H",
+    "set_code": "SV1a",
+    "card_number": "091/193",
+    "attacks": [
+      {
+        "name": "かそくづき",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の自分の番、このポケモンは「かそくづき」が使えない。"
+      }
+    ],
+    "_source_image": "048613_P_RIORU.jpg",
+    "id": "rioru-sv1a-091"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "リオル",
+    "hp": 80,
+    "pokemon_type": "fighting",
+    "weakness": "psychic",
+    "retreat_cost": 2,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "G",
+    "set_code": "MIL",
+    "card_number": "068/063",
+    "attacks": [
+      {
+        "name": "かそくづき",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "fighting"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の自分の番、このポケモンは「かそくづき」が使えない。"
+      }
+    ],
+    "_source_image": "048425_P_RIORU.jpg",
+    "id": "rioru-mil-068"
+  },
+  {
     "name_ja": "リククラゲ",
     "hp": 130,
     "pokemon_type": "fighting",
@@ -773,6 +1060,39 @@
     ],
     "_source_image": "043762_P_RUKARIO.jpg",
     "id": "rukario-svd-060"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ルナトーン",
+    "hp": 110,
+    "pokemon_type": "fighting",
+    "weakness": "grass",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "C",
+    "set_code": null,
+    "card_number": "371/742",
+    "ability": {
+      "name": "ルナサイクル",
+      "description": "自分の場に「ソルロック」がいて、自分の番に、自分の手札から「基本闘エネルギー」を1枚トラッシュするなら、1回使える。自分の山札を3枚引く。この特性は別の「ルナサイクル」を使った番は使えない。"
+    },
+    "attacks": [
+      {
+        "name": "パワージェム",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fighting",
+          "fighting"
+        ],
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "049087_P_RUNATON.jpg",
+    "id": "runaton"
   },
   {
     "name_ja": "レアコイル",

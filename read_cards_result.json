@@ -201,6 +201,192 @@
           "count": 19
         }
       ]
+    },
+    {
+      "deck_code": "9gPNgg-aJDmV5-n9HQgL",
+      "cards": [
+        {
+          "name_ja": "リオル",
+          "count": 4
+        },
+        {
+          "name_ja": "メガルカリオex",
+          "count": 3
+        },
+        {
+          "name_ja": "マクノシタ",
+          "count": 2
+        },
+        {
+          "name_ja": "ハリテヤマ",
+          "count": 2
+        },
+        {
+          "name_ja": "ソルロック",
+          "count": 3
+        },
+        {
+          "name_ja": "ルナトーン",
+          "count": 2
+        },
+        {
+          "name_ja": "パワープロテイン",
+          "count": 4
+        },
+        {
+          "name_ja": "ファイトゴング",
+          "count": 4
+        },
+        {
+          "name_ja": "ハイパーボール",
+          "count": 3
+        },
+        {
+          "name_ja": "ポケパッド",
+          "count": 4
+        },
+        {
+          "name_ja": "ポケモンいれかえ",
+          "count": 1
+        },
+        {
+          "name_ja": "夜のタンカ",
+          "count": 2
+        },
+        {
+          "name_ja": "アンフェアスタンプ(ACE SPEC)",
+          "count": 1
+        },
+        {
+          "name_ja": "ふうせん",
+          "count": 2
+        },
+        {
+          "name_ja": "ボスの指令",
+          "count": 2
+        },
+        {
+          "name_ja": "暗号マニアの解読",
+          "count": 2
+        },
+        {
+          "name_ja": "ジャッジマン",
+          "count": 1
+        },
+        {
+          "name_ja": "リーリエの決心",
+          "count": 4
+        },
+        {
+          "name_ja": "グラビティーマウンテン",
+          "count": 2
+        },
+        {
+          "name_ja": "基本闘エネルギー",
+          "count": 10
+        },
+        {
+          "name_ja": "ロック闘エネルギー",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "deck_code": "8DcaYc-IR2SmJ-x8D8G8",
+      "cards": [
+        {
+          "name_ja": "メガルカリオex",
+          "count": 3
+        },
+        {
+          "name_ja": "リオル",
+          "count": 4
+        },
+        {
+          "name_ja": "ソルロック",
+          "count": 3
+        },
+        {
+          "name_ja": "ルナトーン",
+          "count": 2
+        },
+        {
+          "name_ja": "マクノシタ",
+          "count": 2
+        },
+        {
+          "name_ja": "ハリテヤマ",
+          "count": 2
+        },
+        {
+          "name_ja": "ポケパッド",
+          "count": 3
+        },
+        {
+          "name_ja": "ハイパーボール",
+          "count": 3
+        },
+        {
+          "name_ja": "ファイトゴング",
+          "count": 4
+        },
+        {
+          "name_ja": "パワープロテイン",
+          "count": 4
+        },
+        {
+          "name_ja": "夜のタンカ",
+          "count": 2
+        },
+        {
+          "name_ja": "ポケモンいれかえ",
+          "count": 1
+        },
+        {
+          "name_ja": "ふうせん",
+          "count": 2
+        },
+        {
+          "name_ja": "マキシマムベルト(ACE SPEC)",
+          "count": 1
+        },
+        {
+          "name_ja": "リーリエの決心",
+          "count": 4
+        },
+        {
+          "name_ja": "ボスの指令",
+          "count": 2
+        },
+        {
+          "name_ja": "ジャッジマン",
+          "count": 2
+        },
+        {
+          "name_ja": "ゼイユ",
+          "count": 2
+        },
+        {
+          "name_ja": "ミツルの思いやり",
+          "count": 1
+        },
+        {
+          "name_ja": "グラビティーマウンテン",
+          "count": 1
+        },
+        {
+          "name_ja": "ロケット団の監視塔",
+          "count": 1
+        },
+        {
+          "name_ja": "基本闘エネルギー",
+          "count": 10
+        },
+        {
+          "name_ja": "ロック闘エネルギー",
+          "count": 1
+        }
+      ]
     }
   ],
   "card_files": {

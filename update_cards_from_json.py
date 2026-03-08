@@ -169,24 +169,43 @@ def _pokemon_card_from_json(card: dict) -> str:
         lines.append(f"    resistance={py_str(resistance)},")
     is_ex = card.get("is_ex") if "is_ex" in card else ("ex" in (name_ja or ""))
     is_mega = card.get("is_mega") if "is_mega" in card else ("メガ" in (name_ja or ""))
+    ability = card.get("ability")
+    ability_name = ability.get("name") if isinstance(ability, dict) else None
+    ability_description = ability.get("description") if isinstance(ability, dict) else None
     if is_ex:
         lines.append("    is_ex=True,")
     if is_mega:
         lines.append("    is_mega=True,")
+    if ability_name is not None:
+        lines.append(f"    ability_name={py_str(ability_name)},")
+    if ability_description is not None:
+        lines.append(f"    ability_description={py_str(ability_description)},")
     lines.append(")")
     return "\n".join(lines)
 
 
+# グッズは原則 effect=''（use_trainer_goods で処理）。以下だけ別扱いで effect を出す。
+_GOODS_EFFECT_HEAL = frozenset(("potion",))
+_GOODS_EFFECT_SWAP_ACTIVE = frozenset(("pokemon_irekae", "pokemonirekae"))
+
+
 def _goods_card_from_json(card: dict) -> str:
-    """グッズカードを GoodsCard(...) のソース文字列に。"""
+    """グッズカードを GoodsCard(...) のソース文字列に。原則 effect=''（turn で use_trainer_goods が呼ばれる）。"""
     card_id = card.get("id", "unknown")
     name_ja = card.get("name_ja", "")
     description = card.get("description", "") or ""
+    if card_id in _GOODS_EFFECT_HEAL:
+        effect = "heal"
+    elif card_id in _GOODS_EFFECT_SWAP_ACTIVE:
+        effect = "swap_active"
+    else:
+        effect = ""
     return "\n".join([
         f"# {name_ja}（{card_id}）",
         f"{id_to_var_name(card_id)} = GoodsCard(",
         f"    id={py_str(card_id)},",
         f"    name={py_str(name_ja)},",
+        f"    effect={py_str(effect)},",
         f"    description={py_str(description)},",
         ")",
     ])
@@ -231,6 +250,21 @@ def _support_card_from_json(card: dict) -> str:
     ])
 
 
+def _stadium_card_from_json(card: dict) -> str:
+    """スタジアムカードを StadiumCard(...) のソース文字列に。"""
+    card_id = card.get("id", "unknown")
+    name_ja = card.get("name_ja", "")
+    description = card.get("description", "") or ""
+    return "\n".join([
+        f"# {name_ja}（{card_id}）",
+        f"{id_to_var_name(card_id)} = StadiumCard(",
+        f"    id={py_str(card_id)},",
+        f"    name={py_str(name_ja)},",
+        f"    description={py_str(description)},",
+        ")",
+    ])
+
+
 def _energy_card_from_json(card: dict) -> str:
     """エネルギーカードを EnergyCard(...) のソース文字列に。"""
     card_id = card.get("id", "unknown")
@@ -247,7 +281,7 @@ def _energy_card_from_json(card: dict) -> str:
 
 
 def card_from_json(card: dict) -> str:
-    """card_type に応じて PokemonCard / GoodsCard / SupportCard / EnergyCard のソース文字列に。"""
+    """card_type に応じて PokemonCard / GoodsCard / SupportCard / StadiumCard / EnergyCard のソース文字列に。"""
     card_type = (card.get("card_type") or "pokemon").strip().lower()
     if card_type in ("goods", "item"):  # "item" は旧形式の互換
         return _goods_card_from_json(card)
@@ -255,6 +289,8 @@ def card_from_json(card: dict) -> str:
         return _tool_card_from_json(card)
     if card_type == "support":
         return _support_card_from_json(card)
+    if card_type == "stadium":
+        return _stadium_card_from_json(card)
     if card_type == "energy":
         return _energy_card_from_json(card)
     return _pokemon_card_from_json(card)
@@ -337,7 +373,7 @@ def main() -> None:
     else:
         raw_cards = data.get("cards", [])
         if isinstance(raw_cards, dict):
-            cards = [c for k in ("pokemon", "goods", "support", "energy") for c in (raw_cards.get(k) or [])]
+            cards = [c for k in ("pokemon", "goods", "support", "stadium", "energy") for c in (raw_cards.get(k) or [])]
         else:
             cards = raw_cards or []
     if not cards:
@@ -348,7 +384,7 @@ def main() -> None:
             '"""',
             "read_cards_result.json から生成。",
             '"""',
-            "from card.model import Attack, EnergyCard, GoodsCard, PokemonCard, SupportCard",
+            "from card.model import Attack, EnergyCard, GoodsCard, PokemonCard, StadiumCard, SupportCard",
             "",
         ]
         for card in cards:
