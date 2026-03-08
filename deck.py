@@ -82,6 +82,18 @@ def get_deck_count() -> int:
     return len(DECK_RECIPES) + len(_load_registered_decks())
 
 
+def get_deck_strategy(deck_index: int) -> str | None:
+    """デッキ番号に対応する戦略 ID を返す。登録デッキの strategy キーがあればその値、なければ None。"""
+    reg = _load_registered_decks()
+    if deck_index < len(DECK_RECIPES):
+        return None
+    i = deck_index - len(DECK_RECIPES)
+    if i < len(reg):
+        s = reg[i].get("strategy")
+        return (s or "").strip() or None
+    return None
+
+
 def get_deck_name(deck_index: int) -> str:
     """デッキ番号の表示名を返す。0=A, 1=B, ..., 5 以降は登録デッキの name または deck_code。"""
     reg = _load_registered_decks()
