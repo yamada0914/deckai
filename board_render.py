@@ -6,6 +6,7 @@ GameState を受け取り、上下で向き合う形（上: 相手側 / 下: 自
 """
 from pathlib import Path
 import json
+import re
 import textwrap
 
 from PIL import Image, ImageDraw, ImageFont
@@ -22,7 +23,7 @@ _CARD_IMAGE_FILES: dict[str, str] | None = None
 
 
 def _load_card_id_to_image() -> dict[str, str]:
-    """read_cards_data の JSON から card id → _source_image のマッピングを構築する。"""
+    """read_cards_data の JSON から card id → _source_image のマッピングを構築する。name_ja も登録し、フォールバックで使う。"""
     global _CARD_IMAGE_FILES
     if _CARD_IMAGE_FILES is not None:
         return _CARD_IMAGE_FILES
@@ -41,6 +42,9 @@ def _load_card_id_to_image() -> dict[str, str]:
                 src = c.get("_source_image")
                 if cid and src:
                     out[cid] = src
+                name_ja = (c.get("name_ja") or "").strip()
+                if name_ja and src:
+                    out[name_ja] = src
         except (json.JSONDecodeError, OSError):
             continue
     if "kihontouenerugi" in out:
@@ -63,14 +67,36 @@ def get_card_image_path(card_id: str, images_dir: Path | str) -> Path | None:
     """
     カード ID に対応する画像ファイルの Path を返す。
     見つからなければ None。images_dir は card_images など画像フォルダのパス。
+    デッキコード由来の id（meguroko-svd-062 等）と固定 id（meguroko, potion 等）の両方に対応するため、
+    一致しなければ短い id や name_ja でフォールバックする。
     """
     mapping = _load_card_id_to_image()
-    filename = mapping.get(card_id) if card_id else None
-    if not filename:
-        return None
     folder = Path(images_dir)
-    p = folder / filename
-    return p if p.is_file() else None
+    if not card_id:
+        return None
+    try:
+        from card.data import CARD_ID_TO_NAME
+    except Exception:
+        CARD_ID_TO_NAME = {}
+    candidates = [card_id]
+    base = re.sub(r"-[a-z0-9]+-\d+$", "", card_id, flags=re.IGNORECASE)
+    if base != card_id:
+        candidates.append(base)
+    name_ja = CARD_ID_TO_NAME.get(card_id) or CARD_ID_TO_NAME.get(base)
+    if name_ja:
+        candidates.append(name_ja)
+    for cid in candidates:
+        filename = mapping.get(cid)
+        if filename:
+            p = folder / filename
+            if p.is_file():
+                return p
+    for k, filename in mapping.items():
+        if base and (k == base or (isinstance(k, str) and k.startswith(base + "-"))):
+            p = folder / filename
+            if p.is_file():
+                return p
+    return None
 
 
 BOARD_WIDTH = 900
