@@ -9,20 +9,24 @@ from card import (
     is_goods,
     is_pokemon,
     is_stage2_pokemon,
+    is_stadium,
     is_support,
 )
 
 _BASIC_ENERGY_TYPES = ("grass", "fire", "water", "lightning", "psychic", "fighting", "darkness", "metal", "fairy")
 
+from .attack import get_legal_attack_indices
 from .damage import _max_effective_damage_for_attacker
+from .deck_strategies import get_fetch_bonus_for_card
 from .evolution import _apply_evolution, _can_evolve_onto
-from .weights import get_haipaboru_discard_weight
+from .weights import get_faitogongu_fetch_weight, get_haipaboru_discard_weight, get_pokepaddo_fetch_weight
 from .state import (
     GameState,
     PlayerState,
     BattlePokemon,
     _card_label,
     _clear_status,
+    get_effective_max_hp,
     _flip_coin,
     _is_first_player_first_turn,
     _log_choice,
@@ -137,7 +141,8 @@ def use_potion(state: GameState, hand_index: int) -> bool:
         return False
     amount = getattr(card, "heal_amount", 20)
     before = p.active.hp
-    p.active.hp = min(p.active.hp + amount, p.active.max_hp)
+    cap = get_effective_max_hp(state, p.active.card)
+    p.active.hp = min(p.active.hp + amount, cap)
     p.discard.append(p.hand.pop(hand_index))
     when_drawn = "（今ターンのドローで引いた）" if card in state.drawn_this_turn else ""
     state.log(f"{state.player_name(state.current_player)}: きずぐすりを使用 → バトル場のポケモンを {before} → {p.active.hp} に回復{when_drawn}")
@@ -158,7 +163,10 @@ def use_trainer_goods(
     if not is_goods(card):
         return False
     cid = getattr(card, "id", "")
-    if (getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False)) and cid not in ("supaboru", "haipaboru", "fushiginaame"):
+    if (getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False)) and cid not in (
+        "supaboru", "haipaboru", "fushiginaame",
+        "anfeasutanpu", "pawaapurotein", "faitogongu", "pokepaddo", "yorunotanka",
+    ):
         return False
     name_ja = getattr(card, "name", "")
 
@@ -357,6 +365,85 @@ def use_trainer_goods(
         )
         return True
 
+    if cid == "anfeasutanpu":
+        if not state.our_ko_by_damage_last_turn[state.current_player]:
+            return False
+        opp = state.defending_player_state()
+        p.deck.extend(p.hand)
+        p.hand.clear()
+        random.shuffle(p.deck)
+        opp.deck.extend(opp.hand)
+        opp.hand.clear()
+        random.shuffle(opp.deck)
+        p_drawn = p.draw(5)
+        opp_drawn = opp.draw(2)
+        p.hand.extend(p_drawn)
+        opp.hand.extend(opp_drawn)
+        state.drawn_this_turn.extend(p_drawn)
+        p.discard.append(p.hand.pop(hand_index))
+        state.log(f"{state.player_name(state.current_player)}: アンフェアスタンプを使用 → おたがい手札を山札にもどして切り、自分 5 枚・相手 2 枚ドロー")
+        return True
+    if cid == "pawaapurotein":
+        if not p.active or getattr(p.active.card, "pokemon_type", None) != "fighting":
+            return False
+        opp = state.defending_player_state()
+        if not get_legal_attack_indices(state, p, opp):
+            return False
+        state.fighting_damage_plus_30_count_this_turn = getattr(state, "fighting_damage_plus_30_count_this_turn", 0) + 1
+        p.discard.append(p.hand.pop(hand_index))
+        n = state.fighting_damage_plus_30_count_this_turn
+        state.log(f"{state.player_name(state.current_player)}: パワープロテインを使用 → この番、自分の闘ポケモンのワザダメージ+{30 * n}（{n} 枚目）")
+        return True
+    if cid == "faitogongu" and p.deck:
+        fighting_basic = [c for c in p.deck if is_pokemon(c) and getattr(c, "pokemon_type", None) == "fighting" and getattr(c, "evolution_stage", None) == "basic"]
+        fighting_energy = [c for c in p.deck if is_energy(c) and (getattr(c, "energy_type", None) == "fighting" or getattr(c, "id", "") in ("basic-energy-fighting", "kihontouenerugi"))]
+        candidates = fighting_basic + fighting_energy
+        if candidates:
+            weights = state.get_weights_for_player(state.current_player)
+            deck_index = state.deck_indices[state.current_player] if state.deck_indices else 0
+            has_energy_in_hand = any(is_energy(c) for c in p.hand)
+            def _faitogongu_score(c):
+                w = get_faitogongu_fetch_weight(weights, c, deck_index)
+                if not has_energy_in_hand and is_energy(c):
+                    w += 1000.0
+                w += get_fetch_bonus_for_card(deck_index, getattr(c, "id", "") or "")
+                return (w, -p.deck.index(c))
+            chosen = max(candidates, key=_faitogongu_score)
+            p.deck.remove(chosen)
+            p.hand.append(chosen)
+            state.drawn_this_turn.append(chosen)
+            random.shuffle(p.deck)
+            p.discard.append(p.hand.pop(hand_index))
+            state.log(f"{state.player_name(state.current_player)}: ファイトゴングを使用 → 山札から {_card_label(chosen)} を手札に加えた")
+            return True
+        return False
+    if cid == "pokepaddo" and p.deck:
+        no_rule = [c for c in p.deck if is_pokemon(c) and not getattr(c, "has_rule", False)]
+        if no_rule:
+            weights = state.get_weights_for_player(state.current_player)
+            deck_index = state.deck_indices[state.current_player] if state.deck_indices else 0
+            def _pokepaddo_score(c):
+                w = get_pokepaddo_fetch_weight(weights, c, deck_index) + get_fetch_bonus_for_card(deck_index, getattr(c, "id", "") or "")
+                return (w, -p.deck.index(c))
+            chosen = max(no_rule, key=_pokepaddo_score)
+            p.deck.remove(chosen)
+            p.hand.append(chosen)
+            state.drawn_this_turn.append(chosen)
+            random.shuffle(p.deck)
+            p.discard.append(p.hand.pop(hand_index))
+            state.log(f"{state.player_name(state.current_player)}: ポケパッドを使用 → 山札から {_card_label(chosen)} を手札に加えた")
+            return True
+        return False
+    if cid == "yorunotanka":
+        pokemon_or_basic = [c for c in p.discard if is_pokemon(c) or (is_energy(c) and getattr(c, "energy_type", None) in _BASIC_ENERGY_TYPES)]
+        if pokemon_or_basic:
+            chosen = pokemon_or_basic[0]
+            p.discard.remove(chosen)
+            p.hand.append(chosen)
+            p.discard.append(p.hand.pop(hand_index))
+            state.log(f"{state.player_name(state.current_player)}: 夜のタンカを使用 → トラッシュから {_card_label(chosen)} を手札に加えた")
+            return True
+        return False
     if cid == "pokemonkixyatchixya":
         opp = state.defending_player_state()
         if opp.bench and opp.active and _flip_coin():
@@ -428,6 +515,66 @@ def use_pokemon_swap(state: GameState, hand_index: int, bench_index: int) -> boo
     return True
 
 
+def _field_has_pokemon(p: PlayerState, name_ja: str, *id_prefixes: str) -> bool:
+    """自分のバトル場またはベンチに、名前が name_ja または id が id_prefixes のいずれかで始まるポケモンがいるか。"""
+    def match(card) -> bool:
+        if not card:
+            return False
+        n = (getattr(card, "name", "") or getattr(card, "name_ja", "") or "").strip()
+        cid = (getattr(card, "id", "") or "").strip()
+        if n == name_ja:
+            return True
+        for prefix in id_prefixes:
+            if cid == prefix or cid.startswith(prefix + "-") or cid.startswith(prefix + "_"):
+                return True
+        return False
+    if p.active and match(p.active.card):
+        return True
+    for bp in p.bench:
+        if bp and match(bp.card):
+            return True
+    return False
+
+
+def _try_use_ability_runasaikuru(state: GameState) -> bool:
+    """
+    ルナトーンの特性「ルナサイクル」を宣言して使う。
+    条件: 自分の場にルナトーンとソルロックがいる、手札に基本闘エネルギーが 1 枚以上、この番まだルナサイクル未使用。
+    効果: 手札から基本闘エネルギー 1 枚をトラッシュし、山札を 3 枚引く。
+    宣言して使う特性は先行 1 ターン目でも使える（サポートと異なる）。
+    """
+    if state.ability_declared_this_turn == "ルナサイクル":
+        return False
+    p = state.active_player_state()
+    if not _field_has_pokemon(p, "ルナトーン", "runaton"):
+        return False
+    if not _field_has_pokemon(p, "ソルロック", "sorurokku-mc-372", "sorurokku"):
+        return False
+    energy_idx = None
+    for i, c in enumerate(p.hand):
+        if not is_energy(c):
+            continue
+        eid = getattr(c, "id", "") or ""
+        etype = getattr(c, "energy_type", None)
+        if eid in ("basic-energy-fighting", "kihontouenerugi") or etype == "fighting":
+            energy_idx = i
+            break
+    if energy_idx is None:
+        return False
+    trashed = p.hand.pop(energy_idx)
+    p.discard.append(trashed)
+    drawn = p.draw(3)
+    p.hand.extend(drawn)
+    state.drawn_this_turn.extend(drawn)
+    state.ability_declared_this_turn = "ルナサイクル"
+    drawn_names = ", ".join(_card_label(c) for c in drawn)
+    state.log(
+        f"{state.player_name(state.current_player)}: ルナトーンの特性「ルナサイクル」を使用 → "
+        f"手札の基本闘エネルギー 1 枚をトラッシュし、山札から 3 枚ドロー → [{drawn_names}]"
+    )
+    return True
+
+
 def use_support(state: GameState, hand_index: int) -> bool:
     """
     サポートカードを使用。1 ターンに 1 枚まで。先行の 1 ターン目は使用不可。
@@ -441,10 +588,58 @@ def use_support(state: GameState, hand_index: int) -> bool:
         return False
     if state.support_used_this_turn:
         return False
-    if _is_first_player_first_turn(state):
+    cid = getattr(card, "id", "")
+    if _is_first_player_first_turn(state) and cid != "zeiyu":
         return False
     effect = getattr(card, "effect", "")
-    cid = getattr(card, "id", "")
+    if cid == "zeiyu":
+        used = p.hand.pop(hand_index)
+        p.discard.extend(p.hand)
+        p.hand.clear()
+        p.discard.append(used)
+        drawn = p.draw(5)
+        p.hand.extend(drawn)
+        state.drawn_this_turn.extend(drawn)
+        state.support_used_this_turn = True
+        drawn_names = ", ".join(_card_label(c) for c in drawn)
+        state.log(f"{state.player_name(state.current_player)}: ゼイユを使用 → 手札をすべてトラッシュし、山札から 5 枚ドロー → [{drawn_names}]")
+        return True
+    if cid == "bosunoshirei":
+        opp = state.defending_player_state()
+        if not opp.bench or not opp.active:
+            return False
+        idx = random.randint(0, len(opp.bench) - 1)
+        opp.active, opp.bench[idx] = opp.bench[idx], opp.active
+        p.discard.append(p.hand.pop(hand_index))
+        state.support_used_this_turn = True
+        state.log(f"{state.player_name(state.current_player)}: ボスの指令を使用 → 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
+        return True
+    if cid == "riirienokesshin":
+        used_card = p.hand[hand_index]
+        rest = [p.hand[j] for j in range(len(p.hand)) if j != hand_index]
+        p.deck.extend(rest)
+        p.hand.clear()
+        random.shuffle(p.deck)
+        n_draw = 8 if (len(p.prize_pile) == 6) else 6
+        drawn = p.draw(min(n_draw, len(p.deck)))
+        p.hand.extend(drawn)
+        state.drawn_this_turn.extend(drawn)
+        p.discard.append(used_card)
+        state.support_used_this_turn = True
+        drawn_names = ", ".join(_card_label(c) for c in drawn)
+        state.log(f"{state.player_name(state.current_player)}: リーリエの決心を使用 → 手札を山札にもどして切り、山札から {len(drawn)} 枚ドロー → [{drawn_names}]")
+        return True
+    if cid == "angoumanianokaidoku":
+        if len(p.deck) < 2:
+            return False
+        top2 = [p.deck.pop(0) for _ in range(2)]
+        p.deck.extend(reversed(top2))
+        p.discard.append(p.hand.pop(hand_index))
+        state.support_used_this_turn = True
+        new_top = _card_label(top2[1])
+        new_second = _card_label(top2[0])
+        state.log(f"{state.player_name(state.current_player)}: 暗号マニアの解読を使用 → 山札の上 2 枚の順序を入れ替えた（一番上: {new_top}、2 枚目: {new_second}）")
+        return True
     if cid == "tanpankozou":
         n_hand = len(p.hand)
         used_card = p.hand[hand_index]
@@ -507,6 +702,34 @@ def use_support(state: GameState, hand_index: int) -> bool:
         drawn_names = ", ".join(_card_label(c) for c in drawn)
         state.log(f"{state.player_name(state.current_player)}: キハダを使用 → 手札の 1 枚を山札の下にもどし、{need} 枚ドロー → [{drawn_names}]（手札 {len(p.hand)} 枚）")
         return True
+    if cid == "mitsurunoomoiyari":
+        ex_target = None
+        if p.active and (getattr(p.active.card, "is_ex", False) or "ex" in (getattr(p.active.card, "name", "") or "")):
+            ex_target = p.active
+        if ex_target is None:
+            for bp in p.bench:
+                if getattr(bp.card, "is_ex", False) or "ex" in (getattr(bp.card, "name", "") or ""):
+                    ex_target = bp
+                    break
+        if ex_target is None:
+            return False
+        before_hp = ex_target.hp
+        cap = get_effective_max_hp(state, ex_target.card)
+        ex_target.card.hp = cap
+        nrg_count = ex_target.attached_energy
+        types = getattr(ex_target, "attached_energy_types", [])[:]
+        ex_target.attached_energy = 0
+        ex_target.attached_energy_types = []
+        for _ in range(nrg_count):
+            try:
+                c = get_card_by_id("basic-energy", f"mitsuru-{id(state)}-{len(p.hand)}")
+                p.hand.append(c)
+            except ValueError:
+                pass
+        p.discard.append(p.hand.pop(hand_index))
+        state.support_used_this_turn = True
+        state.log(f"{state.player_name(state.current_player)}: ミツルの思いやりを使用 → {ex_target.card.name} のHPを全回復（{before_hp} → {cap}）、ついているエネルギー {nrg_count} 個を手札にもどした")
+        return True
     if effect == "draw_3" or cid in ("nemo", "nemokako", "nemomirai"):
         n = getattr(card, "draw_count", 3)
         drawn = p.draw(n)
@@ -520,3 +743,31 @@ def use_support(state: GameState, hand_index: int) -> bool:
         )
         return True
     return False
+
+
+def play_stadium(state: GameState, hand_index: int) -> bool:
+    """
+    スタジアムを手札から場に出す。1 ターンに 1 枚まで。
+    別名のスタジアムを出すとそれまで出ていたスタジアムはトラッシュ（現在のプレイヤーのトラッシュへ）。
+    出ているスタジアムと同じ名前のスタジアムは出せない。
+    """
+    p = state.active_player_state()
+    if hand_index < 0 or hand_index >= len(p.hand):
+        return False
+    card = p.hand[hand_index]
+    if not is_stadium(card):
+        return False
+    if state.stadium_played_this_turn:
+        return False
+    current_name = (getattr(card, "name", "") or "").strip()
+    if state.stadium is not None:
+        in_play_name = (getattr(state.stadium, "name", "") or "").strip()
+        if in_play_name == current_name:
+            return False
+        p.discard.append(state.stadium)
+        state.log(f"{state.player_name(state.current_player)}: スタジアム {_card_label(state.stadium)} をトラッシュ")
+    p.hand.pop(hand_index)
+    state.stadium = card
+    state.stadium_played_this_turn = True
+    state.log(f"{state.player_name(state.current_player)}: スタジアム {_card_label(card)} を場に出す")
+    return True
