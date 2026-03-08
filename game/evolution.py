@@ -1,4 +1,6 @@
-"""進化（進化適用・進化可否判定・evolve_pokemon）。"""
+"""進化（進化適用・進化可否判定・evolve_pokemon）。進化したとき 1 回使える特性のトリガーも扱う。"""
+import random
+
 from card import PokemonCard, is_pokemon
 
 from .state import (
@@ -31,6 +33,29 @@ def _apply_evolution(
     target.evolved_this_turn = True
     _clear_status(target)
     state.log(f"{log_prefix}{old_name} を {evolved.name} に進化（HP {target.hp}/{target.max_hp}）")
+
+
+def _trigger_ability_when_evolved(state: GameState, target: BattlePokemon) -> None:
+    """
+    進化したポケモンの「自分の番に手札から出して進化させたとき 1 回使える」特性を発動する。
+    例: ハリテヤマのどすこいキャッチャー（相手のベンチ 1 匹をバトルポケモンと入れ替え）。
+    """
+    if state.ability_used_this_turn:
+        return
+    ability_name = (getattr(target.card, "ability_name", None) or "").strip()
+    if not ability_name:
+        return
+    if ability_name == "どすこいキャッチャー":
+        opp = state.defending_player_state()
+        if not opp.bench or not opp.active:
+            return
+        bench_idx = random.randint(0, len(opp.bench) - 1)
+        opp.active, opp.bench[bench_idx] = opp.bench[bench_idx], opp.active
+        state.ability_used_this_turn = True
+        state.log(
+            f"{state.player_name(state.current_player)}: {target.card.name} の特性「どすこいキャッチャー」→ "
+            f"相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）"
+        )
 
 
 def _can_evolve_onto(field_card, evolution_card) -> bool:
@@ -72,6 +97,7 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
             f"{state.player_name(state.current_player)}: ",
         )
         p.hand.pop(hand_index)
+        _trigger_ability_when_evolved(state, p.active)
         return True
     if bench_index < 0 or bench_index >= len(p.bench):
         return False
@@ -87,4 +113,5 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
         f"{state.player_name(state.current_player)}: ベンチの ",
     )
     p.hand.pop(hand_index)
+    _trigger_ability_when_evolved(state, bench_pokemon)
     return True
