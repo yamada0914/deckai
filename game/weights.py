@@ -10,28 +10,19 @@ class GameWeights:
     各選択で card_id ごとに加算するバイアス。
     キーが無い場合は 0 として扱い、重みなし＝現状ルールになる。
     """
-    # エネルギー付与先（付与するポケモンの card_id）
     w_energy_attach: dict[str, float] = field(default_factory=dict)
-    # にげる先（逃げ先のポケモンの card_id）
     w_retreat_target: dict[str, float] = field(default_factory=dict)
-    # いれかえでバトル場に出すポケモンの card_id
     w_swap_target: dict[str, float] = field(default_factory=dict)
-    # きぜつ時に繰り出すポケモンの card_id
     w_promote: dict[str, float] = field(default_factory=dict)
-    # 技選択（キーは "card_id|attack_name"）
     w_attack: dict[str, float] = field(default_factory=dict)
-    # ポケモンキャッチャーで引き出す相手ベンチの card_id
     w_catcher_target: dict[str, float] = field(default_factory=dict)
-    # サポートを使用する優先順（card_id。高いほど先に試す）
     w_support_use: dict[str, float] = field(default_factory=dict)
-    # グッズを使用する優先順（card_id）
     w_goods_use: dict[str, float] = field(default_factory=dict)
-    # 進化をのせる先のポケモン card_id
     w_evolve_onto: dict[str, float] = field(default_factory=dict)
-    # どうぐを付ける先のポケモン card_id
     w_tool_attach: dict[str, float] = field(default_factory=dict)
-    # ハイパーボールで捨てる 2 枚の選び方（card_id。高いほど捨てやすい＝優先して捨てる）
     w_haipaboru_discard: dict[str, float] = field(default_factory=dict)
+    w_pokepaddo_fetch: dict[str, float] = field(default_factory=dict)
+    w_faitogongu_fetch: dict[str, float] = field(default_factory=dict)
 
 
 def _card_id(card) -> str:
@@ -108,6 +99,34 @@ def get_haipaboru_discard_weight(weights: "GameWeights | None", card) -> float:
     return weights.w_haipaboru_discard.get(_card_id(card), 0.0)
 
 
+def get_pokepaddo_fetch_weight(weights: "GameWeights | None", card, deck_index: int) -> float:
+    """
+    ポケパッドで山札から取ってくるポケモンを選ぶときの重み。高いほど選ばれやすい。
+    キーはまず "deck_index|card_id"（デッキごと）、無ければ "card_id"（共通）で参照する。
+    """
+    if weights is None:
+        return 0.0
+    cid = _card_id(card)
+    key_deck = f"{deck_index}|{cid}"
+    if key_deck in weights.w_pokepaddo_fetch:
+        return weights.w_pokepaddo_fetch[key_deck]
+    return weights.w_pokepaddo_fetch.get(cid, 0.0)
+
+
+def get_faitogongu_fetch_weight(weights: "GameWeights | None", card, deck_index: int) -> float:
+    """
+    ファイトゴングで山札から取ってくるカード（闘たね or 基本闘エネルギー）を選ぶときの重み。高いほど選ばれやすい。
+    キーはまず "deck_index|card_id"、無ければ "card_id" で参照する。
+    """
+    if weights is None:
+        return 0.0
+    cid = _card_id(card)
+    key_deck = f"{deck_index}|{cid}"
+    if key_deck in weights.w_faitogongu_fetch:
+        return weights.w_faitogongu_fetch[key_deck]
+    return weights.w_faitogongu_fetch.get(cid, 0.0)
+
+
 def save_weights(weights: GameWeights, path: str | Path) -> None:
     """重みを JSON で保存する。"""
     path = Path(path)
@@ -123,6 +142,8 @@ def save_weights(weights: GameWeights, path: str | Path) -> None:
         "w_evolve_onto": weights.w_evolve_onto,
         "w_tool_attach": weights.w_tool_attach,
         "w_haipaboru_discard": weights.w_haipaboru_discard,
+        "w_pokepaddo_fetch": weights.w_pokepaddo_fetch,
+        "w_faitogongu_fetch": weights.w_faitogongu_fetch,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -147,6 +168,8 @@ def scale_weights(weights: GameWeights, factor: float) -> GameWeights:
         w_evolve_onto=_scale(weights.w_evolve_onto),
         w_tool_attach=_scale(weights.w_tool_attach),
         w_haipaboru_discard=_scale(weights.w_haipaboru_discard),
+        w_pokepaddo_fetch=_scale(weights.w_pokepaddo_fetch),
+        w_faitogongu_fetch=_scale(weights.w_faitogongu_fetch),
     )
 
 
@@ -167,5 +190,7 @@ def load_weights(path: str | Path, scale: float = 1.0) -> GameWeights:
         w_evolve_onto=data.get("w_evolve_onto", {}),
         w_tool_attach=data.get("w_tool_attach", {}),
         w_haipaboru_discard=data.get("w_haipaboru_discard", {}),
+        w_pokepaddo_fetch=data.get("w_pokepaddo_fetch", {}),
+        w_faitogongu_fetch=data.get("w_faitogongu_fetch", {}),
     )
     return scale_weights(w, scale) if scale != 1.0 else w

@@ -5,8 +5,6 @@
 from .state import GameState, PRIZE_COUNT
 from .damage import _max_effective_damage_for_attacker
 
-
-# 中級者評価用の重み（実験で調整可能）
 PRIZE_WEIGHT = 3.0
 HAND_WEIGHT = 0.5
 ENERGY_WEIGHT = 0.8
