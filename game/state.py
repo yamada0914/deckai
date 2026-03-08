@@ -9,8 +9,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Callable, Literal
 
-from card import PokemonCard, get_card_by_id, is_basic_pokemon, is_energy, is_goods, is_pokemon, is_stage2_pokemon, is_support
+from card import PokemonCard, get_card_by_id, is_basic_pokemon, is_energy, is_goods, is_pokemon, is_stadium, is_stage2_pokemon, is_support
 from deck import STARTING_HAND_SIZE, create_deck, create_deck_from_deck_code, get_deck_name
+from .deck_strategies import get_priority_setup_pokemon_ids
 from .weights import GameWeights, get_promote_weight
 
 BENCH_SIZE = 5
@@ -48,6 +49,7 @@ class BattlePokemon:
     def hp(self, value: int) -> None:
         self.card.hp = min(value, self.card.max_hp)
 
+
     @property
     def max_hp(self) -> int:
         return self.card.max_hp
@@ -77,6 +79,21 @@ class PlayerState:
 
 def _card_label(card) -> str:
     return getattr(card, "name", card.__class__.__name__)
+
+
+def get_effective_max_hp(state: "GameState", card: PokemonCard) -> int:
+    """
+    スタジアム等を反映した実効最大 HP。例：グラビティーマウンテン場のとき 2 進化は -30。
+    """
+    base = getattr(card, "max_hp", 0) or 0
+    stadium = getattr(state, "stadium", None)
+    if stadium is not None and is_stadium(stadium):
+        sid = (getattr(stadium, "id", "") or "").strip()
+        sname = (getattr(stadium, "name", "") or "").strip()
+        if sid == "gurabiteiimaunten" or "グラビティーマウンテン" in sname:
+            if getattr(card, "evolution_stage", None) == "stage2" or is_stage2_pokemon(card):
+                return max(0, base - 30)
+    return base
 
 
 def _basic_energy_id(energy_type: str) -> str:
@@ -187,7 +204,12 @@ class GameState:
     deck_indices: tuple = (0, 1)
     shippegaeshi_120_used: bool = False
     support_used_this_turn: bool = False
+    ability_used_this_turn: bool = False
+    ability_declared_this_turn: str | None = None
+    stadium_played_this_turn: bool = False
+    fighting_damage_plus_30_count_this_turn: int = 0
     energy_attached_this_turn: bool = False
+    retreat_used_this_turn: bool = False
     this_turn_attack_name: str | None = None
     this_turn_attack_actor_id: str | None = None
     last_turn_attack_name: list = field(default_factory=lambda: [None, None])
@@ -197,11 +219,9 @@ class GameState:
     record_frame_fn: Callable[["GameState"], None] | None = field(default=None, repr=False)
     turn_when_disabled_attack: list = field(default_factory=lambda: [None, None])
     weights: GameWeights | None = None
-    # プレイヤーごとの重み（指定時はこちらを優先）。未指定なら weights を共通で使う。
     weights_by_player: list = field(default_factory=lambda: [None, None], repr=False)
-    # 学習用：選択の記録。各要素は {"type", "player", "turn", "card_id"?, "attack_name"?}
+    stadium: object | None = None
     choice_log: list = field(default_factory=list, repr=False)
-    # 攻撃選択で minimax（2 手読み）を使うか。False だと 1 手評価のみ（学習用 --fast で短時間化）
     use_attack_minimax: bool = True
 
     def get_weights_for_player(self, player_index: int) -> GameWeights | None:
@@ -371,22 +391,32 @@ def _put_one_pokemon_active(player: PlayerState) -> bool:
 def _put_one_pokemon_on_bench(
     player: PlayerState, state: GameState, player_index: int, *, log: bool = True
 ) -> bool:
-    """手札からたねポケモン（進化ポケモンでない）1 体をベンチに出す（ベンチが 5 体未満のとき）。"""
+    """手札からたねポケモン（進化ポケモンでない）1 体をベンチに出す（ベンチが 5 体未満のとき）。デッキ戦略で優先ポケモンがあればそれを先に出す。"""
     if len(player.bench) >= BENCH_SIZE:
         return False
+    deck_index = state.deck_indices[player_index] if state.deck_indices else 0
+    priority_ids = set(get_priority_setup_pokemon_ids(deck_index))
     existing_names = {getattr(bp.card, "name", "") for bp in player.bench}
+    cands_priority: list[tuple[int, object]] = []
+    cands_other: list[tuple[int, object]] = []
     for i, c in enumerate(player.hand):
         if is_pokemon(c) and not c.evolves_from:
             if getattr(c, "name", "") in existing_names:
                 continue
-            p = c.copy()
-            bp = BattlePokemon(card=p)
-            bp.put_on_bench_this_turn = True
-            player.bench.append(bp)
-            player.hand.pop(i)
-            if log:
-                state.log(f"{state.player_name(player_index)}: ベンチに {p.name} を出す（ベンチ {len(player.bench)} 体）")
-            return True
+            cid = getattr(c, "id", "") or ""
+            if cid in priority_ids:
+                cands_priority.append((i, c))
+            else:
+                cands_other.append((i, c))
+    for i, c in cands_priority + cands_other:
+        p = c.copy()
+        bp = BattlePokemon(card=p)
+        bp.put_on_bench_this_turn = True
+        player.bench.append(bp)
+        player.hand.pop(i)
+        if log:
+            state.log(f"{state.player_name(player_index)}: ベンチに {p.name} を出す（ベンチ {len(player.bench)} 体）")
+        return True
     return False
 
 
@@ -400,9 +430,7 @@ def _fill_bench_from_hand(
         pass
 
 
-# 繰り出しスコアで can_ko を HP より優先するためのスケール（HP は数百程度）
 _PROMOTE_CAN_KO_SCALE = 10000
-# 手札に進化がある・次ターン強い攻撃が打てそうなときのボーナス
 _PROMOTE_EVOLUTION_READY_SCALE = 3000
 _PROMOTE_DAMAGE_POTENTIAL_SCALE = 10
 
@@ -427,14 +455,12 @@ def _promote_from_bench(player: PlayerState, state: GameState, player_index: int
         )
         base = (_PROMOTE_CAN_KO_SCALE if can_ko else 0) + bp.hp
 
-        # 手札にのせられる進化があればボーナス（次ターン進化して攻撃したい）
         evolution_bonus = 0.0
         for c in player.hand:
             if is_pokemon(c) and getattr(c, "evolves_from", None) and _can_evolve_onto(bp.card, c):
                 evolution_bonus = _PROMOTE_EVOLUTION_READY_SCALE
                 break
 
-        # 手札のエネルギーを 1 つ付けたときの有効ダメージで「次ターン攻撃力」を加味
         damage_potential = 0
         types = getattr(bp, "attached_energy_types", [])
         for c in player.hand:
@@ -560,10 +586,14 @@ def _check_game_end(state: GameState) -> bool:
 
 
 def start_turn(state: GameState) -> None:
-    """ターン開始：ドロー 1 枚、サポート・エネルギー付与未使用にリセット。ねむりならコインで解除判定。"""
+    """ターン開始：ドロー 1 枚、サポート・スタジアム・エネルギー付与未使用にリセット。ねむりならコインで解除判定。"""
     state.support_used_this_turn = False
+    state.ability_used_this_turn = False
+    state.ability_declared_this_turn = None
+    state.stadium_played_this_turn = False
+    state.fighting_damage_plus_30_count_this_turn = 0
     state.energy_attached_this_turn = False
-    # our_ko_by_damage_last_turn は「前の相手の番に自分がきぜつしたか」なので、自分のターン終了時にクリア（end_turn で実施）
+    state.retreat_used_this_turn = False
     state.drawn_this_turn = []
     p = state.active_player_state()
     turn_label = _turn_label(state)
