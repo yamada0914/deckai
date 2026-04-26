@@ -1,16 +1,44 @@
 [
   {
     "card_type": "energy",
-    "name_ja": "ロックエネルギー",
-    "energy_type": null,
+    "name_ja": "ロック闘エネルギー",
+    "energy_type": "fighting",
     "_source_image": "049713_E_ROKKUTOUENERUGI.jpg",
-    "id": "rokkutouenerugi"
+    "id": "rokkutoukenenerugi"
+  },
+  {
+    "card_type": "energy",
+    "name_ja": "基本悪エネルギー",
+    "energy_type": "darkness",
+    "_source_image": "049465_E_KIHONAKUENERUGI.jpg",
+    "id": "kihonakuenerugi"
+  },
+  {
+    "card_type": "energy",
+    "name_ja": "基本炎エネルギー",
+    "energy_type": "fire",
+    "_source_image": "049460_E_KIHONHONOOENERUGI.jpg",
+    "id": "kihonhonooenerugi"
+  },
+  {
+    "card_type": "energy",
+    "name_ja": "基本超エネルギー",
+    "energy_type": "psychic",
+    "_source_image": "049463_E_KIHONCHIXYOUENERUGI.jpg",
+    "id": "kihonchixyouenerugi"
   },
   {
     "card_type": "energy",
     "name_ja": "基本闘エネルギー",
     "energy_type": "fighting",
     "_source_image": "042784_E_KIHONTOUENERUGI.jpg",
+    "id": "basic-energy-fighting"
+  },
+  {
+    "card_type": "energy",
+    "name_ja": "基本闘エネルギー",
+    "energy_type": "fighting",
+    "_source_image": "040096_E_KIHONTOUENERUGI.jpg",
     "id": "kihontouenerugi"
   },
   {

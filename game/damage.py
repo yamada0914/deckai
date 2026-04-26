@@ -9,6 +9,18 @@ from .state import (
 )
 
 
+def _bench_has_lunatone(p: PlayerState) -> bool:
+    """コスモビーム条件: 自分のベンチにルナトーンがいる（バトル場のみでは不可）。"""
+    for bp in p.bench or []:
+        if not bp or not bp.card:
+            continue
+        n = (getattr(bp.card, "name", "") or "").strip()
+        cid = (getattr(bp.card, "id", "") or "").strip()
+        if n == "ルナトーン" or cid.startswith("runaton"):
+            return True
+    return False
+
+
 def _attack_damage_for_eval(atk) -> int:
     """技のダメージを評価用に返す。コイン技の場合は期待値（表0.5×回数×damage_per_coin）。"""
     cf = getattr(atk, "coin_flips", 0)
@@ -24,22 +36,25 @@ def _effective_damage_to_defender(
     base_damage: int,
     state: GameState | None = None,
     attacker_bp: BattlePokemon | None = None,
+    *,
+    ignore_weakness_resistance: bool = False,
 ) -> int:
     """弱点・抵抗力・どうぐ・パワープロテイン・マキシマムベルトを考慮した、守備側が受けるダメージを返す。"""
     defender_card = defender.card
     damage = base_damage
-    if (
-        getattr(defender_card, "weakness", None)
-        and getattr(attacker_card, "pokemon_type", None)
-        and defender_card.weakness == attacker_card.pokemon_type
-    ):
-        damage *= 2
-    if (
-        getattr(defender_card, "resistance", None)
-        and getattr(attacker_card, "pokemon_type", None)
-        and defender_card.resistance == attacker_card.pokemon_type
-    ):
-        damage = max(0, damage - 30)
+    if not ignore_weakness_resistance:
+        if (
+            getattr(defender_card, "weakness", None)
+            and getattr(attacker_card, "pokemon_type", None)
+            and defender_card.weakness == attacker_card.pokemon_type
+        ):
+            damage *= 2
+        if (
+            getattr(defender_card, "resistance", None)
+            and getattr(attacker_card, "pokemon_type", None)
+            and defender_card.resistance == attacker_card.pokemon_type
+        ):
+            damage = max(0, damage - 30)
     tool = getattr(defender, "attached_tool", None)
     if tool and getattr(tool, "is_tool", False) and getattr(tool, "tool_damage_reduce", 0) > 0:
         cond = getattr(tool, "tool_condition_type", None)
@@ -88,10 +103,15 @@ def _opponent_max_effective_damage(state: GameState) -> int:
             opp.active.attached_energy, types,
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
+            if atk.name == "コスモビーム" and not _bench_has_lunatone(opp):
+                continue
             base = _attack_damage_for_eval(atk)
             if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
                 base += 90
-            eff = _effective_damage_to_defender(opp.active.card, p.active, base, state=state, attacker_bp=opp.active)
+            ign = getattr(atk, "damage_ignores_weakness_resistance", False)
+            eff = _effective_damage_to_defender(
+                opp.active.card, p.active, base, state=state, attacker_bp=opp.active, ignore_weakness_resistance=ign
+            )
             max_dmg = max(max_dmg, eff)
     return max_dmg
 
@@ -131,12 +151,17 @@ def _our_max_effective_damage(state: GameState) -> int:
             p.active.attached_energy, types,
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
+            if atk.name == "コスモビーム" and not _bench_has_lunatone(p):
+                continue
             base = _attack_damage_for_eval(atk)
             if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
                 base += 90
             if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[state.current_player]:
                 base += 120
-            eff = _effective_damage_to_defender(p.active.card, opp.active, base, state=state, attacker_bp=p.active)
+            ign = getattr(atk, "damage_ignores_weakness_resistance", False)
+            eff = _effective_damage_to_defender(
+                p.active.card, opp.active, base, state=state, attacker_bp=p.active, ignore_weakness_resistance=ign
+            )
             max_dmg = max(max_dmg, eff)
     return max_dmg
 
@@ -159,12 +184,17 @@ def _max_effective_damage_for_attacker(
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
             continue
+        if atk.name == "コスモビーム" and not _bench_has_lunatone(state.players[player_index]):
+            continue
         base = _attack_damage_for_eval(atk)
         if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
             base += 90
         if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[player_index]:
             base += 120
-        eff = _effective_damage_to_defender(attacker_bp.card, defender_bp, base, state=state, attacker_bp=attacker_bp)
+        ign = getattr(atk, "damage_ignores_weakness_resistance", False)
+        eff = _effective_damage_to_defender(
+            attacker_bp.card, defender_bp, base, state=state, attacker_bp=attacker_bp, ignore_weakness_resistance=ign
+        )
         max_dmg = max(max_dmg, eff)
     return max_dmg
 
@@ -194,11 +224,18 @@ def _max_effective_damage_if_attach(
             atk.energy_cost, getattr(atk, "energy_cost_typed", None),
         ):
             continue
+        if atk.name == "コスモビーム" and not _bench_has_lunatone(state.players[current_player]):
+            continue
         base = _attack_damage_for_eval(atk)
         if atk.name == "しっぺがえし" and len(opp.prize_pile) == 1:
             base += 90
         if atk.name == "アベンジナックル" and state.our_ko_by_damage_last_turn[current_player]:
             base += 120
-        eff = _effective_damage_to_defender(attacker_card, defender, base) if defender else base
+        ign = getattr(atk, "damage_ignores_weakness_resistance", False)
+        eff = (
+            _effective_damage_to_defender(attacker_card, defender, base, ignore_weakness_resistance=ign)
+            if defender
+            else base
+        )
         max_eff = max(max_eff, eff)
     return max_eff

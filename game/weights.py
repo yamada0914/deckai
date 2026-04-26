@@ -9,6 +9,7 @@ class GameWeights:
     """
     各選択で card_id ごとに加算するバイアス。
     キーが無い場合は 0 として扱い、重みなし＝現状ルールになる。
+    学習はまず技選択 (w_attack) のみ行うことを推奨。他は後から追加可能。
     """
     w_energy_attach: dict[str, float] = field(default_factory=dict)
     w_retreat_target: dict[str, float] = field(default_factory=dict)
@@ -23,6 +24,7 @@ class GameWeights:
     w_haipaboru_discard: dict[str, float] = field(default_factory=dict)
     w_pokepaddo_fetch: dict[str, float] = field(default_factory=dict)
     w_faitogongu_fetch: dict[str, float] = field(default_factory=dict)
+    w_pokepaddo_duplicate_penalty: dict[str, float] = field(default_factory=dict)
 
 
 def _card_id(card) -> str:
@@ -30,10 +32,20 @@ def _card_id(card) -> str:
     return getattr(card, "id", None) or getattr(card, "name", "") or ""
 
 
-def get_energy_attach_weight(weights: "GameWeights | None", card) -> float:
+def get_energy_attach_weight(weights: "GameWeights | None", card, *, is_first_player: bool | None = None) -> float:
+    """エネルギー付与先の重みを返す。
+    is_first_player を渡すと "first|card_id" / "second|card_id" の先行/後攻別キーを優先して参照し、
+    なければ共通キー "card_id" にフォールバックする。
+    """
     if weights is None:
         return 0.0
-    return weights.w_energy_attach.get(_card_id(card), 0.0)
+    cid = _card_id(card)
+    if is_first_player is not None:
+        prefix = "first" if is_first_player else "second"
+        prefixed = f"{prefix}|{cid}"
+        if prefixed in weights.w_energy_attach:
+            return weights.w_energy_attach[prefixed]
+    return weights.w_energy_attach.get(cid, 0.0)
 
 
 def get_retreat_target_weight(weights: "GameWeights | None", card) -> float:
@@ -68,10 +80,26 @@ def get_catcher_target_weight(weights: "GameWeights | None", card) -> float:
     return weights.w_catcher_target.get(_card_id(card), 0.0)
 
 
+SUPPORT_DRAW_BONUS: dict[str, float] = {
+    "hakasenokenkyuu": 90.0,
+    "hakasenokenkyuufutouhakase": 90.0,
+    "riirienokesshin": 85.0,
+    "tanpankozou": 70.0,
+    "zeiyu": 70.0,
+    "kihada": 50.0,
+    "nemo": 40.0,
+    "nemokako": 40.0,
+    "nemomirai": 40.0,
+}
+
+
 def get_support_use_weight(weights: "GameWeights | None", card) -> float:
     if weights is None:
         return 0.0
-    return weights.w_support_use.get(_card_id(card), 0.0)
+    cid = _card_id(card)
+    w = weights.w_support_use.get(cid, 0.0)
+    w += SUPPORT_DRAW_BONUS.get(cid, 0.0)
+    return w
 
 
 def get_goods_use_weight(weights: "GameWeights | None", card) -> float:
@@ -127,6 +155,41 @@ def get_faitogongu_fetch_weight(weights: "GameWeights | None", card, deck_index:
     return weights.w_faitogongu_fetch.get(cid, 0.0)
 
 
+def get_pokepaddo_duplicate_penalty(
+    weights: "GameWeights | None",
+    *,
+    species: str,
+    existing_count: int,
+    deck_index: int,
+) -> float:
+    """
+    ポケパッドで同種をすでに持っている場合の減点を返す。
+    キー優先順:
+      1) "{deck_index}|{species}|{bucket}"
+      2) "{species}|{bucket}"
+    bucket は "count1" または "count2plus"。
+    未設定時は従来の固定値にフォールバックする。
+    """
+    if existing_count <= 0:
+        return 0.0
+    bucket = "count1" if existing_count == 1 else "count2plus"
+    key_deck = f"{deck_index}|{species}|{bucket}"
+    key_common = f"{species}|{bucket}"
+    if weights is not None:
+        if key_deck in weights.w_pokepaddo_duplicate_penalty:
+            return float(weights.w_pokepaddo_duplicate_penalty[key_deck])
+        if key_common in weights.w_pokepaddo_duplicate_penalty:
+            return float(weights.w_pokepaddo_duplicate_penalty[key_common])
+    # 既存ロジックのデフォルト
+    if species == "リオル":
+        return -180.0 if existing_count == 1 else -520.0
+    if species in ("ルナトーン", "ソルロック"):
+        return -260.0
+    if species == "マクノシタ":
+        return -320.0
+    return -180.0
+
+
 def save_weights(weights: GameWeights, path: str | Path) -> None:
     """重みを JSON で保存する。"""
     path = Path(path)
@@ -144,6 +207,7 @@ def save_weights(weights: GameWeights, path: str | Path) -> None:
         "w_haipaboru_discard": weights.w_haipaboru_discard,
         "w_pokepaddo_fetch": weights.w_pokepaddo_fetch,
         "w_faitogongu_fetch": weights.w_faitogongu_fetch,
+        "w_pokepaddo_duplicate_penalty": weights.w_pokepaddo_duplicate_penalty,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -170,6 +234,7 @@ def scale_weights(weights: GameWeights, factor: float) -> GameWeights:
         w_haipaboru_discard=_scale(weights.w_haipaboru_discard),
         w_pokepaddo_fetch=_scale(weights.w_pokepaddo_fetch),
         w_faitogongu_fetch=_scale(weights.w_faitogongu_fetch),
+        w_pokepaddo_duplicate_penalty=_scale(weights.w_pokepaddo_duplicate_penalty),
     )
 
 
@@ -192,5 +257,6 @@ def load_weights(path: str | Path, scale: float = 1.0) -> GameWeights:
         w_haipaboru_discard=data.get("w_haipaboru_discard", {}),
         w_pokepaddo_fetch=data.get("w_pokepaddo_fetch", {}),
         w_faitogongu_fetch=data.get("w_faitogongu_fetch", {}),
+        w_pokepaddo_duplicate_penalty=data.get("w_pokepaddo_duplicate_penalty", {}),
     )
     return scale_weights(w, scale) if scale != 1.0 else w

@@ -94,6 +94,15 @@ def get_deck_strategy(deck_index: int) -> str | None:
     return None
 
 
+def find_deck_index_by_code(deck_code: str) -> int | None:
+    """デッキコードから登録デッキのインデックスを返す。見つからなければ None。"""
+    reg = _load_registered_decks()
+    for i, entry in enumerate(reg):
+        if entry.get("deck_code") == deck_code:
+            return len(DECK_RECIPES) + i
+    return None
+
+
 def get_deck_name(deck_index: int) -> str:
     """デッキ番号の表示名を返す。0=A, 1=B, ..., 5 以降は登録デッキの name または deck_code。"""
     reg = _load_registered_decks()
@@ -146,8 +155,16 @@ def create_deck_from_recipe(recipe: dict) -> list:
     return deck
 
 
+def _normalize_card_name(name: str) -> str:
+    """カード名の正規化。（ACE SPEC）は不要なので除去。画像認識・デッキ一覧どちらもカード名のみで扱う。"""
+    s = (name or "").strip()
+    s = s.replace("(ACE SPEC)", "").strip()
+    return s.replace("  ", " ").strip() or (name or "").strip()
+
+
 def _resolve_card_id(name: str, name_to_id: dict[str, str]) -> str | None:
-    """カード名を id に解決する。name_to_id → 「〇〇ex」なら「〇〇」でも検索 → トレーナー名で検索。"""
+    """カード名を id に解決する。name_to_id → 「〇〇ex」なら「〇〇」でも検索 → トレーナー名で検索。（ACE SPEC）は正規化で除去。"""
+    name = _normalize_card_name(name)
     cid = name_to_id.get(name)
     if not cid and name.endswith("ex"):
         cid = name_to_id.get(name[:-2].strip())
@@ -188,7 +205,7 @@ def load_recipe_from_deck_code(
             cards = raw_cards
     name_to_id: dict[str, str] = {}
     for c in cards:
-        name = (c.get("name_ja") or "").strip()
+        name = _normalize_card_name(c.get("name_ja") or "")
         cid = c.get("id")
         if not name:
             continue

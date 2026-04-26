@@ -175,6 +175,8 @@ class Attack:
     poison_damage_if_poison: int = 10
     coin_flips: int = 0
     damage_per_coin: int = 0
+    # True のとき、このワザが相手に与えるダメージの弱点・抵抗力を計算しない（例: コスモビーム）
+    damage_ignores_weakness_resistance: bool = False
 
 
 @dataclass

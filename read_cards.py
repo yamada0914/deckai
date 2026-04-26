@@ -233,11 +233,19 @@ def fetch_deck_list(
     return cards
 
 
+def _normalize_card_name_ja(name_ja: str) -> str:
+    """カード名の正規化。画像認識・デッキ一覧では（ACE SPEC）は不要なのでカード名のみにする。"""
+    s = (name_ja or "").strip()
+    s = s.replace("(ACE SPEC)", "").strip()
+    return s.replace("  ", " ").strip() or (name_ja or "").strip()
+
+
 def _parse_deck_page_html(html: str) -> list[dict]:
     """
     デッキ結果ページの HTML からカード名・枚数のリストを抽出する。
     まず cardImagesView（画像一覧）内の img alt と「N枚」をパースし、
     取れなければ cardListView（リスト）の linkCursor と「N枚」でパースする。
+    カード名は（ACE SPEC）を除いた名前で保存する。
     """
     section = re.search(r'id="cardImagesView"[^>]*>([\s\S]*?)</section>', html)
     if section:
@@ -246,7 +254,7 @@ def _parse_deck_page_html(html: str) -> list[dict]:
         counts = re.findall(r'<span>(\d+)枚</span>', block)
         if len(names) == len(counts) and names:
             return [
-                {"name_ja": name.strip(), "count": int(c)}
+                {"name_ja": _normalize_card_name_ja(name), "count": int(c)}
                 for name, c in zip(names, counts)
             ]
     section = re.search(r'id="cardListView"[^>]*>([\s\S]*?)</section>', html)
@@ -258,7 +266,7 @@ def _parse_deck_page_html(html: str) -> list[dict]:
     if len(names) != len(counts) or not names:
         return []
     return [
-        {"name_ja": name.strip(), "count": int(c)}
+        {"name_ja": _normalize_card_name_ja(name), "count": int(c)}
         for name, c in zip(names, counts)
     ]
 

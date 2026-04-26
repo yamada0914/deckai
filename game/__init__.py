@@ -19,6 +19,7 @@ from .state import (
     setup_game,
     start_turn,
     _check_game_end,
+    rules_only_for_player,
 )
 from .weights import GameWeights, load_weights, save_weights
 from .evolution import evolve_pokemon
@@ -34,6 +35,7 @@ from .attack import attack
 from .damage import _effective_damage_to_defender
 from .evaluate import evaluate_board
 from .turn import retreat, end_turn, run_turn_auto, run_game_auto
+from .policy_rules_only import pick_energy_attach_candidate
 
 __all__ = [
     "BENCH_SIZE",
@@ -61,4 +63,6 @@ __all__ = [
     "_effective_damage_to_defender",
     "load_weights",
     "save_weights",
+    "pick_energy_attach_candidate",
+    "rules_only_for_player",
 ]

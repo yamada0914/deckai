@@ -14,6 +14,13 @@
     "id": "tanpankozou"
   },
   {
+    "card_type": "goods",
+    "name_ja": "なかよしポフィン",
+    "description": "自分の山札から、HPが「70」以下のたねポケモンを2枚まで選び、ベンチに出す。そして山札を切る。",
+    "_source_image": "049364_T_NAKAYOSHIPOFUIN.jpg",
+    "id": "nakayoshipofuin"
+  },
+  {
     "card_type": "tool",
     "name_ja": "ふうせん",
     "description": "このカードをつけているポケモンは、にげるためのエネルギーが2個ぶん少なくなる。",
@@ -26,6 +33,13 @@
     "description": "自分の手札から2進化ポケモンを1枚選び、そのポケモンへと進化する自分の場のたねポケモンにのせ、1進化をとばして進化させる。（最初の自分の番や、出したばかりのポケモンには使えない。）",
     "_source_image": "043822_T_FUSHIGINAAME.jpg",
     "id": "fushiginaame"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "アカツキ",
+    "description": "自分の山札から、それぞれがらタイプの基本エネルギーを2枚まで選び、相手に見せて、どちらか1枚を手札に加え、残りのエネルギーを自分のポケモンにつける。 そして山札を切る。",
+    "_source_image": "049412_T_AKAMATSU.jpg",
+    "id": "akamatsu"
   },
   {
     "card_type": "goods",
@@ -56,11 +70,39 @@
     "id": "kihada"
   },
   {
+    "card_type": "goods",
+    "name_ja": "グラビティーマウンテン",
+    "description": "おたがいの場の2進化ポケモン全員の最大HPは、それぞれ「-30」される。",
+    "_source_image": "048705_T_GURABITEIMAUNTEN.jpg",
+    "id": "gurabiteimaunten"
+  },
+  {
     "card_type": "support",
     "name_ja": "ジャッジマン",
     "description": "おたがいのプレイヤーは、それぞれ手札をすべて山札にもどして切る。その後、それぞれ山札を4枚引く。",
     "_source_image": "043832_T_JIXYAJJIMAN.jpg",
     "id": "jixyajjiman"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ジャミングタワー",
+    "description": "おたがいのポケモン全員についている「ポケモンのどうぐ」の効果は、すべてなくなる。",
+    "_source_image": "047214_T_JIXYAMINGUTAWA.jpg",
+    "id": "jixyamingutawa"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "スペシャルレッドカード",
+    "description": "このカードは、相手のサイドの残り枚数が3枚以下のときにしか使えない。相手は相手自身の手札をすべてウラにして切り、山札の下にもどす。その後、相手は山札を3枚引く。",
+    "_source_image": "050156_T_SUPESHIXYARUREDDOKADO.png",
+    "id": "supeshiyarureddokado"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "スペシャルレッドカード",
+    "description": "このカードは、相手のサイドの残り枚数が3枚以下のときにしか使えない。\n相手は相手自身の手札をすべてウラにして切り、山札の下にもどす。その後、相手は山札を3枚引く。",
+    "_source_image": "050156_T_SUPESHIXYARUREDDOKADO.jpg",
+    "id": "supeshixyarureddokado"
   },
   {
     "card_type": "goods",
@@ -106,10 +148,38 @@
   },
   {
     "card_type": "goods",
+    "name_ja": "パワープロテイン",
+    "description": "この番、自分のポケモンが使うワザの、相手のバトルポケモンへのダメージは「+30」される。",
+    "_source_image": "048438_T_PAWAPUROTEIN.jpg",
+    "id": "pawapurotein"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ヒカリ",
+    "description": "自分の山札から「たねポケモン」「1進化ポケモン」「2進化ポケモン」を1枚ずつ選び、相手に見せて、手札に加える。そして山札を切る。",
+    "_source_image": "048417_T_HIKARI.jpg",
+    "id": "hikari"
+  },
+  {
+    "card_type": "goods",
     "name_ja": "ファイトゴング",
     "description": "自分の山札から闘タイプのたねポケモンまたは「基本闘エネルギー」を1枚選び、相手に見せて、手札に加える。そして山札を切る。",
     "_source_image": "049370_T_FUAITOGONGU.jpg",
     "id": "faitogongu"
+  },
+  {
+    "card_type": "goods",
+    "name_ja": "ファイトゴング",
+    "description": "自分の山札から闘タイプのたねポケモンまたは「基本闘エネルギー」を1枚選び、相手に見せて、手札に加える。そして山札を切る。",
+    "_source_image": "048439_T_FUAITOGONGU.jpg",
+    "id": "fuaitogongu"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ブライア",
+    "description": "このカードは、相手のサイドの残り枚数が2枚のときにしか使えない。この番、自分の「テラスタル」のポケモンが使うワザのダメージで、相手のバトルポケモンがきぜつしたなら、サイドを1枚多くとる。",
+    "_source_image": "049438_T_BURAIA.jpg",
+    "id": "buraia"
   },
   {
     "card_type": "support",
@@ -117,6 +187,13 @@
     "description": "相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。",
     "_source_image": "049440_T_BOSUNOSHIREI.jpg",
     "id": "bosunoshirei"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "ボスの指令",
+    "description": "相手のベンチポケモンを1匹選び、バトルポケモンと入れ替える。",
+    "_source_image": "042900_T_BOSUNOSHIREIAKAGI.jpg",
+    "id": "bosunoshireiakagi"
   },
   {
     "card_type": "goods",
@@ -155,10 +232,24 @@
   },
   {
     "card_type": "support",
+    "name_ja": "メイのはげまし",
+    "description": "このカードは、自分のサイドの残り枚数が、相手のサイドの残り枚数より多いときにしか使えない。自分のトラッシュから基本エネルギーを2枚まで選び、自分の2進化ポケモン1匹につける。",
+    "_source_image": "049708_T_MEINOHAGEMASHI.jpg",
+    "id": "meinohagemashi"
+  },
+  {
+    "card_type": "support",
     "name_ja": "リーリエの決心",
     "description": "自分の手札をすべて山札にもどして切る。その後、山札を6枚引く。自分のサイドの残り枚数が6枚なら、引く枚数は8枚になる。",
     "_source_image": "049609_T_RIRIENOKESSHIN.jpg",
     "id": "riirienokesshin"
+  },
+  {
+    "card_type": "support",
+    "name_ja": "リーリエの決心",
+    "description": "自分の手札をすべて山札にもどして切る。その後、山札を6枚引く。自分のサイドの残り枚数が6枚なら、引く枚数は8枚になる。",
+    "_source_image": "048443_T_RIRIENOKESSHIN.jpg",
+    "id": "ririenokesshin"
   },
   {
     "card_type": "goods",

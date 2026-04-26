@@ -220,6 +220,24 @@ python scripts/train_weights.py --merge weights/weights.json --output weights/we
 - `--min-samples`: 重みを付けるのに必要な最小選択回数
 - `--merge`: 既存の重み JSON を読み、学習結果で上書きマージ
 
+#### 2b. 一括で対戦記録＋学習（scripts/run_training_games.py）
+
+指定したデッキ組み合わせで対戦を N 回記録し、続けて `train_weights.py` で重みを学習します。デフォルトは minimax オフ（`--fast`）で短時間で回せます。
+
+```bash
+# デッキ5（アンフェアルカリオ）vs デッキ6（ベルトルカリオ）を 3000 回記録して学習
+python scripts/run_training_games.py --matchup 5v6 --n 3000 --out-dir battles/train_5v6 --weights-out weights/weights.json
+
+# 特定デッキの自己対戦で学習（例: ベルトルカリオ同士）
+python scripts/run_training_games.py --deck-code 8DcaYc-IR2SmJ-x8D8G8 --n 500 --out-dir battles/train_belt --weights-out weights/weights.json
+```
+
+- `--matchup`: `5v6`（デッキ5 vs 6）/ `5v5` / `6v6` / `all`（5v6+5v5+6v6）
+- `--deck-code`: 指定したデッキコードで同デッキ対戦（自己対戦）。`--matchup` より優先
+- `--n`: 各組み合わせの試合数
+- `--out-dir`: 対戦 pkl の保存先（既定: `battles/train_weights`）
+- `--only-train`: 記録は行わず、既存の `--out-dir` から学習のみ実行
+
 #### 3. 学習した重みで対戦する
 
 **コマンドラインから**（プロジェクトルートで実行）:
@@ -242,22 +260,38 @@ state = setup_game(seed=42, deck0=0, deck1=0, weights=w)
 winner = run_game_auto(state)
 ```
 
-#### 4. 学習の効果の見方
+#### 4. 学習の効果の見方（scripts/compare_weighted_vs_unweighted.py）
 
 **重みの内容**: `weights/weights.json` を開くと、カード ID や技ごとに正・負の数値が付いている。正の重みは「その選択をした試合で勝ちが多かった」、負は「負けが多かった」傾向。
 
-**勝率の差**: 重みあり vs 重みなしで同じ対戦を繰り返し、デッキごとの勝率を比較できる。
+**勝率の差**: 重みあり vs 重みなしで対戦を繰り返し、「重みあり側の勝率」を出して効果を確認する。
 
 ```bash
-# 各 300 試合ずつ実行し、重みなしと重みありの勝率を表示
-python scripts/compare_weights.py --n 300 --deck0 5 --deck1 6
+# 同じデッキで重みあり vs 重みなし（先行偏りは半々で打ち消し）
+python scripts/compare_weighted_vs_unweighted.py --deck 6 --n 500
+
+# 重みなしデッキ5 vs 重みありデッキ6 で検証（5v6 で学習した重みの効果を見る）
+python scripts/compare_weighted_vs_unweighted.py --deck0 5 --deck1 6 --n 1000
+
+# 重みの差を出しやすくする（技選択で minimax なし）
+python scripts/compare_weighted_vs_unweighted.py --deck0 5 --deck1 6 --n 500 --no-minimax
+
+# デッキコードで学習した内容を比較（学習と同じデッキで検証する）
+python scripts/compare_weighted_vs_unweighted.py --deck-code 8DcaYc-IR2SmJ-x8D8G8 --n 1000
+
+# learned attach（energy_attach の Q モデル）を使って比較
+python scripts/compare_weighted_vs_unweighted.py --deck-code 8DcaYc-IR2SmJ-x8D8G8 --n 1000 --q-energy-attach models/q_energy_attach_mlp.pt
 ```
 
-- 重みは**両プレイヤー**に同じようにかかるため、どちらか一方だけが強くなるわけではない。学習データの偏りや「勝ちやすい手」の傾向が、両者に反映された結果の差として出る。
+- `--deck N`: 両者ともデッキ N（同じデッキで重みあり vs 重みなし）
+- `--deck-code CODE`: デッキコード指定で両者とも同じデッキで対戦
+- `--deck0` / `--deck1`: 異なるデッキで比較。`--weights-for 1`（既定）でプレイヤー1（デッキ1側）に重みを適用
+- `--fair`（既定）: 重みあり側を先行・後攻の半々で回し、先行有利の偏りを除く
+- 重みは**重みあり側のプレイヤー**にだけかかる。比較では「重みあり側の勝率」が 50% を超えていれば、学習が効いている目安になる。
+- `--q-energy-attach PATH`: energy_attach の learned Q モデル (.pt)。指定すると付与先は top2 を Q で順位付けして選ぶ
 
 - 重みの保存・読み込み: `game.weights.save_weights(weights, path)` / `load_weights(path)`
-- 設計メモ: `docs/weight_design_energy_retreat_swap.md`
-- **重みを効かせるコツ**（同じ対戦だけで学習・スケール上げ・min-samples）: `docs/weight_usage_tips.md`
+- **重みを効かせるコツ**（同じ対戦だけで学習・スケール上げ・min-samples）: `docs/weight_usage_tips.md`（現在は技選択のみ学習）
 
 ---
 
@@ -297,6 +331,8 @@ python -m pytest tests/test_rules_01_play_supplement.py -v
 | `scripts/record_game.py` | 1 試合を実行しログ・状態を `battles/<id>/` に保存 |
 | `scripts/make_video.py` | 保存した状態から盤面フレームを描画し MP4 を出力 |
 | `scripts/train_weights.py` | 対戦 pkl から選択ごとの勝率を集計し重みを JSON で保存 |
+| `scripts/export_policy_dataset.py` | battle_states.pkl から (state, action, win) の JSONL データセットを出力 |
+| `scripts/train_q_torch.py` | JSONL データセットから Q(s,a)=P(win\|state,action) を PyTorch で学習（.pt を保存） |
 | `scripts/compare_weights.py` | 重みあり vs なしで同じ対戦を繰り返し、勝率の差を表示 |
 
 ## コアモジュール

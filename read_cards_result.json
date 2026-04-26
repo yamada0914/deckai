@@ -254,7 +254,7 @@
           "count": 2
         },
         {
-          "name_ja": "アンフェアスタンプ(ACE SPEC)",
+          "name_ja": "アンフェアスタンプ",
           "count": 1
         },
         {
@@ -266,7 +266,7 @@
           "count": 2
         },
         {
-          "name_ja": "暗号マニアの解読",
+          "name_ja": "ゼイユ",
           "count": 2
         },
         {
@@ -324,7 +324,7 @@
         },
         {
           "name_ja": "ハイパーボール",
-          "count": 3
+          "count": 4
         },
         {
           "name_ja": "ファイトゴング",
@@ -336,10 +336,14 @@
         },
         {
           "name_ja": "夜のタンカ",
-          "count": 2
+          "count": 1
         },
         {
           "name_ja": "ポケモンいれかえ",
+          "count": 1
+        },
+        {
+          "name_ja": "スペシャルレッドカード",
           "count": 1
         },
         {
@@ -347,7 +351,7 @@
           "count": 2
         },
         {
-          "name_ja": "マキシマムベルト(ACE SPEC)",
+          "name_ja": "マキシマムベルト",
           "count": 1
         },
         {
@@ -371,10 +375,6 @@
           "count": 1
         },
         {
-          "name_ja": "グラビティーマウンテン",
-          "count": 1
-        },
-        {
           "name_ja": "ロケット団の監視塔",
           "count": 1
         },
@@ -385,6 +385,123 @@
         {
           "name_ja": "ロック闘エネルギー",
           "count": 1
+        }
+      ]
+    },
+    {
+      "deck_code": "V5FbkV-oWBGx8-kFFkkV",
+      "cards": [
+        {
+          "name_ja": "ドラメシヤ",
+          "count": 4
+        },
+        {
+          "name_ja": "ドロンチ",
+          "count": 4
+        },
+        {
+          "name_ja": "ドラパルトex",
+          "count": 3
+        },
+        {
+          "name_ja": "ヨマワル",
+          "count": 2
+        },
+        {
+          "name_ja": "サマヨール",
+          "count": 1
+        },
+        {
+          "name_ja": "ヨノワール",
+          "count": 1
+        },
+        {
+          "name_ja": "スボミー",
+          "count": 2
+        },
+        {
+          "name_ja": "ニャースex",
+          "count": 2
+        },
+        {
+          "name_ja": "マシマシラ",
+          "count": 1
+        },
+        {
+          "name_ja": "キチキギスex",
+          "count": 1
+        },
+        {
+          "name_ja": "アンフェアスタンプ",
+          "count": 1
+        },
+        {
+          "name_ja": "なかよしポフィン",
+          "count": 4
+        },
+        {
+          "name_ja": "ハイパーボール",
+          "count": 4
+        },
+        {
+          "name_ja": "ふしぎなアメ",
+          "count": 3
+        },
+        {
+          "name_ja": "夜のタンカ",
+          "count": 1
+        },
+        {
+          "name_ja": "ポケパッド",
+          "count": 4
+        },
+        {
+          "name_ja": "スペシャルレッドカード",
+          "count": 1
+        },
+        {
+          "name_ja": "ヒカリ",
+          "count": 1
+        },
+        {
+          "name_ja": "アカツキ",
+          "count": 1
+        },
+        {
+          "name_ja": "ブライア",
+          "count": 1
+        },
+        {
+          "name_ja": "ボスの指令",
+          "count": 2
+        },
+        {
+          "name_ja": "リーリエの決心",
+          "count": 4
+        },
+        {
+          "name_ja": "メイのはげまし",
+          "count": 1
+        },
+        {
+          "name_ja": "ジャミングタワー",
+          "count": 1
+        },
+        {
+          "name_ja": "ロケット団の監視塔",
+          "count": 2
+        },
+        {
+          "name_ja": "基本超エネルギー",
+          "count": 3
+        },
+        {
+          "name_ja": "基本炎エネルギー",
+          "count": 3
+        },
+        {
+          "name_ja": "基本悪エネルギー",
+          "count": 2
         }
       ]
     }

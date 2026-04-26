@@ -10,7 +10,7 @@
      → `battles/<日時>/battle_states.pkl` ができる。
 
 2. **記録した pkl から重みを計算する**  
-   `train_weights.py` が「選択ごとの勝率」を集計し、勝率が高い選択ほど正の重みになるよう変換する。
+   `train_weights.py` が「選択ごとの盤面評価」を集計し、評価が高い選択ほど正の重みになるよう変換する。**現在は技選択 (attack) のみ学習**する（`--all-choices` で他も学習可能）。
    ```bash
    python scripts/train_weights.py --battles-dir battles/train_weights --output weights/weights.json --scale 10
    ```
@@ -20,8 +20,6 @@
 3. **学習した重みでプレイする**  
    - record_game: `python scripts/record_game.py --weights weights/weights.json`
    - シミュレーション: `scripts/simulate.py` や `compare_weighted_vs_unweighted.py` で `--weights` を指定。
-
-**ハイパーボールで捨てる 2 枚**（`w_haipaboru_discard`）も同じ流れで学習される。捨てたカードごとに `haipaboru_discard` が choice_log に記録され、その試合の勝敗から「そのカードを捨てたときの勝率」が重みになる（捨てて勝ちが多いカードは正の重み＝捨てやすく、捨てて負けが多いカードは負の重み＝捨てにくくなる）。
 
 ---
 
@@ -53,7 +51,7 @@
 
 ```bash
 # 5v6・5v5・6v6 をすべて使って学習（既定の all）。スケール控えめ・min-samples でノイズ削減
-python scripts/run_training_games.py --matchup all --n 500 --scale 12 --min-samples 5 --weights-out weights/weights_general.json
+python scripts/run_training_games.py --matchup all --n 500 --scale 12 --min-samples 5 --weights-out weights/weights.json
 ```
 
 将来デッキが 10 個になったら、`run_training_games.py` で「全ペア」や「ランダムペアを N 回」を回し、同じように `--matchup all` 相当で学習すれば、定石的な重みを更新できる。
@@ -225,23 +223,19 @@ python scripts/train_weights.py --battles-dir battles/train_weights --output wei
 
 # 重みまわり 調査・今後の候補リスト
 
-## 実装済み（重み・選択記録あり）
+## 現在学習しているもの
 
 | 項目 | 説明 |
 |------|------|
-| 技選択 | どのワザを出すか（`w_attack`） |
-| エネルギー付与先 | どのポケモンにエネルギーを付けるか |
-| にげる | 逃げ先のベンチを誰にするか |
-| いれかえ | グッズでバトル場に出すベンチを誰にするか |
-| きぜつ時の繰り出し | ベンチから誰をバトル場に出すか |
-| ポケモンキャッチャー対象 | 相手ベンチの誰を引き出すか（`w_catcher_target`） |
-| サポート・グッズの使用順 | どのサポート／グッズを先に使うか（`w_support_use`, `w_goods_use`） |
-| 進化・どうぐの付与先 | 誰に進化をのせるか・誰にどうぐをつけるか（`w_evolve_onto`, `w_tool_attach`） |
-| ハイパーボールで捨てる 2 枚 | どのカードをトラッシュするか（`w_haipaboru_discard`。高いほど捨てやすい） |
+| 技選択 | どのワザを出すか（`w_attack`）。現在ここだけ学習。 |
+
+## 将来用（実装・記録はあるが学習対象外）
+
+エネルギー付与先・にげる・いれかえ・繰り出し・キャッチャー対象・サポート／グッズ順・進化・どうぐ・ハイパーボール捨て などはゲーム内で重みを参照するが、学習は `--all-choices` を付けたときのみ行う。
 
 ## 未実装・今後の候補
 
-（現在は上記ですべて実装済み。強化学習や報酬の細分化などは未対応。）
+強化学習や報酬の細分化などは未対応。
 
 ## その他
 
