@@ -47,8 +47,6 @@ def _load_card_id_to_image() -> dict[str, str]:
                     out[name_ja] = src
         except (json.JSONDecodeError, OSError):
             continue
-    if "kihontouenerugi" in out:
-        out.setdefault("basic-energy-fighting", out["kihontouenerugi"])
     if "kihonkaminarienerugi" in out:
         out.setdefault("basic-energy-lightning", out["kihonkaminarienerugi"])
     if "basic-energy-fighting" in out:
@@ -148,9 +146,17 @@ def _simplify_log_text_for_panel(log_text: str | None) -> str:
             simplified.append(stripped)
             continue
         body = stripped.split(": ", 1)[1] if ": " in stripped else stripped
-        for sep in ("→", "（"):
-            if sep in body:
-                body = body.split(sep, 1)[0].rstrip()
+        # ハイパーボールのトラッシュ内容は残す
+        if "ハイパーボール" in body and "捨て" in body:
+            if "を手札に" in body:
+                body = body.split("を手札に")[0].rstrip()
+        # ていさつしれいのめくったカード情報は残す
+        elif "ていさつしれい" in body:
+            pass  # 全文表示
+        else:
+            for sep in ("→", "（"):
+                if sep in body:
+                    body = body.split(sep, 1)[0].rstrip()
         simplified.append(body)
     return "\n".join(simplified)
 
@@ -169,16 +175,23 @@ def _draw_placeholder(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
         draw.text((x + (w - draw.textlength(label, font=font)) // 2, y + (h - 16) // 2), label, fill=TEXT_COLOR, font=font)
 
 
+_CARD_IMAGE_CACHE: dict[tuple, Image.Image] = {}
+
 def _paste_card_image(bg: Image.Image, card_path: Path | None, x: int, y: int, w: int, h: int, name: str) -> None:
-    """カード画像をリサイズして bg に貼り付ける。なければプレースホルダーを描画。"""
+    """カード画像をリサイズして bg に貼り付ける。なければプレースホルダーを描画。キャッシュ付き。"""
     draw = ImageDraw.Draw(bg)
     if card_path and card_path.is_file():
-        try:
-            img = Image.open(card_path).convert("RGB")
-            img = img.resize((w, h), Image.Resampling.LANCZOS)
-            bg.paste(img, (x, y))
-        except Exception:
-            _draw_placeholder(draw, x, y, w, h, name)
+        cache_key = (str(card_path), w, h)
+        img = _CARD_IMAGE_CACHE.get(cache_key)
+        if img is None:
+            try:
+                img = Image.open(card_path).convert("RGB")
+                img = img.resize((w, h), Image.Resampling.LANCZOS)
+                _CARD_IMAGE_CACHE[cache_key] = img
+            except Exception:
+                _draw_placeholder(draw, x, y, w, h, name)
+                return
+        bg.paste(img, (x, y))
     else:
         _draw_placeholder(draw, x, y, w, h, name)
 
@@ -241,6 +254,53 @@ def _draw_status_markers(
         bg.paste(resized.convert("RGB"), (px, py), resized)
 
 
+def _draw_ability_used_marker(
+    bg: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    bp: object,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    state: "GameState | None" = None,
+) -> None:
+    """1ターン1回の特性を使用済みの場合、カード上に薄く'Used'マーカーを表示する。"""
+    if state is None:
+        return
+    bp_name = (getattr(getattr(bp, "card", None), "name", "") or "").strip()
+    used = False
+    # ていさつしれい（ドロンチ）
+    if bp_name == "ドロンチ":
+        used_ids = getattr(state, "_teisatsushirei_used_ids_this_turn", set())
+        if id(bp) in used_ids:
+            used = True
+    # おくのてキャッチ（ニャースex）
+    elif bp_name == "ニャースex":
+        if getattr(state, "_okunote_used_this_turn", False):
+            used = True
+    # さかてにとる（キチキギスex）
+    elif bp_name == "キチキギスex":
+        if getattr(state, "_sakatenitori_used_this_turn", False):
+            used = True
+    # ルナサイクル（ルナトーン）
+    elif bp_name == "ルナトーン":
+        if getattr(state, "ability_declared_this_turn", None) == "ルナサイクル":
+            used = True
+    if not used:
+        return
+    # "Used"バッジをカード中央に描画（カードレイヤー上に直接描画）
+    badge_w, badge_h = min(w - 8, 50), 16
+    bx = x + (w - badge_w) // 2
+    by = y + h // 2 - badge_h // 2
+    draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=4, fill=(60, 60, 60))
+    try:
+        font_used = ImageFont.truetype("/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc", 11)
+    except OSError:
+        font_used = ImageFont.load_default()
+    tw = draw.textlength("Used", font=font_used)
+    draw.text((bx + (badge_w - tw) // 2, by + 1), "Used", fill=(220, 220, 220), font=font_used)
+
+
 def _draw_log_panel(
     draw: ImageDraw.ImageDraw,
     log_text: str,
@@ -285,6 +345,7 @@ def _draw_pokemon_with_tool(
     w: int,
     h: int,
     images_dir: Path,
+    state: "GameState | None" = None,
 ) -> None:
     """ポケモンカードを描画する。どうぐがついていればその上にはみ出すように重ねて表示する。
 
@@ -326,6 +387,9 @@ def _draw_pokemon_with_tool(
         py = cy - rh // 2
 
     bg.paste(paste_img.convert("RGB"), (px, py), paste_img)
+    # Usedマーカーは最上レイヤー（進化カードの上に被らないように）
+    bg_draw = ImageDraw.Draw(bg)
+    _draw_ability_used_marker(bg, bg_draw, bp, x, y, w, h, state=state)
 
 
 def _draw_hp_bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, hp: int, max_hp: int) -> None:
@@ -459,18 +523,22 @@ def _render_prize_stack(
     prize_h: int,
     step: int,
     images_dir: Path,
+    deck_searched: bool = False,
 ) -> None:
-    """サイドを表向きで重ねて描画。下（画面下・1 枚目が奥）から上（画面上・最後の枚が手前）に重なる。お互い同じ。"""
+    """サイドを描画。デッキを確認済みのプレイヤーは表向き、未確認は裏向き。"""
     n = len(prize_pile)
     for i in range(n - 1, -1, -1):
         row, col = divmod(i, 2)
         y = y_bottom - row * step - prize_h
         x = start_px + col * (prize_w // 2)
-        card = prize_pile[i]
-        card_id = getattr(card, "id", "")
-        card_name = getattr(card, "name", "") or getattr(card, "name_ja", "?")
-        path = get_card_image_path(card_id, images_dir)
-        _paste_card_image(bg, path, x, y, prize_w, prize_h, card_name)
+        if deck_searched:
+            card = prize_pile[i]
+            card_id = getattr(card, "id", "")
+            card_name = getattr(card, "name", "") or getattr(card, "name_ja", "?")
+            path = get_card_image_path(card_id, images_dir)
+            _paste_card_image(bg, path, x, y, prize_w, prize_h, card_name)
+        else:
+            _draw_card_back(bg, draw, x, y, prize_w, prize_h)
 
 
 def _render_hand_cards(
@@ -592,7 +660,8 @@ def render_board_frame(
     active_y_opp = center_y - CARD_H_BENCH - 16
     bench_y_opp = active_y_opp - 20 - CARD_H_BENCH
     prize_y_bottom_opp = active_y_opp + CARD_H_BENCH
-    _render_prize_stack(bg, draw, opp.prize_pile, start_px_opp, prize_y_bottom_opp, prize_w, prize_h, prize_step, images_dir)
+    _ds = getattr(state, "deck_searched_by_player", [False, False])
+    _render_prize_stack(bg, draw, opp.prize_pile, start_px_opp, prize_y_bottom_opp, prize_w, prize_h, prize_step, images_dir, deck_searched=_ds[1] if len(_ds) > 1 else False)
     prize_block_top_opp = prize_y_bottom_opp - prize_h - 2 * prize_step
     deck_trash_x_opp = start_bx - CARD_W_BENCH - BENCH_GAP
     deck_y_opp = active_y_opp
@@ -621,28 +690,40 @@ def render_board_frame(
         bx = start_bx + i * (CARD_W_BENCH + BENCH_GAP)
         if i < len(opp.bench):
             bp = opp.bench[i]
-            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir)
+            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
         else:
             _draw_placeholder(draw, bx, bench_y_opp, CARD_W_BENCH, CARD_H_BENCH, "")
     if opp.active:
         bp = opp.active
-        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir)
+        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
     else:
         _draw_placeholder(draw, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, "なし")
+
+    stadium_x = active_x + CARD_W_BENCH + BENCH_GAP
+    stadium_card = getattr(state, "stadium", None)
+    stadium_played_by = getattr(state, "stadium_played_by", 0)
+    if stadium_card is not None:
+        stadium_id = getattr(stadium_card, "id", "") or ""
+        stadium_name = getattr(stadium_card, "name", "") or "スタジアム"
+        stadium_path = get_card_image_path(stadium_id, images_dir)
+        if stadium_played_by == 1:
+            _paste_card_image(bg, stadium_path, stadium_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, stadium_name)
 
     self_p = state.players[0]
     active_y_self = center_y + 16
     if self_p.active:
         bp = self_p.active
-        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir)
+        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
     else:
         _draw_placeholder(draw, active_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, "なし")
+    if stadium_card is not None and stadium_played_by == 0:
+        _paste_card_image(bg, stadium_path, stadium_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, stadium_name)
     bench_y_self = active_y_self + CARD_H_BENCH + 28
     for i in range(BENCH_SLOTS):
         bx = start_bx + i * (CARD_W_BENCH + BENCH_GAP)
         if i < len(self_p.bench):
             bp = self_p.bench[i]
-            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir)
+            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
         else:
             _draw_placeholder(draw, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, "")
     deck_trash_x_self = start_bx + total_bw + BENCH_GAP
@@ -680,7 +761,7 @@ def render_board_frame(
         except (TypeError, AttributeError):
             draw.text((cx - 80, turn_y_below_hand), turn_text, fill=LABEL_COLOR, font=font_label)
     prize_y_bottom_self = bench_y_self + CARD_H_BENCH
-    _render_prize_stack(bg, draw, self_p.prize_pile, start_px_self, prize_y_bottom_self, prize_w, prize_h, prize_step, images_dir)
+    _render_prize_stack(bg, draw, self_p.prize_pile, start_px_self, prize_y_bottom_self, prize_w, prize_h, prize_step, images_dir, deck_searched=_ds[0] if len(_ds) > 0 else False)
     prize_block_top_self = prize_y_bottom_self - prize_h - 2 * prize_step
     draw.text((board_offset + MARGIN, height - 28), self_label, fill=LABEL_COLOR, font=font_label)
 

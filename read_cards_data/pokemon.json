@@ -166,6 +166,40 @@
     "_source_image": "043769_P_GAKEGANI.jpg"
   },
   {
+    "card_type": "pokemon",
+    "name_ja": "キチキギスex",
+    "hp": 210,
+    "pokemon_type": "darkness",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "489/242",
+    "ability": {
+      "name": "さかてにとる",
+      "description": "前の相手の番に、自分のポケモンがきぜつしていたなら、自分の番に1回使える。自分の山札を3枚引く。この番、すでに別の「さかてにとる」を使っていたなら、この特性は使えない。"
+    },
+    "attacks": [
+      {
+        "name": "クルーエルアロー",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 100,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "相手のポケモン1匹に、100ダメージ。[ベンチは弱点・抵抗力を計算しない。]"
+      }
+    ],
+    "_source_image": "049205_P_KICHIKIGISUEX.jpg",
+    "id": "kichikigisuex-mc-489"
+  },
+  {
     "card_type": "stadium",
     "name_ja": "グラビティーマウンテン",
     "description": "おたがいの場の2進化ポケモン全員の最大HPは、それぞれ「-30」される。スタジアムは、自分の番に1枚、バトル場の横に出せる。別のスタジアムが場に出たなら、このカードをトラッシュする。同じ名前のスタジアムは場に出せない。",
@@ -252,6 +286,39 @@
     "id": "koraidonex-svd-068"
   },
   {
+    "card_type": "pokemon",
+    "name_ja": "サマヨール",
+    "hp": 90,
+    "pokemon_type": "psychic",
+    "weakness": "darkness",
+    "retreat_cost": 2,
+    "evolves_from": "ヨマワル",
+    "evolution_stage": "stage1",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "309/742",
+    "ability": {
+      "name": "カースドボム",
+      "description": "自分の番に1回使えて、使ったなら、このポケモンをきぜつさせる。相手のポケモン1匹に、ダメカンを5個のせる。"
+    },
+    "attacks": [
+      {
+        "name": "おにび",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "psychic",
+          "psychic"
+        ],
+        "damage": 50,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "049025_P_SAMAYORU.jpg",
+    "id": "samayoru-mc-309"
+  },
+  {
     "name_ja": "ジバコイル",
     "hp": 170,
     "pokemon_type": "lightning",
@@ -290,6 +357,35 @@
     ],
     "id": "jibakoil-svd-038",
     "_source_image": "043740_P_JIBAKOIRU.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "スボミー",
+    "hp": 30,
+    "pokemon_type": "grass",
+    "weakness": "fire",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "H",
+    "set_code": "S2a",
+    "card_number": "011/193",
+    "ability": null,
+    "attacks": [
+      {
+        "name": "むずむずかふん",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "colorless"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の相手の番、相手は手札からグッズを出して使えない。"
+      }
+    ],
+    "_source_image": "048533_P_SUBOMI.jpg",
+    "id": "subomi-s2a-011"
   },
   {
     "name_ja": "ズピカ",
@@ -346,6 +442,155 @@
     ],
     "_source_image": "049088_P_SORUROKKU.jpg",
     "id": "sorurokku-mc-372"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ドラパルト",
+    "hp": 320,
+    "pokemon_type": "dragon",
+    "weakness": "psychic",
+    "retreat_cost": 1,
+    "evolves_from": "ドラメシヤ",
+    "evolution_stage": "stage2",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "548/742",
+    "ability": null,
+    "attacks": [
+      {
+        "name": "ジェットヘッド",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "colorless"
+        ],
+        "damage": 70,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "ファントムダイブ",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fire",
+          "psychic"
+        ],
+        "damage": 200,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "ダメカン6個を、相手のベンチポケモンに好きなようにのせる。"
+      }
+    ],
+    "_source_image": "049264_P_DORAPARUTOEX.jpg",
+    "id": "doraparutoex-mc-548"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ドラメシヤ",
+    "hp": 70,
+    "pokemon_type": "dragon",
+    "weakness": null,
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "546/742",
+    "ability": null,
+    "attacks": [
+      {
+        "name": "ちょっとうらむ",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "psychic"
+        ],
+        "damage": 10,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      },
+      {
+        "name": "かみつく",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fire",
+          "psychic"
+        ],
+        "damage": 40,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "049262_P_DORAMESHIYA.jpg",
+    "id": "dorameshiya-mc-546"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ドロンチ",
+    "hp": 90,
+    "pokemon_type": "dragon",
+    "weakness": null,
+    "retreat_cost": 1,
+    "evolves_from": "ドラメシヤ",
+    "evolution_stage": "stage1",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "547/742",
+    "ability": {
+      "name": "ていさつしれい",
+      "description": "自分の番に1回使える。自分の山札を上から2枚見て、どちらか1枚を選び、手札に加える。残りのカードは、山札の下にもどす。"
+    },
+    "attacks": [
+      {
+        "name": "リューズヘッド",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "fire",
+          "psychic"
+        ],
+        "damage": 70,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "049263_P_DORONCHI.jpg",
+    "id": "doronchi-mc-547"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ニャース",
+    "hp": 170,
+    "pokemon_type": "colorless",
+    "weakness": "fighting",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "J",
+    "set_code": "M3",
+    "card_number": "061/080",
+    "ability": {
+      "name": "おくのてキャッチ",
+      "description": "自分の番に、このカードを手札からベンチに出したとき、1回使える。自分の山札からサポートを1枚選び、相手に見せて、手札に加える。そして山札を切る。この番、名前に「おくのて」とつく特性を使っていたなら、この特性は使えない。"
+    },
+    "attacks": [
+      {
+        "name": "しっぽをまく",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "colorless",
+          "colorless",
+          "colorless"
+        ],
+        "damage": 60,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "このポケモンと、ついているすべてのカードを、手札にもどす。"
+      }
+    ],
+    "_source_image": "049694_P_NIXYASUEX.jpg",
+    "id": "nixyasuex-m3-061"
   },
   {
     "card_type": "pokemon",
@@ -649,6 +894,39 @@
   },
   {
     "card_type": "pokemon",
+    "name_ja": "マシマシラ",
+    "hp": 110,
+    "pokemon_type": "psychic",
+    "weakness": "psychic",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "358/742",
+    "ability": {
+      "name": "アドレナブレイン",
+      "description": "このポケモンに悪エネルギーがついているなら、自分の番に1回使える。自分の場のポケモン1匹についているダメカンを3個まで選び、相手の場のポケモン1匹にのせ替える。"
+    },
+    "attacks": [
+      {
+        "name": "サイコトリップ",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "psychic",
+          "colorless"
+        ],
+        "damage": 60,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "相手のバトルポケモンをこんらんにする。"
+      }
+    ],
+    "_source_image": "049074_P_MASHIMASHIRA.jpg",
+    "id": "mashimashira-mc-358"
+  },
+  {
+    "card_type": "pokemon",
     "name_ja": "ミライドンex",
     "hp": 220,
     "pokemon_type": "lightning",
@@ -842,6 +1120,81 @@
     ],
     "id": "mototokage-mc-627",
     "_source_image": "049343_P_MOTOTOKAGE.jpg"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ヨノワール",
+    "hp": 160,
+    "pokemon_type": "psychic",
+    "weakness": "darkness",
+    "retreat_cost": 3,
+    "evolves_from": "サマヨール",
+    "evolution_stage": "stage2",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "310/742",
+    "ability": {
+      "name": "カースドボム",
+      "description": "自分の番に1回使えて、使ったなら、このポケモンをきぜつさせる。相手のポケモン1匹に、ダメカンを13個のせる。"
+    },
+    "attacks": [
+      {
+        "name": "かげしばり",
+        "energy_cost": 3,
+        "energy_cost_typed": [
+          "psychic",
+          "psychic",
+          "colorless"
+        ],
+        "damage": 150,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "次の相手の番、このワザを受けたポケモンは、にげられない。"
+      }
+    ],
+    "_source_image": "049026_P_YONOWARU.jpg",
+    "id": "yonowaru-mc-310"
+  },
+  {
+    "card_type": "pokemon",
+    "name_ja": "ヨマワル",
+    "hp": 60,
+    "pokemon_type": "psychic",
+    "weakness": "darkness",
+    "retreat_cost": 1,
+    "evolves_from": null,
+    "evolution_stage": "basic",
+    "regulation": "H",
+    "set_code": "MC",
+    "card_number": "308/742",
+    "ability": null,
+    "attacks": [
+      {
+        "name": "むかえにいく",
+        "energy_cost": 1,
+        "energy_cost_typed": [
+          "psychic"
+        ],
+        "damage": 0,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": "自分のトラッシュから「ヨマワル」を3枚まで選び、ベンチに出す。"
+      },
+      {
+        "name": "つぶやく",
+        "energy_cost": 2,
+        "energy_cost_typed": [
+          "psychic",
+          "psychic"
+        ],
+        "damage": 30,
+        "self_damage": 0,
+        "bench_damage": 0,
+        "description": ""
+      }
+    ],
+    "_source_image": "049024_P_YOMAWARU.jpg",
+    "id": "yomawaru-mc-308"
   },
   {
     "card_type": "pokemon",

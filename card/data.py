@@ -272,7 +272,16 @@ SORUROKKU_MC_372 = PokemonCard(
     hp=110,
     max_hp=110,
     attacks=[
-        Attack('コスモビーム', 1, 70, 0, 0, '自分のベンチに「ルナトーン」がいないなら、このワザは失敗。このワザのダメージは弱点・抵抗力を計算しない。', bench_damage_target='self', energy_cost_typed=['fighting']),
+        Attack(
+            'コスモビーム',
+            1,
+            70,
+            0,
+            0,
+            '自分のベンチに「ルナトーン」がいないなら、このワザは失敗。このワザのダメージは弱点・抵抗力を計算しない。',
+            energy_cost_typed=['fighting'],
+            damage_ignores_weakness_resistance=True,
+        ),
     ],
     evolves_from=None,
     evolution_stage='basic',
@@ -741,6 +750,14 @@ ANFEASUTANPU = GoodsCard(
     description='このカードは、前の相手の番に、自分のポケモンがきぜつしていなければ使えない。おたがいのプレイヤーは、それぞれ手札をすべて山札にもどして切る。その後、自分は5枚、相手は2枚、山札を引く。',
 )
 
+# スペシャルレッドカード（supeshiyarureddokado）
+SUPESHIYARUREDDOKADO = GoodsCard(
+    id='supeshiyarureddokado',
+    name='スペシャルレッドカード',
+    effect='',
+    description='このカードは、相手のサイドの残り枚数が3枚以下のときにしか使えない。相手は相手自身の手札をすべてウラにして切り、山札の下にもどす。その後、相手は山札を3枚引く。',
+)
+
 # エネルギー回収（unknown）
 UNKNOWN = GoodsCard(
     id='unknown',
@@ -885,7 +902,7 @@ ROKETTODANNOKANSHITOU = GoodsCard(
     id='rokettodannokanshitou',
     name='ロケット団の監視塔',
     effect='',
-    description='おたがいの場のポケモン全員の特性は、すべてなくなる。',
+    description='おたがいの場の無色ポケモン全員の特性は、すべてなくなる。',
 )
 
 # 博士の研究（hakasenokenkyuu）
@@ -928,17 +945,10 @@ ANGOUMANIANOKAIDOKU = SupportCard(
     description='自分の山札から好きなカードを2枚選ぶ。残りの山札を切り、選んだカードを好きな順番に入れ替えて、山札の上に戻す。',
 )
 
-# ロックエネルギー（rokkutouenerugi）
-ROKKUTOUENERUGI = EnergyCard(
-    id='rokkutouenerugi',
-    name='ロックエネルギー',
-    energy_type=None,
-)
-
-# 基本闘エネルギー（kihontouenerugi）
-KIHONTOUENERUGI = EnergyCard(
-    id='kihontouenerugi',
-    name='基本闘エネルギー',
+# ロック闘エネルギー（rokkutoukenenerugi）
+ROKKUTOUKENENERUGI = EnergyCard(
+    id='rokkutoukenenerugi',
+    name='ロック闘エネルギー',
     energy_type='fighting',
 )
 
@@ -947,6 +957,258 @@ KIHONKAMINARIENERUGI = EnergyCard(
     id='kihonkaminarienerugi',
     name='基本雷エネルギー',
     energy_type='lightning',
+)
+
+# ドラメシヤ（dorameshiya-mc-546）
+DORAMESHIYA_MC_546 = PokemonCard(
+    id='dorameshiya-mc-546',
+    name='ドラメシヤ',
+    hp=70,
+    max_hp=70,
+    attacks=[
+        Attack('ちょっとうらむ', 1, 10, 0, 0, '', energy_cost_typed=['psychic']),
+        Attack('かみつく', 2, 40, 0, 0, '', energy_cost_typed=['fire', 'psychic']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='dragon',
+    regulation='H',
+    weakness=None,
+)
+
+# ドロンチ（doronchi-mc-547）
+DORONCHI_MC_547 = PokemonCard(
+    id='doronchi-mc-547',
+    name='ドロンチ',
+    hp=90,
+    max_hp=90,
+    attacks=[
+        Attack('リューズヘッド', 2, 70, 0, 0, '', energy_cost_typed=['fire', 'psychic']),
+    ],
+    evolves_from='ドラメシヤ',
+    evolution_stage='stage1',
+    retreat_cost=1,
+    pokemon_type='dragon',
+    regulation='H',
+    weakness=None,
+    ability_name='ていさつしれい',
+    ability_description='自分の番に1回使える。自分の山札を上から2枚見て、どちらか1枚を選び、手札に加える。残りのカードは、山札の下にもどす。',
+)
+
+# ドラパルトex（doraparutoex-mc-548）
+DORAPARUTOEX_MC_548 = PokemonCard(
+    id='doraparutoex-mc-548',
+    name='ドラパルトex',
+    hp=320,
+    max_hp=320,
+    attacks=[
+        Attack('ジェットヘッド', 1, 70, 0, 0, '', energy_cost_typed=['colorless']),
+        Attack('ファントムダイブ', 2, 200, 0, 0, 'ダメカン6個を、相手のベンチポケモンに好きなようにのせる。', energy_cost_typed=['fire', 'psychic']),
+    ],
+    evolves_from='ドロンチ',
+    evolution_stage='stage2',
+    retreat_cost=1,
+    pokemon_type='dragon',
+    regulation='H',
+    weakness=None,
+    is_ex=True,
+)
+
+# ヨマワル（yomawaru-mc-308）
+YOMAWARU_MC_308 = PokemonCard(
+    id='yomawaru-mc-308',
+    name='ヨマワル',
+    hp=60,
+    max_hp=60,
+    attacks=[
+        Attack('むかえにいく', 1, 0, 0, 0, '自分のトラッシュから「ヨマワル」を3枚まで選び、ベンチに出す。', energy_cost_typed=['psychic']),
+        Attack('つぶやく', 2, 30, 0, 0, '', energy_cost_typed=['psychic', 'psychic']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='psychic',
+    regulation='H',
+    weakness='darkness',
+)
+
+# サマヨール（samayoru-mc-309）
+SAMAYORU_MC_309 = PokemonCard(
+    id='samayoru-mc-309',
+    name='サマヨール',
+    hp=90,
+    max_hp=90,
+    attacks=[
+        Attack('おにび', 2, 50, 0, 0, '', energy_cost_typed=['psychic', 'psychic']),
+    ],
+    evolves_from='ヨマワル',
+    evolution_stage='stage1',
+    retreat_cost=2,
+    pokemon_type='psychic',
+    regulation='H',
+    weakness='darkness',
+    ability_name='カースドボム',
+    ability_description='自分の番に1回使えて、使ったなら、このポケモンをきぜつさせる。相手のポケモン1匹に、ダメカンを5個のせる。',
+)
+
+# ヨノワール（yonowaru-mc-310）
+YONOWARU_MC_310 = PokemonCard(
+    id='yonowaru-mc-310',
+    name='ヨノワール',
+    hp=160,
+    max_hp=160,
+    attacks=[
+        Attack('かげしばり', 3, 150, 0, 0, '次の相手の番、このワザを受けたポケモンは、にげられない。', energy_cost_typed=['psychic', 'psychic', 'colorless']),
+    ],
+    evolves_from='サマヨール',
+    evolution_stage='stage2',
+    retreat_cost=3,
+    pokemon_type='psychic',
+    regulation='H',
+    weakness='darkness',
+    ability_name='カースドボム',
+    ability_description='自分の番に1回使えて、使ったなら、このポケモンをきぜつさせる。相手のポケモン1匹に、ダメカンを13個のせる。',
+)
+
+# スボミー（subomi-s2a-011）
+SUBOMI_S2A_011 = PokemonCard(
+    id='subomi-s2a-011',
+    name='スボミー',
+    hp=30,
+    max_hp=30,
+    attacks=[
+        Attack('むずむずかふん', 0, 10, 0, 0, '次の相手の番、相手は手札からグッズを出して使えない。', energy_cost_typed=[]),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=0,
+    pokemon_type='grass',
+    regulation='H',
+    weakness='fire',
+)
+
+# ニャースex（nixyasuex-m3-061）
+NIXYASUEX_M3_061 = PokemonCard(
+    id='nixyasuex-m3-061',
+    name='ニャースex',
+    hp=170,
+    max_hp=170,
+    attacks=[
+        Attack('しっぽをまく', 3, 60, 0, 0, 'このポケモンと、ついているすべてのカードを、手札にもどす。', energy_cost_typed=['colorless', 'colorless', 'colorless']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='colorless',
+    regulation='J',
+    weakness='fighting',
+    is_ex=True,
+    ability_name='おくのてキャッチ',
+    ability_description='自分の番に、このカードを手札からベンチに出したとき、1回使える。自分の山札からサポートを1枚選び、相手に見せて、手札に加える。そして山札を切る。この番、名前に「おくのて」とつく特性を使っていたなら、この特性は使えない。',
+)
+
+# マシマシラ（mashimashira-mc-358）
+MASHIMASHIRA_MC_358 = PokemonCard(
+    id='mashimashira-mc-358',
+    name='マシマシラ',
+    hp=110,
+    max_hp=110,
+    attacks=[
+        Attack('サイコトリップ', 2, 60, 0, 0, '相手のバトルポケモンをこんらんにする。', energy_cost_typed=['psychic', 'colorless'], status_effect='confusion'),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='psychic',
+    regulation='H',
+    weakness='psychic',
+    ability_name='アドレナブレイン',
+    ability_description='このポケモンに悪エネルギーがついているなら、自分の番に1回使える。自分の場のポケモン1匹についているダメカンを3個まで選び、相手の場のポケモン1匹にのせ替える。',
+)
+
+# キチキギスex（kichikigisuex-mc-489）
+KICHIKIGISUEX_MC_489 = PokemonCard(
+    id='kichikigisuex-mc-489',
+    name='キチキギスex',
+    hp=210,
+    max_hp=210,
+    attacks=[
+        Attack('クルーエルアロー', 3, 100, 0, 0, '相手のポケモン1匹に、100ダメージ。[ベンチは弱点・抵抗力を計算しない。]', energy_cost_typed=['colorless', 'colorless', 'colorless']),
+    ],
+    evolves_from=None,
+    evolution_stage='basic',
+    retreat_cost=1,
+    pokemon_type='darkness',
+    regulation='H',
+    weakness='fighting',
+    is_ex=True,
+    ability_name='さかてにとる',
+    ability_description='前の相手の番に、自分のポケモンがきぜつしていたなら、自分の番に1回使える。自分の山札を3枚引く。この番、すでに別の「さかてにとる」を使っていたなら、この特性は使えない。',
+)
+
+# なかよしポフィン（nakayoshipofuin）
+NAKAYOSHIPOFUIN = GoodsCard(
+    id='nakayoshipofuin',
+    name='なかよしポフィン',
+    effect='',
+    description='自分の山札から、HPが「70」以下のたねポケモンを2枚まで選び、ベンチに出す。そして山札を切る。',
+)
+
+# ヒカリ（hikari）
+HIKARI = SupportCard(
+    id='hikari',
+    name='ヒカリ',
+    description='自分の山札から「たねポケモン」「1進化ポケモン」「2進化ポケモン」を1枚ずつ選び、相手に見せて、手札に加える。そして山札を切る。',
+)
+
+# アカマツ（akamatsu）
+AKAMATSU = SupportCard(
+    id='akamatsu',
+    name='アカマツ',
+    description='自分の山札から、それぞれがらタイプの基本エネルギーを2枚まで選び、相手に見せて、どちらか1枚を手札に加え、残りのエネルギーを自分のポケモンにつける。 そして山札を切る。',
+)
+
+# ブライア（buraia）
+BURAIA = SupportCard(
+    id='buraia',
+    name='ブライア',
+    description='このカードは、相手のサイドの残り枚数が2枚のときにしか使えない。この番、自分の「テラスタル」のポケモンが使うワザのダメージで、相手のバトルポケモンがきぜつしたなら、サイドを1枚多くとる。',
+)
+
+# メイのはげまし（meinohagemashi）
+MEINOHAGEMASHI = SupportCard(
+    id='meinohagemashi',
+    name='メイのはげまし',
+    description='このカードは、自分のサイドの残り枚数が、相手のサイドの残り枚数より多いときにしか使えない。自分のトラッシュから基本エネルギーを2枚まで選び、自分の2進化ポケモン1匹につける。',
+)
+
+# ジャミングタワー（jixyamingutawa）
+JIXYAMINGUTAWA = StadiumCard(
+    id='jixyamingutawa',
+    name='ジャミングタワー',
+    description='おたがいのポケモン全員についている「ポケモンのどうぐ」の効果は、すべてなくなる。',
+)
+
+# 基本超エネルギー（kihonchixyouenerugi）
+KIHONCHIXYOUENERUGI = EnergyCard(
+    id='kihonchixyouenerugi',
+    name='基本超エネルギー',
+    energy_type='psychic',
+)
+
+# 基本炎エネルギー（kihonhonooenerugi）
+KIHONHONOOENERUGI = EnergyCard(
+    id='kihonhonooenerugi',
+    name='基本炎エネルギー',
+    energy_type='fire',
+)
+
+# 基本悪エネルギー（kihonakuenerugi）
+KIHONAKUENERUGI = EnergyCard(
+    id='kihonakuenerugi',
+    name='基本悪エネルギー',
+    energy_type='darkness',
 )
 
 # ----- 以上 JSON から生成 -----
@@ -1059,6 +1321,7 @@ CARD_ID_TO_NAME = {
     "fuusen": 'ふうせん',
     "fushiginaame": 'ふしぎなアメ',
     "anfeasutanpu": 'アンフェアスタンプ',
+    "supeshiyarureddokado": 'スペシャルレッドカード',
     "unknown": 'エネルギー回収',
     "erekijienereta": 'エレキジェネレーター',
     "kihada": 'キハダ',
@@ -1083,9 +1346,28 @@ CARD_ID_TO_NAME = {
     "yorunotanka": '夜のタンカ',
     "iwanomuneate": '岩のむねあて',
     "angoumanianokaidoku": '暗号マニアの解読',
-    "rokkutouenerugi": 'ロックエネルギー',
+    "rokkutoukenenerugi": 'ロック闘エネルギー',
     "kihontouenerugi": '基本闘エネルギー',
     "kihonkaminarienerugi": '基本雷エネルギー',
+    "dorameshiya-mc-546": 'ドラメシヤ',
+    "doronchi-mc-547": 'ドロンチ',
+    "doraparutoex-mc-548": 'ドラパルトex',
+    "yomawaru-mc-308": 'ヨマワル',
+    "samayoru-mc-309": 'サマヨール',
+    "yonowaru-mc-310": 'ヨノワール',
+    "subomi-s2a-011": 'スボミー',
+    "nixyasuex-m3-061": 'ニャースex',
+    "mashimashira-mc-358": 'マシマシラ',
+    "kichikigisuex-mc-489": 'キチキギスex',
+    "nakayoshipofuin": 'なかよしポフィン',
+    "hikari": 'ヒカリ',
+    "akamatsu": 'アカマツ',
+    "buraia": 'ブライア',
+    "meinohagemashi": 'メイのはげまし',
+    "jixyamingutawa": 'ジャミングタワー',
+    "kihonchixyouenerugi": '基本超エネルギー',
+    "kihonhonooenerugi": '基本炎エネルギー',
+    "kihonakuenerugi": '基本悪エネルギー',
     # ----- 以上 JSON から生成 -----
 }
 
@@ -1155,6 +1437,7 @@ _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | StadiumCard | S
     "fuusen": FUUSEN,
     "fushiginaame": FUSHIGINAAME,
     "anfeasutanpu": ANFEASUTANPU,
+    "supeshiyarureddokado": SUPESHIYARUREDDOKADO,
     "unknown": UNKNOWN,
     "erekijienereta": EREKIJIENERETA,
     "kihada": KIHADA,
@@ -1179,9 +1462,28 @@ _CARD_REGISTRY: dict[str, PokemonCard | EnergyCard | GoodsCard | StadiumCard | S
     "yorunotanka": YORUNOTANKA,
     "iwanomuneate": IWANOMUNEATE,
     "angoumanianokaidoku": ANGOUMANIANOKAIDOKU,
-    "rokkutouenerugi": ROKKUTOUENERUGI,
-    "kihontouenerugi": KIHONTOUENERUGI,
+    "rokkutoukenenerugi": ROKKUTOUKENENERUGI,
+    "kihontouenerugi": BASIC_ENERGY_FIGHTING,
     "kihonkaminarienerugi": KIHONKAMINARIENERUGI,
+    "dorameshiya-mc-546": DORAMESHIYA_MC_546,
+    "doronchi-mc-547": DORONCHI_MC_547,
+    "doraparutoex-mc-548": DORAPARUTOEX_MC_548,
+    "yomawaru-mc-308": YOMAWARU_MC_308,
+    "samayoru-mc-309": SAMAYORU_MC_309,
+    "yonowaru-mc-310": YONOWARU_MC_310,
+    "subomi-s2a-011": SUBOMI_S2A_011,
+    "nixyasuex-m3-061": NIXYASUEX_M3_061,
+    "mashimashira-mc-358": MASHIMASHIRA_MC_358,
+    "kichikigisuex-mc-489": KICHIKIGISUEX_MC_489,
+    "nakayoshipofuin": NAKAYOSHIPOFUIN,
+    "hikari": HIKARI,
+    "akamatsu": AKAMATSU,
+    "buraia": BURAIA,
+    "meinohagemashi": MEINOHAGEMASHI,
+    "jixyamingutawa": JIXYAMINGUTAWA,
+    "kihonchixyouenerugi": KIHONCHIXYOUENERUGI,
+    "kihonhonooenerugi": KIHONHONOOENERUGI,
+    "kihonakuenerugi": KIHONAKUENERUGI,
     # ----- 以上 JSON から生成 -----
 }
 
