@@ -1102,6 +1102,16 @@ def _put_one_pokemon_on_bench(
             # ドラパルトデッキ: サポート使用済みターンはニャースexを温存
             if _drapa_skip_nyarth and c_name == "ニャースex":
                 continue
+            # ドラパルトデッキ: キチキギスexは必要になるまで出さない
+            # さかてにとるは前ターンに自分のポケモンがきぜつしていないと使えない
+            # 序盤に出してもボスの指令で呼ばれてサイド2枚献上するだけ
+            if _is_drapa_bench(state, player_index) and c_name == "キチキギスex":
+                _any_ko = getattr(state, "any_ko_by_opponent_last_turn", [False, False])
+                _our_ko = getattr(state, "our_ko_by_damage_last_turn", [False, False])
+                _ko_happened = (_any_ko[player_index] if len(_any_ko) > player_index else False) or \
+                               (_our_ko[player_index] if len(_our_ko) > player_index else False)
+                if not _ko_happened:
+                    continue  # きぜつしていない → さかてにとる使えない → 出す意味なし
             # ドラパルトデッキ: マシマシラはベンチに出さない（ただし種切れ防止で他にたねがなければ出す）
             if _is_drapa_bench(state, player_index) and c_name == "マシマシラ":
                 _has_other_basic_in_hand = any(
