@@ -512,6 +512,22 @@ def _build_energy_attach_input(
     if not candidates:
         return None
 
+    # ドラパルトexデッキ: ファントムダイブ完成に近いドラパルトexにboost（全パス共通）
+    if _is_drapa_deck and len(candidates) >= 2:
+        _boosted_candidates = []
+        for _bi_c, _dmg_c in candidates:
+            _bp_c = p.active if _bi_c is None else p.bench[_bi_c]
+            _bp_name_c = (getattr(_bp_c.card, "name", "") or "").strip()
+            _bonus_c = 0
+            if _bp_name_c == "ドラパルトex":
+                _types_c = list(getattr(_bp_c, "attached_energy_types", []) or [])
+                if new_type in ("fire", "psychic") and new_type not in _types_c:
+                    _other_c = "psychic" if new_type == "fire" else "fire"
+                    if _other_c in _types_c:
+                        _bonus_c = 100000  # このエネでファントムダイブ完成！
+            _boosted_candidates.append((_bi_c, _dmg_c + _bonus_c))
+        candidates = _boosted_candidates
+
     return energy_hand_idx, energy_card, candidates
 
 
@@ -529,14 +545,46 @@ def _try_attach_energy_auto(state: GameState) -> bool:
     p = state.active_player_state()
     can_evolve_this_turn = not _is_first_player_first_turn(state)
 
-    # ドラパルトexデッキ: 悪エネをドラパルトexラインに付ける早期パスをスキップ
+    # ドラパルトexデッキ: ファントムダイブ完成即時パス（最優先、他の全パスより先）
+    # 手札にfire/psychicがあり、ドラパルトexに不足タイプを付ければファントムダイブが撃てる
     from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_early
-    _is_drapa_early_deck = _is_drapa_early(state, state.current_player)
+    if _is_drapa_early(state, state.current_player) and not state.energy_attached_this_turn:
+        _all_bp_pd = ([p.active] if p.active else []) + list(p.bench or [])
+        for _bp_pd in _all_bp_pd:
+            if (getattr(_bp_pd.card, "name", "") or "").strip() != "ドラパルトex":
+                continue
+            _types_pd = list(getattr(_bp_pd, "attached_energy_types", []) or [])
+            _has_fire_pd = "fire" in _types_pd
+            _has_psychic_pd = "psychic" in _types_pd
+            _need_type = None
+            if _has_fire_pd and not _has_psychic_pd:
+                _need_type = "psychic"
+            elif _has_psychic_pd and not _has_fire_pd:
+                _need_type = "fire"
+            if _need_type:
+                for _ei_pd, _ec_pd in enumerate(p.hand):
+                    if is_energy(_ec_pd) and getattr(_ec_pd, "energy_type", None) == _need_type:
+                        # ファントムダイブ完成！即付与
+                        _bi_pd = None
+                        if _bp_pd is not p.active:
+                            for _bi2, _bbp in enumerate(p.bench):
+                                if _bbp is _bp_pd:
+                                    _bi_pd = _bi2
+                                    break
+                        if _bi_pd is not None:
+                            attach_energy(state, _ei_pd, bench_index=_bi_pd)
+                        else:
+                            attach_energy(state, _ei_pd)
+                        _card_id = getattr(_bp_pd.card, "id", None) or getattr(_bp_pd.card, "name", "")
+                        _log_choice(state, "energy_attach", card_id=_card_id)
+                        return True
+
+    # ドラパルトexデッキ: 悪エネをドラパルトexラインに付ける早期パスをスキップ
     _drapa_line_early = frozenset({"ドラパルトex", "ドロンチ", "ドラメシヤ"})
 
     def _drapa_darkness_block(target_bp) -> bool:
         """ドラパルトexデッキで悪エネをドラパルトexラインに付けようとしているかチェック"""
-        if not _is_drapa_early_deck:
+        if not _is_drapa_early(state, state.current_player):
             return False
         eidx = _pick_energy_hand_idx(p, state)
         if eidx is None:
@@ -656,8 +704,6 @@ def _try_attach_energy_auto(state: GameState) -> bool:
         return False
     energy_hand_idx, energy_card, candidates = result
 
-    # ドラパルトexデッキ: バトル場のドラメシヤよりベンチのドロンチ/ドラパルトexを優先
-    # （バトル場は次ターンKOされるリスクが高い。ベンチにエネを貯める方が安全）
     from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ene_prio
     if _is_drapa_ene_prio(state, state.current_player) and len(candidates) >= 2:
         _active_name_ep = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""

@@ -184,8 +184,8 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
                         return 15000.0  # サポートなし → ニャースexより低い
                     if c_name == "ニャースex":
                         if not _has_draw_support_hb:
-                            return 20000.0  # サポートなし → ニャースex最優先（おくのてキャッチ→サポートサーチ）
-                        return 12000.0  # サポートあり → ドラメシヤより低い
+                            return 20000.0  # サポートなし → ニャースex最優先
+                        return 12000.0  # サポートあり → 種切れ防止用
                     if c_name == "キチキギスex":
                         return 5000.0
                     return 15000.0 + strength
@@ -197,13 +197,29 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
             )
             if c_name == "ドラメシヤ" and not _has_drameshiya_on_field:
                 return 18000.0 + strength  # ドラメシヤ0体 → 最優先で確保
+            # リーリエが手札にある+即進化不可 → 進化ポケモンはリーリエで流される → たねを優先
+            if _has_draw_support_hb and is_pokemon(c) and getattr(c, "evolves_from", None):
+                _evo_name = (getattr(c, "name", "") or "").strip()
+                _can_use_now = False
+                # ドロンチ: ドラメシヤが場にいれば即進化可能
+                if _evo_name == "ドロンチ" and _has_drameshiya_on_field and state and state.turn_count >= 2:
+                    _can_use_now = True
+                # ドラパルトex: ドロンチが場にいれば即進化可能
+                elif _evo_name == "ドラパルトex":
+                    _has_doronchi_for_evo = any(
+                        (getattr(fc, "name", "") or "").strip() == "ドロンチ" for fc in field_cards
+                    )
+                    if _has_doronchi_for_evo and state and state.turn_count >= 2:
+                        _can_use_now = True
+                if not _can_use_now:
+                    return 1000.0  # リーリエで流される+即使えない → 低優先
             # ドラパルトex: 進化できる状態（ドロンチが場にいる or ふしぎなアメ+ドラメシヤ）なら高優先
             # 1ターン目は進化不可なので低優先。それ以外で進化手段なしも低優先。
             if c_name == "ドラパルトex":
                 # 1ターン目は進化できない → 手札で腐る
                 _is_first_turn = state is not None and getattr(state, "turn_count", 99) <= 2
                 if _is_first_turn:
-                    return 3000.0 + strength  # 1ターン目 → ニャースexやスボミーより低い
+                    return 3000.0 + strength
                 _has_ame = any(
                     (getattr(hc, "id", "") or "") == "fushiginaame" for hc in p.hand
                 )
@@ -257,18 +273,20 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
             # サポートが手札にあっても、おくのてキャッチで追加サポート(アカマツ等)を取れる価値は高い
             if c_name == "ニャースex":
                 if len(p.bench) >= 5:
-                    return -5000.0  # ベンチ満杯 → 出せないので取る意味なし
-                if not state.support_used_this_turn:
-                    return 14000.0  # サポート未使用 → おくのてキャッチ→即サポート連携が可能
+                    return -5000.0
                 if _has_draw_support_hb:
-                    return 2000.0 + strength  # サポート使用済み+ドローサポートあり → 低め
-                return 9000.0 + strength  # サポートなし → おくのてキャッチでサポートを確保
+                    return 2000.0 + strength  # ドローサポートあり → 低め
+                if state is not None and not state.support_used_this_turn:
+                    return 14000.0  # サポートなし+未使用 → おくのてキャッチ連携
+                return 9000.0 + strength
             # キチキギスex: HBで取るバリューは基本的に低い（ベンチ枠を使う割に即効性がない）
             # ニャースex（おくのてキャッチ）やドラメシヤ（ドロンチ進化の基盤）を優先
             if c_name == "キチキギスex":
                 if len(p.bench) >= 5:
                     return -5000.0  # ベンチ満杯 → 出せない
                 return -1000.0  # HBで積極的に取る必要なし
+            if c_name == "マシマシラ":
+                return -5000.0  # ベンチに出さない
             return 1000.0 + strength
 
         # ベンチが空で手札にたねもない（種切れリスク）→ たねポケモンを最優先
@@ -2356,6 +2374,10 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
     for c in top:
         p.deck.append(c)
     used_set.add(id(doronchi_bp))
+    # カウントベースの追跡（Usedマーカー用）
+    if not hasattr(state, "_teisatsushirei_used_count"):
+        state._teisatsushirei_used_count = [0, 0]
+    state._teisatsushirei_used_count[state.current_player] += 1
     # 位置ベースの追跡（deepcopy後のスナップショットでも照合可能）
     if not hasattr(state, "_teisatsushirei_used_positions"):
         state._teisatsushirei_used_positions = set()

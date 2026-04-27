@@ -1069,30 +1069,38 @@ def _put_one_pokemon_on_bench(
     # （おくのてキャッチで取ったサポートは今ターン使えない。ベンチ枠はドラパルトexラインに回す）
     # ただしサポート未使用なら出す（おくのてキャッチ→サポートサーチ→即使用の連携が可能）
     from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_nyarth
+    # 相手にどすこいキャッチャー持ち（ハリテヤマ/マクノシタ）がいるか
+    _opp_has_dosukoi = False
+    if _is_drapa_nyarth(state, player_index):
+        opp_state = state.players[1 - player_index]
+        _opp_has_dosukoi = any(
+            (getattr(getattr(bp, "card", None), "name", "") or "").strip() == "マクノシタ"
+            for bp in ([opp_state.active] if opp_state.active else []) + list(opp_state.bench or [])
+        )
     _drapa_skip_nyarth = False
     if _is_drapa_nyarth(state, player_index):
         if state.support_used_this_turn:
             _drapa_skip_nyarth = True
         else:
-            # サポート未使用でも、おくのてキャッチで取ったサポートが活用できないならスキップ
-            # アカマツ: ファントムダイブに届く(ドラパルトexがエネ1以上)時のみ価値あり
-            # リーリエの決心: 手札が多い(6枚以上)なら不要
-            # → どちらも活用できないならニャースexを出す意味がない
-            _has_drapa_with_energy = any(
-                (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
-                and (getattr(bp, "attached_energy", 0) or 0) >= 1
-                for bp in ([player.active] if player.active else []) + list(player.bench or [])
+            _has_draw_support_hand = any(
+                is_support(c) and (getattr(c, "id", "") or "") in (
+                    "riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari", "nemo",
+                )
+                for c in player.hand
             )
-            _hand_is_large = len(player.hand) >= 6
-            if not _has_drapa_with_energy and _hand_is_large:
+            if _has_draw_support_hand:
                 _drapa_skip_nyarth = True
+            if _opp_has_dosukoi:
+                _drapa_skip_nyarth = True  # どすこいで引っ張られるリスク
 
     for i, c in enumerate(player.hand):
         if is_pokemon(c) and not c.evolves_from:
             cid = getattr(c, "id", "") or ""
             c_name = getattr(c, "name", "") or ""
             if c_name in existing_names and cid not in allow_duplicate_ids:
-                continue
+                # ベンチ0体なら種切れ防止で重複でも出す
+                if len(player.bench) >= 1:
+                    continue
             if c_name in _ENGINE_SINGLE_NAMES and c_name in all_field_names:
                 continue
             if _is_basic_rioru_card(c) and not _may_add_basic_rioru_to_field(
@@ -1100,8 +1108,10 @@ def _put_one_pokemon_on_bench(
             ):
                 continue
             # ドラパルトデッキ: サポート使用済みターンはニャースexを温存
+            # ただしベンチ0体なら種切れ防止で必ず出す
             if _drapa_skip_nyarth and c_name == "ニャースex":
-                continue
+                if len(player.bench) >= 1:
+                    continue
             # ドラパルトデッキ: キチキギスexは必要になるまで出さない
             # さかてにとるは前ターンに自分のポケモンがきぜつしていないと使えない
             # 序盤に出してもボスの指令で呼ばれてサイド2枚献上するだけ
@@ -1112,6 +1122,9 @@ def _put_one_pokemon_on_bench(
                                (_our_ko[player_index] if len(_our_ko) > player_index else False)
                 if not _ko_happened:
                     continue  # きぜつしていない → さかてにとる使えない → 出す意味なし
+                # どすこいキャッチャー持ちがいれば出さない（引っ張られてサイド2献上）
+                if _opp_has_dosukoi:
+                    continue
             # ドラパルトデッキ: マシマシラはベンチに出さない（ただし種切れ防止で他にたねがなければ出す）
             if _is_drapa_bench(state, player_index) and c_name == "マシマシラ":
                 _has_other_basic_in_hand = any(
@@ -1285,17 +1298,14 @@ def _promote_from_bench(player: PlayerState, state: GameState, player_index: int
             _bp_energy = getattr(bp, "attached_energy", 0) or 0
             if bp_name == "ドラパルトex":
                 base += 6000  # メインアタッカー
-                # エネルギーが多いほどファントムダイブに近い → さらにボーナス
                 if _bp_energy >= 2:
-                    base += 4000  # あと1枚でファントムダイブ
+                    base += 4000  # ファントムダイブ圏内
                 elif _bp_energy >= 1:
                     base += 2000  # ジェットヘッド撃てる
-            elif bp_name == "スボミー":
-                # スボミーは逃げ0+グッズロック+サイド1枚 → 壁として常に優先
-                # いつでも逃げられるので前に出しても安全
-                base += 4000
             elif bp_name == "ドロンチ":
                 base += 2000
+            elif bp_name == "スボミー":
+                base += 4000
             # ex サポートポケモンは前に出さない（倒されると2サイド献上）
             # キチキギスex/ニャースex は攻撃力がなく、KOされるだけ
             if bp_name in ("キチキギスex", "ニャースex"):

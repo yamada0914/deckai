@@ -622,8 +622,10 @@ def _try_retreat_when_koed(state: GameState) -> bool:
                     raw -= 30000  # 進化の基盤 → 出さない（守りたい）
                 elif bp_name in ("サマヨール", "ヨノワール", "マシマシラ"):
                     raw -= 20000  # サポート系
+                elif bp_name == "ドロンチ":
+                    raw -= 10000  # HP低くてKOされやすい → 前に出さない
                 elif bp_name == "ヨマワル":
-                    raw += 5000  # 壁として適任（倒されてもカースドボムで活用可能、サイド1）
+                    raw += 5000  # 壁として適任
             score = raw + get_retreat_target_weight(weights, bp.card)
             if score > best_score:
                 best_score = score
@@ -1226,6 +1228,36 @@ def _try_attach_energy_with_attack_lookahead(state: GameState) -> bool:
         heuristic_logits_energy_attach,
     )
     from .trainers import attach_energy as _attach_en
+
+    # ドラパルトexデッキ: ファントムダイブ完成即時パス（最優先）
+    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_la
+    if _is_drapa_la(state, state.current_player) and not state.energy_attached_this_turn:
+        p_la = state.active_player_state()
+        _all_bp_la = ([p_la.active] if p_la.active else []) + list(p_la.bench or [])
+        for _bp_la in _all_bp_la:
+            if (getattr(_bp_la.card, "name", "") or "").strip() != "ドラパルトex":
+                continue
+            _types_la = list(getattr(_bp_la, "attached_energy_types", []) or [])
+            _need_la = None
+            if "fire" in _types_la and "psychic" not in _types_la:
+                _need_la = "psychic"
+            elif "psychic" in _types_la and "fire" not in _types_la:
+                _need_la = "fire"
+            if _need_la:
+                from card import is_energy as _is_e_la
+                for _ei_la, _ec_la in enumerate(p_la.hand):
+                    if _is_e_la(_ec_la) and getattr(_ec_la, "energy_type", None) == _need_la:
+                        _bi_la = None
+                        if _bp_la is not p_la.active:
+                            for _bi2, _bbp in enumerate(p_la.bench):
+                                if _bbp is _bp_la:
+                                    _bi_la = _bi2
+                                    break
+                        if _bi_la is not None:
+                            _attach_en(state, _ei_la, bench_index=_bi_la)
+                        else:
+                            _attach_en(state, _ei_la)
+                        return True
 
     if rules_only_for_player(state):
         return _try_attach_energy_auto(state)
@@ -2414,6 +2446,53 @@ def run_turn_auto(state: GameState) -> bool:
                 _try_put_bench_until_full()
 
     opp = state.defending_player_state()
+
+    # ドラパルトデッキ: 攻撃前にバトル場がexサポートポケモンなら逃げる
+    # exがバトル場に残るとサイド2枚献上リスク
+    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ex_retreat
+    if _is_drapa_ex_retreat(state, state.current_player) and p.active and p.bench:
+        _ex_active_name = (getattr(p.active.card, "name", "") or "").strip()
+        _is_ex_support = _ex_active_name in ("キチキギスex", "ニャースex")
+        if _is_ex_support and not getattr(state, "retreat_used_this_turn", False):
+            _raw_rc = getattr(p.active.card, "retreat_cost", 1)
+            _tool = getattr(p.active, "attached_tool", None)
+            _eff_rc = max(0, _raw_rc - (2 if _tool and (getattr(_tool, "id", "") or "") == "fuusen" else 0))
+            if p.active.attached_energy >= _eff_rc:
+                # 逃げ先: ドラメシヤ/ヨマワル/スボミー等の非exを優先
+                _best_retreat_idx = None
+                _best_retreat_score = -1
+                for _ri, _rbp in enumerate(p.bench):
+                    _rn = (getattr(_rbp.card, "name", "") or "").strip()
+                    _is_ex_bench = bool(getattr(_rbp.card, "is_ex", False))
+                    if _is_ex_bench:
+                        continue  # ex同士の入れ替えは意味なし
+                    _rscore = 100
+                    # ドラメシヤが場に複数いれば1体は壁に使える
+                    _drameshiya_count = sum(
+                        1 for _bp2 in p.bench
+                        if (getattr(_bp2.card, "name", "") or "").strip() == "ドラメシヤ"
+                    )
+                    if _rn == "ドラメシヤ":
+                        if _drameshiya_count >= 2:
+                            _rscore = 250  # 余裕あり → 壁として最適
+                        else:
+                            _rscore = 50  # 1体しかない → 進化の基盤、温存
+                    elif _rn == "スボミー":
+                        _rscore = 200  # グッズロック壁
+                    elif _rn == "ヨマワル":
+                        _rscore = 80  # カースドボム用に温存、壁にはしない
+                    elif _rn in ("ドロンチ", "ドラパルトex"):
+                        _rscore = 300  # アタッカー
+                    if _rscore > _best_retreat_score:
+                        _best_retreat_score = _rscore
+                        _best_retreat_idx = _ri
+                if _best_retreat_idx is not None:
+                    retreat(state, _best_retreat_idx)
+                    acted = True
+                    p = state.active_player_state()
+                    opp = state.defending_player_state()
+                    state._record_frame()
+
     if _do_attack_phase(state, p, opp):
         acted = True
         state._record_frame()
