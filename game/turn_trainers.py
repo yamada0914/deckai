@@ -307,17 +307,29 @@ def _try_support_no_discard_only(state: GameState) -> bool:
             for _bp_nds in _all_bp_nds
         )
 
+    # ドラパルトデッキ: 1ターン目はヒカリをスキップ（進化ポケモンを取っても使えない）
+    # リーリエの決心が手札にあるならリーリエで引き直す方が良い
+    if _is_drapa_nds and state.turn_count <= 1:
+        _has_lillie_nds = any(
+            is_support(c) and (getattr(c, "id", "") or "") == "riirienokesshin"
+            for c in p.hand
+        )
+        if _has_lillie_nds:
+            no_discard = [(i, c) for i, c in no_discard if (getattr(c, "id", "") or "") != "hikari"]
+            if not no_discard:
+                return False
+
     def _nds_sort_key(x):
         i, c = x
         cid = getattr(c, "id", "") or ""
         w = get_support_use_weight(weights, c)
         if _is_drapa_nds:
             if cid == "meinohagemashi":
-                w += 200.0  # メイのはげまし最優先
+                w += 200.0
             elif cid == "akamatsu" and _nds_phantom_reachable:
-                w += 150.0  # ファントムダイブに届く → 高優先
+                w += 150.0
             elif cid == "akamatsu":
-                w -= 100.0  # 届かない → 低優先（リーリエ等に譲る）
+                w -= 100.0
         return -w
 
     no_discard.sort(key=_nds_sort_key)
@@ -382,10 +394,15 @@ def _try_goods_before_hand_refresh(state: GameState) -> bool:
             for c in list(p.hand) + list(p.deck)
         )
         _has_support_gbhr = any(is_support(c) for c in p.hand)
-        if _has_draw_supp_gbhr or state.support_used_this_turn:
+        if state.support_used_this_turn:
             _drapa_skip_hb_gbhr = True
-        elif not _has_support_gbhr and _has_nyarth_gbhr:
-            _drapa_skip_hb_gbhr = True  # サポートなし+ニャースex確保可能 → HB温存
+        elif _has_draw_supp_gbhr:
+            _nyarth_in_deck_gbhr2 = any(
+                "ニャースex" in (getattr(dc, "name", "") or "")
+                for dc in p.deck
+            )
+            if not _nyarth_in_deck_gbhr2:
+                _drapa_skip_hb_gbhr = True
 
     def _build_goods_list():
         return [

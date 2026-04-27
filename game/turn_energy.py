@@ -423,6 +423,13 @@ def _build_energy_attach_input(
     _is_drapa_deck = _is_drapa_build(state, state.current_player)
     _drapa_support_names = frozenset({"スボミー", "キチキギスex", "ニャースex", "ヨマワル", "サマヨール", "ヨノワール"})
 
+    # ドラパルトデッキ: バトル場が次ターンKO確定ならエネをベンチに回す（付けたエネが無駄になる）
+    if _is_drapa_deck and candidates and p.active and opp.active and p.bench:
+        from .damage import _max_effective_damage_for_attacker as _opp_dmg_chk
+        _opp_max_dmg = _opp_dmg_chk(state, opp.active, p.active, 1 - state.current_player)
+        if _opp_max_dmg >= (p.active.hp or 0):
+            candidates = [(bi, d) for bi, d in candidates if bi is not None]  # バトル場候補を除外
+
     # ドラパルトexデッキ: 悪エネはドラパルトexライン（ドラメシヤ/ドロンチ/ドラパルトex）に付けない
     # ファントムダイブは炎+超が必要。悪エネを付けるとファントムダイブが使えなくなる。
     # また同じタイプのエネを2個付けない（ファントムダイブは火1+超1）

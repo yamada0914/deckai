@@ -272,13 +272,22 @@ def _draw_ability_used_marker(
         return
     bp_name = (getattr(getattr(bp, "card", None), "name", "") or "").strip()
     used = False
-    # ていさつしれい（ドロンチ）— 位置ベースで照合
+    # ていさつしれい（ドロンチ）— カウントベースで照合
+    # 使用回数 >= このドロンチの位置順（場の先頭から数えて何体目か）なら Used
     if bp_name == "ドロンチ":
-        positions = getattr(state, "_teisatsushirei_used_positions", set())
-        if position == "active" and ("active", player_index) in positions:
-            used = True
-        elif position == "bench" and ("bench", player_index, bench_index) in positions:
-            used = True
+        used_count = getattr(state, "_teisatsushirei_used_count", [0, 0])
+        n_used = used_count[player_index] if player_index < len(used_count) else 0
+        if n_used > 0:
+            # このドロンチが場の何体目のドロンチか数える
+            all_bp = ([state.players[player_index].active] if state.players[player_index].active else []) + list(state.players[player_index].bench or [])
+            doronchi_index = 0
+            for abp in all_bp:
+                if (getattr(getattr(abp, "card", None), "name", "") or "").strip() == "ドロンチ":
+                    if abp is bp or (position == "active" and abp is state.players[player_index].active) or (position == "bench" and bench_index >= 0 and abp is state.players[player_index].bench[bench_index]):
+                        if doronchi_index < n_used:
+                            used = True
+                        break
+                    doronchi_index += 1
     # おくのてキャッチ（ニャースex）
     elif bp_name == "ニャースex":
         if getattr(state, "_okunote_used_this_turn", False):

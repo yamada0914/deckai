@@ -684,13 +684,19 @@ def _try_retreat_voluntary(state: GameState) -> bool:
         # KO可能なら最優先、そうでなくてもバトル場が攻撃不能なら交代
         ko_bonus = 1000000 if dmg >= opp.active.hp else 0
         score = ko_bonus + dmg + bp.hp
-        # ドラパルトexデッキ: サポートポケモンは前に出さない
+        # ドラパルトexデッキ: 前に出すポケモンの優先度調整
         if _is_drapa_vol_deck:
             bp_name = (getattr(bp.card, "name", "") or "").strip()
             if bp_name in ("キチキギスex", "ニャースex"):
                 score -= 50000
-            if bp_name in ("サマヨール", "ヨノワール", "ヨマワル", "マシマシラ"):
+            elif bp_name == "ドラメシヤ":
+                score -= 30000  # 進化の基盤 → 前に出さない
+            elif bp_name in ("サマヨール", "ヨノワール", "マシマシラ"):
                 score -= 40000
+            elif bp_name == "スボミー":
+                score += 5000  # 壁+グッズロック → 前に出す候補として優先
+            elif bp_name == "ヨマワル":
+                score += 3000  # 壁として適任
         if score > best_score:
             best_score = score
             best_idx = i
@@ -1642,15 +1648,29 @@ def run_turn_auto(state: GameState) -> bool:
 
         can_evolve = state.turn_count >= 2
         # 進化前にていさつしれいを使い切る（ドロンチ→ドラパルトex進化で失われるため）
-        # ただしリーリエの決心等が手札にある場合はリーリエを先に使う
+        # リーリエが手札にあっても、ドラパルトex進化が控えているならていさつしれいを先に使う
         if can_evolve:
+            # ドラパルトex進化が可能か（手札にドラパルトex + 場にドロンチ）
+            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_pre_evo
+            _drapa_evo_pending = False
+            if _is_drapa_pre_evo(state, state.current_player):
+                _has_drapa_hand = any(
+                    is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "ドラパルトex"
+                    for c in p.hand
+                )
+                _has_doronchi_field = any(
+                    (getattr(bp.card, "name", "") or "").strip() == "ドロンチ"
+                    for bp in ([p.active] if p.active else []) + list(p.bench or [])
+                )
+                _drapa_evo_pending = _has_drapa_hand and _has_doronchi_field
             _has_hr_pre_evo = any(
                 is_support(c) and (getattr(c, "id", "") or "") in (
                     "riirienokesshin", "zeiyu", "hakasenokenkyuu",
                 )
                 for c in p.hand
             ) and not state.support_used_this_turn
-            if not _has_hr_pre_evo:
+            # ドラパルトex進化が控えている → リーリエ延期を無視してていさつしれいを先に使う
+            if not _has_hr_pre_evo or _drapa_evo_pending:
                 while _try_use_ability_teisatsushirei(state):
                     acted = True
                     p = state.active_player_state()
@@ -1785,11 +1805,16 @@ def run_turn_auto(state: GameState) -> bool:
                 _has_support_in_hand = any(is_support(c) for c in p.hand)
                 _skip_hb = False
                 if not state.support_used_this_turn:
-                    # サポート未使用: ドローサポートあり or ニャースex温存
+                    # サポート未使用 + ドローサポートが手札にある
                     if _has_draw_support_for_hb:
-                        _skip_hb = True
-                    elif not _has_support_in_hand and (_has_nyarth_in_deck or _has_nyarth_in_hand):
-                        _skip_hb = True
+                        # ニャースexが取れるならHB→ニャースex→おくのてキャッチ連携可能
+                        # リーリエ+おくのてキャッチで2つのサポートを活用できる
+                        _nyarth_in_deck_for_hb = any(
+                            "ニャースex" in (getattr(dc, "name", "") or "")
+                            for dc in p.deck
+                        )
+                        if not _nyarth_in_deck_for_hb:
+                            _skip_hb = True  # ニャースex取れない → リーリエで引いてから
                 else:
                     # サポート使用済み: ニャースex取っても今ターン活用できない → HBスキップ
                     _skip_hb = True
@@ -2230,9 +2255,12 @@ def run_turn_auto(state: GameState) -> bool:
                 )
                 _has_support_goods = any(is_support(c) for c in p.hand)
                 if _has_draw_support_goods:
-                    _skip_hb_goods = True
-                elif not _has_support_goods and _has_nyarth_goods:
-                    _skip_hb_goods = True  # サポートなし+ニャースex確保可能 → HB温存
+                    _nyarth_in_deck_goods = any(
+                        "ニャースex" in (getattr(dc, "name", "") or "")
+                        for dc in p.deck
+                    )
+                    if not _nyarth_in_deck_goods:
+                        _skip_hb_goods = True
             else:
                 # サポート使用済み → HBでニャースex等を取っても今ターン活用できない
                 _skip_hb_goods = True

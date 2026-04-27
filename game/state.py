@@ -1430,7 +1430,11 @@ def _check_game_end(state: GameState) -> bool:
 def mark_own_deck_shuffled(state: GameState) -> None:
     """現在のプレイヤーの山札を切った直後に呼ぶ（暗号マニアのタイミング用）。"""
     state.own_deck_shuffled_this_turn = True
-    # デッキを検索した → サイドの中身を推測可能（消去法）
+
+
+def mark_deck_searched(state: GameState) -> None:
+    """デッキの中身を確認した（検索した）時に呼ぶ。サイドの中身を推測可能になる。
+    リーリエの決心等のシャッフルドローでは呼ばない（デッキを見ていない）。"""
     if not hasattr(state, "deck_searched_by_player"):
         state.deck_searched_by_player = [False, False]
     state.deck_searched_by_player[state.current_player] = True
@@ -1453,6 +1457,7 @@ def start_turn(state: GameState) -> None:
     state._okunote_used_this_turn = False
     state._teisatsushirei_used_this_turn = False
     state._teisatsushirei_used_ids_this_turn = set()  # 各ドロンチのID別トラッキングもリセット
+    state._teisatsushirei_used_count = [0, 0]  # カウントベース追跡もリセット（Usedマーカー用）
     # かげしばり: ターン開始時に自分のバトル場の retreat_locked を解除
     p_now = state.players[state.current_player]
     if p_now.active and getattr(p_now.active, "retreat_locked", False):

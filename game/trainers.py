@@ -44,6 +44,7 @@ from .state import (
     _log_choice,
     _prizes_for_ko,
     mark_own_deck_shuffled,
+    mark_deck_searched,
     rules_only_for_player,
 )
 
@@ -253,11 +254,14 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
                 )
                 return 5000.0 if _has_samayoru_field else 1500.0
             # ニャースex: おくのてキャッチ→サポートサーチが強力
+            # サポートが手札にあっても、おくのてキャッチで追加サポート(アカマツ等)を取れる価値は高い
             if c_name == "ニャースex":
                 if len(p.bench) >= 5:
                     return -5000.0  # ベンチ満杯 → 出せないので取る意味なし
+                if not state.support_used_this_turn:
+                    return 14000.0  # サポート未使用 → おくのてキャッチ→即サポート連携が可能
                 if _has_draw_support_hb:
-                    return 2000.0 + strength  # ドローサポートが手札にあるなら低め
+                    return 2000.0 + strength  # サポート使用済み+ドローサポートあり → 低め
                 return 9000.0 + strength  # サポートなし → おくのてキャッチでサポートを確保
             # キチキギスex: HBで取るバリューは基本的に低い（ベンチ枠を使う割に即効性がない）
             # ニャースex（おくのてキャッチ）やドラメシヤ（ドロンチ進化の基盤）を優先
@@ -606,6 +610,7 @@ def use_trainer_goods(
         p.deck.extend(rest)
         random.shuffle(p.deck)
         mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
         p.discard.append(p.hand.pop(hand_index))
         if energies:
             state.log(f"{state.player_name(state.current_player)}: エレキジェネレーターを使用 → 山札上から 5 枚のうち基本雷エネルギー {len(energies)} 枚をベンチの {p.bench[best_bi].card.name} につけた")
@@ -625,6 +630,7 @@ def use_trainer_goods(
         p.deck.extend(top)
         random.shuffle(p.deck)
         mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
         p.discard.append(p.hand.pop(hand_index))
         pokemon_label = _card_label(pokemon) if pokemon else ""
         state.log(
@@ -990,6 +996,7 @@ def use_trainer_goods(
             state.drawn_this_turn.append(c)
             random.shuffle(p.deck)
             mark_own_deck_shuffled(state)
+            mark_deck_searched(state)
         p.discard.append(p.hand.pop(new_hi))
         add_label = f" → {_card_label(pokemon_found[1])}" if pokemon_found else ""
         state.log(
@@ -1282,6 +1289,7 @@ def use_trainer_goods(
             state.drawn_this_turn.append(chosen)
             random.shuffle(p.deck)
             mark_own_deck_shuffled(state)
+            mark_deck_searched(state)
             p.discard.append(p.hand.pop(hand_index))
             state.log(f"{state.player_name(state.current_player)}: ファイトゴングを使用 → 山札から {_card_label(chosen)} を手札に加えた")
             return True
@@ -1485,6 +1493,7 @@ def use_trainer_goods(
             state.drawn_this_turn.append(chosen)
             random.shuffle(p.deck)
             mark_own_deck_shuffled(state)
+            mark_deck_searched(state)
             p.discard.append(p.hand.pop(hand_index))
             state.log(f"{state.player_name(state.current_player)}: ポケパッドを使用 → 山札から {_card_label(chosen)} を手札に加えた")
             return True
@@ -1661,6 +1670,7 @@ def use_trainer_goods(
         if put_count > 0:
             random.shuffle(p.deck)
             mark_own_deck_shuffled(state)
+            mark_deck_searched(state)
             p.discard.append(p.hand.pop(hand_index))
             return True
         return False
@@ -2217,7 +2227,17 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
             if sid == "bosunoshirei":
                 return 1500
             # メイのはげまし: きぜつ後のエネ加速（Stage2対象）
+            # ドラパルトexがエネ不足でファントムダイブに繋がるなら最優先
             if _is_drapa_oku and sid == "meinohagemashi":
+                if _drapa_needs_energy_oku:
+                    # ドラパルトexが場にいてエネ不足 → メイのはげましが最優先
+                    _has_drapa_ex_oku = any(
+                        (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
+                        for bp in ([p.active] if p.active else []) + list(p.bench or [])
+                    )
+                    if _has_drapa_ex_oku:
+                        return 6000  # ファントムダイブ直結 → リーリエより上
+                    return 4000
                 return 1200
             # ブライア: フィニッシュ用
             if sid == "buraia":
@@ -2233,6 +2253,7 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
         state._okunote_used_this_turn = True
         random.shuffle(p.deck)
         mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
         state.log(
             f"{state.player_name(state.current_player)}: ニャースex の特性「おくのてキャッチ」→ "
             f"山札にサポートがなかった"
@@ -2243,6 +2264,7 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
     state.drawn_this_turn.append(found)
     random.shuffle(p.deck)
     mark_own_deck_shuffled(state)
+    mark_deck_searched(state)
     state._okunote_used_this_turn = True
     state.log(
         f"{state.player_name(state.current_player)}: ニャースex の特性「おくのてキャッチ」→ "
@@ -2770,6 +2792,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
             fetched.append(c)
         random.shuffle(p.deck)
         mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
         p.discard.append(p.hand.pop(hand_index))
         state.support_used_this_turn = True
         fetched_names = ", ".join(_card_label(c) for c in fetched)
@@ -2844,6 +2867,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
             fetched.append(c)
         random.shuffle(p.deck)
         mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
         if len(fetched) == 1:
             # 1枚しか見つからなかった場合: 手札に加える
             p.hand.append(fetched[0])

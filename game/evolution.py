@@ -13,6 +13,7 @@ from .state import (
     _handle_opponent_ko,
     _prizes_for_ko,
     _put_energy_cards_in_discard,
+    get_effective_max_hp,
 )
 
 
@@ -31,8 +32,11 @@ def _apply_evolution(
     damage_taken = old_max_hp - old_hp
     evolved = evolution_card.copy()
     target.card = evolved
-    target.card.max_hp = evolved.max_hp
-    target.card.hp = max(0, min(evolved.max_hp, evolved.max_hp - damage_taken))
+    # グラビティーマウンテン等のスタジアム効果を反映した実効max_hp
+    eff_max_hp = get_effective_max_hp(state, evolved)
+    target.card.max_hp = evolved.max_hp  # カード本来のmax_hpは保持
+    target.card.hp = max(0, min(eff_max_hp, eff_max_hp - damage_taken))
+    target.hp = target.card.hp
     target.attached_energy = old_energy
     target.attached_energy_types = list(old_energy_types)
     target.evolved_this_turn = True
@@ -83,9 +87,9 @@ def _trigger_ability_when_evolved(state: GameState, target: BattlePokemon) -> No
             if can_ko:
                 resource_bonus = energy_attached * 200 + (300 if is_evolved else 0)
             else:
-                # KO不可 → エネ多いほど危険（引っ張るべきでない）、エネ少ないほど安全（縛れる）
+                # KO不可でもエネ多い方を優先（同名ポケモンならリソース削り）
                 retreat_cost = getattr(bp.card, "retreat_cost", 1) or 1
-                resource_bonus = -energy_attached * 500 + retreat_cost * 300
+                resource_bonus = energy_attached * 300 + retreat_cost * 100
             # サポート特性持ちを狙う（特性封じ＋サイド取得で一石二鳥）
             name = (getattr(bp.card, "name", "") or "").strip()
             ability_deny_bonus = 2000 if name in _ABILITY_DENY_NAMES else 0
