@@ -263,16 +263,21 @@ def _draw_ability_used_marker(
     w: int,
     h: int,
     state: "GameState | None" = None,
+    position: str | None = None,
+    player_index: int = 0,
+    bench_index: int = -1,
 ) -> None:
     """1ターン1回の特性を使用済みの場合、カード上に薄く'Used'マーカーを表示する。"""
     if state is None:
         return
     bp_name = (getattr(getattr(bp, "card", None), "name", "") or "").strip()
     used = False
-    # ていさつしれい（ドロンチ）
+    # ていさつしれい（ドロンチ）— 位置ベースで照合
     if bp_name == "ドロンチ":
-        used_ids = getattr(state, "_teisatsushirei_used_ids_this_turn", set())
-        if id(bp) in used_ids:
+        positions = getattr(state, "_teisatsushirei_used_positions", set())
+        if position == "active" and ("active", player_index) in positions:
+            used = True
+        elif position == "bench" and ("bench", player_index, bench_index) in positions:
             used = True
     # おくのてキャッチ（ニャースex）
     elif bp_name == "ニャースex":
@@ -346,6 +351,9 @@ def _draw_pokemon_with_tool(
     h: int,
     images_dir: Path,
     state: "GameState | None" = None,
+    position: str = "bench",
+    player_index: int = 0,
+    bench_index: int = -1,
 ) -> None:
     """ポケモンカードを描画する。どうぐがついていればその上にはみ出すように重ねて表示する。
 
@@ -389,7 +397,7 @@ def _draw_pokemon_with_tool(
     bg.paste(paste_img.convert("RGB"), (px, py), paste_img)
     # Usedマーカーは最上レイヤー（進化カードの上に被らないように）
     bg_draw = ImageDraw.Draw(bg)
-    _draw_ability_used_marker(bg, bg_draw, bp, x, y, w, h, state=state)
+    _draw_ability_used_marker(bg, bg_draw, bp, x, y, w, h, state=state, position=position, player_index=player_index, bench_index=bench_index)
 
 
 def _draw_hp_bar(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, hp: int, max_hp: int) -> None:
@@ -690,12 +698,12 @@ def render_board_frame(
         bx = start_bx + i * (CARD_W_BENCH + BENCH_GAP)
         if i < len(opp.bench):
             bp = opp.bench[i]
-            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
+            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state, position="bench", player_index=1, bench_index=i)
         else:
             _draw_placeholder(draw, bx, bench_y_opp, CARD_W_BENCH, CARD_H_BENCH, "")
     if opp.active:
         bp = opp.active
-        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
+        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state, position="active", player_index=1)
     else:
         _draw_placeholder(draw, active_x, active_y_opp, CARD_W_BENCH, CARD_H_BENCH, "なし")
 
@@ -713,7 +721,7 @@ def render_board_frame(
     active_y_self = center_y + 16
     if self_p.active:
         bp = self_p.active
-        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
+        _draw_pokemon_with_tool(bg, draw, bp, active_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state, position="active", player_index=0)
     else:
         _draw_placeholder(draw, active_x, active_y_self, CARD_W_BENCH, CARD_H_BENCH, "なし")
     if stadium_card is not None and stadium_played_by == 0:
@@ -723,7 +731,7 @@ def render_board_frame(
         bx = start_bx + i * (CARD_W_BENCH + BENCH_GAP)
         if i < len(self_p.bench):
             bp = self_p.bench[i]
-            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state)
+            _draw_pokemon_with_tool(bg, draw, bp, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, images_dir, state=state, position="bench", player_index=0, bench_index=i)
         else:
             _draw_placeholder(draw, bx, bench_y_self, CARD_W_BENCH, CARD_H_BENCH, "")
     deck_trash_x_self = start_bx + total_bw + BENCH_GAP

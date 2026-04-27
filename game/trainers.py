@@ -2023,6 +2023,33 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
                 win_target, win_target_key, win_prize_gain = tbp, tkey, pg
                 can_win_with_bomb = True
 
+        # カースドボムで削り + ファントムダイブのベンチ60でKO → サイド取り切り
+        # 例: サマヨール50 → HP110のベンチが60に → ファントムダイブ(200+60)で2体KO
+        if not can_win_with_bomb and _is_drapa and _can_ko_active:
+            _drapa_active = p.active
+            _drapa_name = (getattr(_drapa_active.card, "name", "") or "").strip() if _drapa_active else ""
+            if _drapa_name == "ドラパルトex":
+                _en = getattr(_drapa_active, "attached_energy", 0) or 0
+                _types = list(getattr(_drapa_active, "attached_energy_types", []) or [])
+                _can_phantom_win = _en >= 2 and "fire" in _types and "psychic" in _types
+                if _can_phantom_win:
+                    for tkey, tbp in targets:
+                        if tkey == "active":
+                            continue  # バトル場はファントムダイブ本体で倒す
+                        if tbp.hp is None or tbp.hp <= 0:
+                            continue
+                        # カースドボムで削って、ファントムダイブのベンチ60で倒せるか
+                        remaining_hp = tbp.hp - bomb_damage
+                        if remaining_hp > 0 and remaining_hp <= _phantom_bench_dmg:
+                            from .state import _prizes_for_ko
+                            pg_bomb_bench = _prizes_for_ko(tbp)
+                            total_prizes = _atk_prize + pg_bomb_bench
+                            if our_prizes_remaining <= total_prizes:
+                                win_target, win_target_key = tbp, tkey
+                                win_prize_gain = pg_bomb_bench
+                                can_win_with_bomb = True
+                                break
+
         # 相手サイド1枚の時は自爆禁止（相手がサイド取って勝ってしまう）
         if opp_prizes_remaining <= 1 and not can_win_with_bomb:
             continue
@@ -2307,6 +2334,17 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
     for c in top:
         p.deck.append(c)
     used_set.add(id(doronchi_bp))
+    # 位置ベースの追跡（deepcopy後のスナップショットでも照合可能）
+    if not hasattr(state, "_teisatsushirei_used_positions"):
+        state._teisatsushirei_used_positions = set()
+    p = state.active_player_state()
+    if doronchi_bp is p.active:
+        state._teisatsushirei_used_positions.add(("active", state.current_player))
+    else:
+        for bi, bbp in enumerate(p.bench):
+            if bbp is doronchi_bp:
+                state._teisatsushirei_used_positions.add(("bench", state.current_player, bi))
+                break
     # 後方互換: 旧フラグもセット
     state._teisatsushirei_used_this_turn = True
     # ログに2枚とも表示
