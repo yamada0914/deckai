@@ -1089,7 +1089,15 @@ def _put_one_pokemon_on_bench(
                 for c in player.hand
             )
             if _has_draw_support_hand:
-                _drapa_skip_nyarth = True
+                # ドラパルトexが場にいてエネ不足 → ニャースexを出してアカマツを取りに行く
+                # リーリエでドローしてもエネが来る保証はないが、アカマツなら確実
+                _drapa_ex_needs_energy_nyarth = any(
+                    (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
+                    and (getattr(bp, "attached_energy", 0) or 0) < 2
+                    for bp in ([player.active] if player.active else []) + list(player.bench or [])
+                )
+                if not _drapa_ex_needs_energy_nyarth:
+                    _drapa_skip_nyarth = True
             if _opp_has_dosukoi:
                 _drapa_skip_nyarth = True  # どすこいで引っ張られるリスク
 

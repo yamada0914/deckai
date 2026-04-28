@@ -2093,17 +2093,27 @@ def run_turn_auto(state: GameState) -> bool:
                         _tool_ret = getattr(_p_ret.active, "attached_tool", None)
                         _eff_rc = max(0, _raw_rc - (2 if _tool_ret and (getattr(_tool_ret, "id", "") or "") == "fuusen" else 0))
                         if _eff_rc > 0 and _p_ret.active.attached_energy < _eff_rc:
-                            _has_energy_hand = any(is_energy(c) for c in _p_ret.hand)
-                            if _has_energy_hand:
-                                from .turn_energy import _pick_energy_hand_idx
-                                from .trainers import attach_energy as _ret_attach
-                                _eidx = _pick_energy_hand_idx(_p_ret, state)
-                                if _eidx is not None:
-                                    _ret_attach(state, _eidx)
-                                    acted = True
-                                    _did_attach_for_ko = True
-                                    p = state.active_player_state()
-                                    state._record_frame()
+                            # ドラパルトexデッキ: サポートポケモン（ヨノワール等）の逃げにエネを使うのは無駄
+                            # ベンチのドラパルトexにエネを付けた方がファントムダイブへの投資になる
+                            _skip_ret_for_drapa = False
+                            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ret
+                            if _is_drapa_ret(state, state.current_player):
+                                _ret_active_name = (getattr(_p_ret.active.card, "name", "") or "").strip()
+                                _drapa_support_ret = frozenset({"ヨノワール", "サマヨール", "ヨマワル", "キチキギスex", "ニャースex", "マシマシラ"})
+                                if _ret_active_name in _drapa_support_ret:
+                                    _skip_ret_for_drapa = True
+                            if not _skip_ret_for_drapa:
+                                _has_energy_hand = any(is_energy(c) for c in _p_ret.hand)
+                                if _has_energy_hand:
+                                    from .turn_energy import _pick_energy_hand_idx
+                                    from .trainers import attach_energy as _ret_attach
+                                    _eidx = _pick_energy_hand_idx(_p_ret, state)
+                                    if _eidx is not None:
+                                        _ret_attach(state, _eidx)
+                                        acted = True
+                                        _did_attach_for_ko = True
+                                        p = state.active_player_state()
+                                        state._record_frame()
 
             if not _did_attach_for_ko:
                 if _try_use_ability_runasaikuru(state):

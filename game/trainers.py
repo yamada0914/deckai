@@ -122,7 +122,7 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
             is_pokemon(c) and (getattr(c, "name", "") or "").strip() in _drapa_names_pre
             for c in list(p.deck) + list(p.hand)
         )
-        _drapa_allow_dup = {"ドロンチ"} if _is_drapa_hb_pre else set()
+        _drapa_allow_dup = {"ドロンチ", "ドラメシヤ"} if _is_drapa_hb_pre else set()
         preferred = [
             (i, c) for i, c in candidates
             if not _haipaboru_already_have(p, c)
@@ -254,10 +254,23 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
                 return 3000.0 + strength
             # ドラメシヤ（ベンチに出して展開）
             if c_name == "ドラメシヤ":
+                # 場+手札に2体以上いれば十分 → 他を優先
+                _drameshiya_count = sum(
+                    1 for fc in field_cards
+                    if (getattr(fc, "name", "") or "").strip() in ("ドラメシヤ", "ドロンチ", "ドラパルトex")
+                ) + sum(
+                    1 for hc in p.hand
+                    if is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() == "ドラメシヤ"
+                )
+                if _drameshiya_count >= 2:
+                    return 3000.0  # 2体以上 → スボミー/ヨマワルより低く
                 return 6000.0 + strength
+            # スボミー（むずむずかふん=グッズロック、壁役）
+            if c_name == "スボミー":
+                return 5000.0
             # ヨマワル
             if c_name == "ヨマワル":
-                return 4000.0 + strength
+                return 4500.0
             # サマヨール/ヨノワール（カースドボム）
             if c_name == "サマヨール":
                 _has_yomawaru_field = any(
@@ -275,10 +288,10 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
                 if len(p.bench) >= 5:
                     return -5000.0
                 if _has_draw_support_hb:
-                    return 2000.0 + strength  # ドローサポートあり → 低め
+                    return 2000.0  # ドローサポートあり → ドラメシヤ(6000)より低く
                 if state is not None and not state.support_used_this_turn:
                     return 14000.0  # サポートなし+未使用 → おくのてキャッチ連携
-                return 9000.0 + strength
+                return 9000.0
             # キチキギスex: HBで取るバリューは基本的に低い（ベンチ枠を使う割に即効性がない）
             # ニャースex（おくのてキャッチ）やドラメシヤ（ドロンチ進化の基盤）を優先
             if c_name == "キチキギスex":
@@ -813,7 +826,7 @@ def use_trainer_goods(
                 if c_id_hb == "meinohagemashi":
                     discard_score -= 4000.0  # メイのはげまし: Stage2にエネ2枚付ける唯一の手段
                 elif c_id_hb == "akamatsu":
-                    discard_score -= 3000.0  # アカマツ: 炎+超を一度に確保
+                    discard_score -= 15000.0  # アカマツ: FDの生命線（炎+超を確実に確保）
             # アンフェアスタンプは終盤の逆転カード → 基本的に捨てない（全デッキ共通）
             if is_goods(c) and (getattr(c, "id", "") or "") == "anfeasutanpu":
                 discard_score -= 15000.0
@@ -2222,9 +2235,25 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
             (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")
             for bp in ([p.active] if p.active else []) + list(p.bench or [])
         )
+        # ドラパルトexが場にいるか（進化済み）
+        _drapa_has_ex_on_field_oku = _is_drapa_oku and any(
+            (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
+            for bp in ([p.active] if p.active else []) + list(p.bench or [])
+        )
         def _okunote_support_score(pair):
             _, sc = pair
             sid = (getattr(sc, "id", "") or "").strip()
+            # アカマツ: ドラパルトexが場にいてエネ不足なら最優先（FD直結）
+            # リーリエでドローしてもエネが来る保証はないが、アカマツなら確実にエネ2枚
+            if _is_drapa_oku and sid == "akamatsu":
+                if _drapa_has_ex_on_field_oku and _drapa_needs_energy_oku:
+                    return 7000  # FD直結 → 最優先
+                elif _drapa_line_on_field_oku and _drapa_needs_energy_oku:
+                    return 4000
+                elif _drapa_line_on_field_oku:
+                    return 1500
+                else:
+                    return 500  # ラインが場にいない → 低優先
             # 手札が少ない場合はリーリエの決心が最優先（ドローで立て直す）
             if sid == "riirienokesshin":
                 if _hand_size_oku <= 4:
@@ -2233,14 +2262,6 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
                     return 1800
                 else:
                     return 800
-            # アカマツ: ドラパルトexラインが場にいる時のみ高優先
-            if _is_drapa_oku and sid == "akamatsu":
-                if _drapa_line_on_field_oku and _drapa_needs_energy_oku:
-                    return 3000
-                elif _drapa_line_on_field_oku:
-                    return 1500
-                else:
-                    return 500  # ラインが場にいない → 低優先
             # ボスの指令: ベンチ狙いに必要
             if sid == "bosunoshirei":
                 return 1500
@@ -2337,11 +2358,22 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
         is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() == "ドラパルトex"
         for hc in p.hand
     )
+    # ドラパルトexが場にいてエネ不足か（アカマツの価値判定用）
+    _drapa_ex_needs_energy_tei = any(
+        (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
+        and (getattr(bp, "attached_energy", 0) or 0) < 2
+        for bp in _all_field_bp
+    )
+    # キチキギスex: 前ターンにきぜつ発生+ベンチ空き → さかてにとるで3枚ドロー
+    _bench_has_room_tei = len(p.bench) < 5  # ベンチ枠に空きがあるか（activeは別）
+    _ko_last_turn_tei = any(getattr(state, "any_ko_by_opponent_last_turn", [False, False]))
+    _kichikigisu_valuable_tei = _ko_last_turn_tei and _bench_has_room_tei
     def _card_value(c):
         if is_support(c):
             cid_v = (getattr(c, "id", "") or "").strip()
             if cid_v == "akamatsu":
-                return 1100
+                # ドラパルトexが場にいてエネ不足 → FD直結なので最優先
+                return 1800 if _drapa_ex_needs_energy_tei else 1100
             return 1000
         if is_pokemon(c) and getattr(c, "evolves_from", None):
             cname_v = (getattr(c, "name", "") or "").strip()
@@ -2356,6 +2388,13 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
                     return 1200
                 return 900
             return 800
+        # たねポケモン（進化なし）
+        if is_pokemon(c) and not getattr(c, "evolves_from", None):
+            cname_v = (getattr(c, "name", "") or "").strip()
+            # キチキギスex: 前ターンきぜつ+ベンチ空き → さかてにとるで3枚ドロー
+            if cname_v == "キチキギスex" and _kichikigisu_valuable_tei:
+                return 1400  # サポートより高く、進化可能なドラパルトexより低い
+            return 200  # たねポケモンはていさつしれいで取る優先度は低い
         if is_energy(c):
             return 500
         if is_goods(c):
