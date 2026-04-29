@@ -253,7 +253,7 @@ def heuristic_logits_retreat_before_attack(state: GameState) -> list[float]:
                     logits[0] += 10.0  # NOOPを強く推奨
                     for bi in range(BENCH_SIZE):
                         logits[1 + bi] -= 8.0  # にげるペナルティ
-            elif active_name in ("キチキギスex", "ニャースex", "スボミー", "ヨマワル", "サマヨール") and active_energy == 0:
+            elif active_name in ("キチキギスex", "ニャースex", "ヨマワル", "サマヨール") and active_energy == 0:
                 # サポートポケモンがバトル場でエネなし → ベンチのドラパルトexに交代したい
                 opp = state.defending_player_state()
                 for bi, bp in enumerate(p.bench):

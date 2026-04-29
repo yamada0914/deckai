@@ -238,7 +238,7 @@ def _support_try_order(p: PlayerState, state: GameState) -> list[int]:
     def _key(x):
         i, c = x
         cid = getattr(c, "id", "") or ""
-        # ドラパルトexデッキ: アカマツはファントムダイブに届く時のみ最優先
+        # ドラパルトexデッキ: アカマツ/メイはファントムダイブに届く時のみ最優先
         energy_supp_priority = 1
         if _drapa_akamatsu_enables_phantom and cid in ("akamatsu", "meinohagemashi"):
             energy_supp_priority = -1  # 最優先

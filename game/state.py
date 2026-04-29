@@ -1130,9 +1130,6 @@ def _put_one_pokemon_on_bench(
                                (_our_ko[player_index] if len(_our_ko) > player_index else False)
                 if not _ko_happened:
                     continue  # きぜつしていない → さかてにとる使えない → 出す意味なし
-                # どすこいキャッチャー持ちがいれば出さない（引っ張られてサイド2献上）
-                if _opp_has_dosukoi:
-                    continue
             # ドラパルトデッキ: マシマシラはベンチに出さない（ただし種切れ防止で他にたねがなければ出す）
             if _is_drapa_bench(state, player_index) and c_name == "マシマシラ":
                 _has_other_basic_in_hand = any(
@@ -1144,6 +1141,16 @@ def _put_one_pokemon_on_bench(
                 _field_pokemon_count = len(player.bench) + (1 if player.active else 0)
                 if _has_other_basic_in_hand or _field_pokemon_count >= 2:
                     continue  # 他にたねがあるか場に2体以上いるなら出さない
+            # ドラパルトデッキ: ドラメシヤは場に3体以上なら追加しない（ベンチ枠を温存）
+            # スボミーやニャースex用の枠を残す。やられる分も考慮して3体が目安。
+            if _is_drapa_bench(state, player_index) and c_name == "ドラメシヤ":
+                _drapa_line_names_bench = {"ドラメシヤ", "ドロンチ", "ドラパルトex"}
+                _drapa_line_count = sum(
+                    1 for bp in player.bench
+                    if getattr(bp.card, "name", "") in _drapa_line_names_bench
+                ) + (1 if player.active and getattr(player.active.card, "name", "") in _drapa_line_names_bench else 0)
+                if _drapa_line_count >= 4:
+                    continue
             # ドラパルトデッキ: ヨマワルラインは場に合計1体まで
             if _is_drapa_bench(state, player_index) and c_name == "ヨマワル":
                 _yoma_line_names = {"ヨマワル", "サマヨール", "ヨノワール"}

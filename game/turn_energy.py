@@ -192,6 +192,21 @@ def _try_evolve_once(state: GameState) -> bool:
             if evo_name_ == "ドロンチ":
                 w += 5000.0  # ていさつしれいを先に使うため最優先
             elif evo_name_ == "ドラパルトex":
+                # ふしぎなアメが手札にある+ターゲットがドロンチ+ドラメシヤが場にいる
+                # → アメでドラメシヤに乗せる方が得（ドロンチをていさつしれい用に残せる）
+                _has_ame_evo = any(
+                    (getattr(hc, "id", "") or "") == "fushiginaame"
+                    for hc in p.hand
+                )
+                _target_bp_evo = p.active if bench_idx_ is None else p.bench[bench_idx_]
+                _target_is_doronchi = (getattr(_target_bp_evo.card, "name", "") or "").strip() == "ドロンチ"
+                _has_drameshiya_for_ame = any(
+                    (getattr(bp.card, "name", "") or "").strip() == "ドラメシヤ"
+                    for bp in ([p.active] if p.active else []) + list(p.bench or [])
+                )
+                if _has_ame_evo and _target_is_doronchi and _has_drameshiya_for_ame:
+                    w -= 20000.0  # アメで乗せるべき → 通常進化を抑制
+
                 # ドロンチ進化候補がまだ残っている場合は後回し
                 _has_more_doronchi_evo = any(
                     is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() == "ドロンチ"

@@ -783,12 +783,22 @@ def use_trainer_goods(
                             )
                             if not _has_this_type:
                                 _drapa_needing += 1
+                    # 夜のタンカがデッキ+手札にあるか（エネルギーをトラッシュから回収可能）
+                    _has_tanka = any(
+                        (getattr(hc, "id", "") or "") == "yorunotanka"
+                        for _, hc in hand_without_haipaboru
+                    ) or any(
+                        (getattr(dc, "id", "") or "") == "yorunotanka"
+                        for dc in p.deck
+                    )
                     if _same_type_count <= _drapa_needing:
                         discard_score -= 9000.0  # 必要数以下 → 捨てると攻撃不能
                     elif _same_type_count <= 1:
                         discard_score -= 9000.0  # 最後の1枚 → ファントムダイブの生命線
+                    elif _same_type_count >= 2 and _has_tanka:
+                        discard_score += 500.0  # 2枚以上+タンカあり → 捨ててOK（回収可能）
                     else:
-                        discard_score -= 4000.0  # 余裕がある場合のみ少し緩和
+                        discard_score -= 4000.0  # タンカなし → 慎重に
                 elif etype_hb == "darkness":
                     # ニャースexがバトル場で逃げ用に必要な場合は保護
                     _nyarth_active = (
@@ -2554,9 +2564,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         if can_ko_active:
             return False
 
-        # ドラパルトexデッキ: ファントムダイブ(200+ベンチ60)が撃てるなら
-        # バトル場に200点+ベンチにダメカン60の方が、ボスで弱い相手を引っ張るより効率的
-        # ボスを使うのはサイド取り切りできる場合のみ
+        # ドラパルトexデッキ: ボスの指令の使用条件
         from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_boss
         if _is_drapa_boss(state, state.current_player):
             _active_name_boss = (getattr(p.active.card, "name", "") or "").strip()

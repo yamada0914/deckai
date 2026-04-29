@@ -575,6 +575,19 @@ def _try_retreat_when_koed(state: GameState) -> bool:
     our_max_effective = _our_max_effective_damage(state)
     would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
     can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
+    # ドラパルトexデッキ: スボミーがバトル場でKO確定 → ベンチにFD準備完了のドラパルトexがいなければ壁として残す
+    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_subomii_wall
+    if _is_drapa_subomii_wall(state, state.current_player):
+        _active_name_koed = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
+        if _active_name_koed == "スボミー":
+            # ベンチにFD準備完了(エネ2+)のドラパルトexがいるなら逃げて攻撃に回す
+            _fd_ready_on_bench = any(
+                (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
+                and getattr(bp, "attached_energy", 0) >= 2
+                for bp in p.bench
+            )
+            if not _fd_ready_on_bench:
+                return False  # FD未準備 → スボミーで壁+グッズロックで時間稼ぎ
     _raw_retreat = getattr(p.active.card, "retreat_cost", 1) if p.active else 0
     retreat_cost = max(0, _raw_retreat - (2 if p.active and (getattr(p.active, "attached_tool", None) and (getattr(p.active.attached_tool, "id", "") or "") == "fuusen") else 0))
     can_retreat = p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
@@ -633,11 +646,24 @@ def _try_retreat_when_koed(state: GameState) -> bool:
     if best_idx is None:
         survivors = [(i, p.bench[i].hp, p.bench[i].attached_energy) for i in range(len(p.bench)) if p.bench[i].hp > opp_max_effective]
         if survivors:
-            best_idx = max(survivors, key=lambda x: (x[1], x[2], get_retreat_target_weight(weights, p.bench[x[0]].card)))[0]
+            def _fallback_score(x):
+                idx_, hp_, energy_ = x
+                bp_name_ = (getattr(p.bench[idx_].card, "name", "") or "").strip()
+                s = (hp_, energy_, get_retreat_target_weight(weights, p.bench[idx_].card))
+                # ドラパルトexデッキ: exサポートをフォールバックでも前に出さない
+                if _is_drapa_koed_deck and bp_name_ in ("キチキギスex", "ニャースex"):
+                    return (-1, 0, 0)
+                return s
+            best_idx = max(survivors, key=_fallback_score)[0]
         else:
+            def _fallback_score2(i):
+                bp_name_ = (getattr(p.bench[i].card, "name", "") or "").strip()
+                if _is_drapa_koed_deck and bp_name_ in ("キチキギスex", "ニャースex"):
+                    return (-1, 0, 0)
+                return (p.bench[i].hp, p.bench[i].attached_energy, get_retreat_target_weight(weights, p.bench[i].card))
             best_idx = max(
                 range(len(p.bench)),
-                key=lambda i: (p.bench[i].hp, p.bench[i].attached_energy, get_retreat_target_weight(weights, p.bench[i].card)),
+                key=_fallback_score2,
                 default=None,
             )
     if best_idx is None:
@@ -1837,19 +1863,27 @@ def run_turn_auto(state: GameState) -> bool:
                 _has_support_in_hand = any(is_support(c) for c in p.hand)
                 _skip_hb = False
                 if not state.support_used_this_turn:
-                    # サポート未使用 + ドローサポートが手札にある
                     if _has_draw_support_for_hb:
-                        # ニャースexが取れるならHB→ニャースex→おくのてキャッチ連携可能
-                        # リーリエ+おくのてキャッチで2つのサポートを活用できる
+                        # ドローサポートが手札にある → HBでニャースex→おくのてキャッチ連携
                         _nyarth_in_deck_for_hb = any(
                             "ニャースex" in (getattr(dc, "name", "") or "")
                             for dc in p.deck
                         )
                         if not _nyarth_in_deck_for_hb:
                             _skip_hb = True  # ニャースex取れない → リーリエで引いてから
+                    elif not _has_draw_support_for_hb and _has_nyarth_in_deck and state.turn_count <= 1:
+                        # 1ターン目+ドローサポートなし+ニャースex山札にある
+                        # → HBは次ターンに温存（HB→ニャースex→おくのてキャッチ→リーリエに繋げる）
+                        _skip_hb = True
                 else:
-                    # サポート使用済み: ニャースex取っても今ターン活用できない → HBスキップ
-                    _skip_hb = True
+                    # ドローサポート使用済み → 手札が充実しているのでHBでポケモンを取りに行く
+                    # ただしドラパルトexラインが場に十分ならスキップ
+                    _drapa_line_on_field = sum(
+                        1 for bp in ([p.active] if p.active else []) + list(p.bench or [])
+                        if (getattr(bp.card, "name", "") or "").strip() in ("ドラメシヤ", "ドロンチ", "ドラパルトex")
+                    )
+                    if _drapa_line_on_field >= 2:
+                        _skip_hb = True  # ライン十分 → スキップ
                 if _skip_hb:
                     ball_candidates = [
                         (i, c) for i, c in ball_candidates
@@ -2219,6 +2253,39 @@ def run_turn_auto(state: GameState) -> bool:
                 continue
 
         if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
+            # ドラパルトexデッキ: アンフェアスタンプの前にHB→ニャースex→おくのてキャッチ→アカマツで
+            # エネルギーを確保してからアンスタを使う（運任せにしない）
+            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ansta
+            if _is_drapa_ansta(state, state.current_player):
+                _has_ansta = any(
+                    (getattr(c, "id", "") or "") == "anfeasutanpu" for c in p.hand
+                )
+                _has_hb = any(
+                    (getattr(c, "id", "") or "") == "haipaboru" for c in p.hand
+                )
+                _has_nyarth_hand = any(
+                    is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "ニャースex"
+                    for c in p.hand
+                )
+                _nyarth_in_deck = any(
+                    (getattr(c, "name", "") or "").strip() == "ニャースex"
+                    for c in p.deck
+                )
+                # アンスタ+HBがあり、ニャースexを出せる可能性がある
+                # → HBでニャースex取得→ベンチ出し→おくのてキャッチ→アカマツ を先に
+                if _has_ansta and _has_hb and not _has_nyarth_hand and _nyarth_in_deck and len(p.bench) < 5:
+                    from .trainers import use_trainer_goods as _use_hb_before_ansta
+                    for _hi, _hc in enumerate(p.hand):
+                        if (getattr(_hc, "id", "") or "") == "haipaboru":
+                            if _use_hb_before_ansta(state, _hi):
+                                acted = True
+                                p = state.active_player_state()
+                                state._record_frame()
+                                _try_put_bench_until_full()
+                                break
+                    if acted:
+                        continue
+
             has_any_support = any(is_support(c) for c in p.hand)
             if has_any_support and try_support_policy(state):
                 acted = True
