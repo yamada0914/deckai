@@ -299,8 +299,15 @@ def _pick_energy_hand_idx(p: PlayerState, state: GameState | None = None) -> int
         if not _non_dark:
             _active_name = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
             _active_en = getattr(p.active, "attached_energy", 0) or 0 if p.active else 0
-            if _active_name == "ドラメシヤ" and _active_en == 0:
+            if _active_name in ("ドラメシヤ", "ヨマワル") and _active_en == 0:
                 pass  # 逃げ用にOK
+            # ベンチにヨマワル(エネ0)がいれば逃げ用にOK
+            elif any(
+                (getattr(bp.card, "name", "") or "").strip() == "ヨマワル"
+                and getattr(bp, "attached_energy", 0) == 0
+                for bp in (p.bench or [])
+            ):
+                pass  # ベンチヨマワル逃げ用にOK
             else:
                 return None
 
@@ -479,9 +486,12 @@ def _build_energy_attach_input(
         for bp in _drapa_all_pokemon
     )
     # バトル場がサポートで候補に入っている場合もフィルタ
+    # ただしヨマワル+悪エネの場合は逃げ用に付けてOK
     if _is_drapa_deck and candidates:
         active_name = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
-        if active_name in _drapa_support_names or active_name == "マシマシラ":
+        if active_name == "ヨマワル" and new_type == "darkness" and (getattr(p.active, "attached_energy", 0) or 0) == 0:
+            pass  # 悪エネ+ヨマワルエネ0 → 逃げ用OK
+        elif active_name in _drapa_support_names or active_name == "マシマシラ":
             candidates.clear()  # サポートがバトル場→候補から除外
 
     for bi, b in enumerate(p.bench):
@@ -497,10 +507,12 @@ def _build_energy_attach_input(
         if _is_solrock(b.card) and b.attached_energy >= 1:
             continue
         # ドラパルトexデッキ: サポートポケモンをベンチ候補から常に除外
-        # （ドラメシヤラインが場にいなくても、ヨマワル等にエネを付ける価値はない）
+        # ただしヨマワルは悪エネの場合のみ逃げ用として候補に残す（最低優先度）
         if _is_drapa_deck:
             bench_name = (getattr(b.card, "name", "") or "").strip()
-            if bench_name in _drapa_support_names or bench_name == "マシマシラ":
+            if bench_name == "ヨマワル" and new_type == "darkness" and b.attached_energy == 0:
+                pass  # 悪エネ+ヨマワルエネ0 → 逃げ用に付けてOK（最低優先度）
+            elif bench_name in _drapa_support_names or bench_name == "マシマシラ":
                 continue
         # ドラパルトexデッキ: 悪エネはファントムダイブに不要（炎+超の2エネのみ必要）
         # 同じタイプのエネを2個付けない（火1+超1が必須）

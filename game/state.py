@@ -1512,3 +1512,17 @@ def start_turn(state: GameState) -> None:
         else:
             state.log(f"{state.player_name(state.current_player)}: {p.active.card.name} はねむったまま（コイン：裏）")
     state._record_frame()
+
+
+def can_use_phantom_dive(state: "GameState", player_idx: int) -> bool:
+    """このターンにファントムダイブが打てるか（バトル場orベンチにFD準備完了のドラパルトex）"""
+    p = state.players[player_idx]
+    all_bp = ([p.active] if p.active else []) + list(p.bench or [])
+    for bp in all_bp:
+        if (getattr(bp.card, "name", "") or "").strip() != "ドラパルトex":
+            continue
+        en = getattr(bp, "attached_energy", 0) or 0
+        types = list(getattr(bp, "attached_energy_types", []) or [])
+        if en >= 2 and "fire" in types and "psychic" in types:
+            return True
+    return False

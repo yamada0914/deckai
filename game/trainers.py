@@ -1072,9 +1072,6 @@ def use_trainer_goods(
         return True
     if cid == "supeshiyarureddokado":
         opp = state.defending_player_state()
-        # 相手のサイド残りが 3 枚以下のときのみ使用可能
-        if len(opp.prize_pile) > 3:
-            return False
         used_card = p.hand.pop(hand_index)
         # 「ウラにして切り」を、手札順非公開のランダム順にして山札の下へ戻す挙動として扱う
         opp_hidden = list(opp.hand)
@@ -2110,9 +2107,29 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
             best_target_key = win_target_key
             best_prize_gain = win_prize_gain
         else:
-            # サマヨール(50ダメ)は勝てない場合使わない（50ダメは小さすぎて無駄打ち）
+            # サマヨール(50ダメ): このターンFDが打てて、ベンチダメカンと合わせてKOできるなら使う
             if bomb_damage <= 50:
-                continue
+                _bomb50_useful = False
+                if _is_drapa:
+                    # FDが打てるか（バトル場orベンチにFD準備完了のドラパルトex）
+                    _can_fd = False
+                    _all_our = ([p.active] if p.active else []) + list(p.bench or [])
+                    for _bp_fd in _all_our:
+                        if (getattr(_bp_fd.card, "name", "") or "").strip() == "ドラパルトex":
+                            _bp_en = getattr(_bp_fd, "attached_energy", 0) or 0
+                            _bp_types = list(getattr(_bp_fd, "attached_energy_types", []) or [])
+                            if _bp_en >= 2 and "fire" in _bp_types and "psychic" in _bp_types:
+                                _can_fd = True
+                                break
+                    if _can_fd:
+                        for tkey, tbp in targets:
+                            if tkey == "active":
+                                continue
+                            if tbp.hp and 0 < tbp.hp <= bomb_damage + _phantom_bench_dmg:
+                                _bomb50_useful = True
+                                break
+                if not _bomb50_useful:
+                    continue
             # --- 2. 勝てない場合: 130ダメージを有効活用できるターゲットに使う ---
             best_target = None
             best_target_key = None
@@ -2142,13 +2159,16 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
                         _score = _energy_count * 1000
                         if _score > best_prize_gain:
                             best_target, best_target_key, best_prize_gain = tbp, tkey, _score
-                # カースドボム + ファントムダイブベンチ60 でKOできる（130 < HP <= 190）
+                # カースドボム + ファントムダイブベンチ60 でKOできる
                 elif _is_drapa and hp <= bomb_damage + _phantom_bench_dmg and tkey != "active":
                     _energy_count_combo = getattr(tbp, "attached_energy", 0) or 0
-                    if _pg >= 2 or _energy_count_combo >= 2:
-                        _score = _pg * 5000 + _energy_count_combo * 500
-                        if _score > best_prize_gain:
-                            best_target, best_target_key, best_prize_gain = tbp, tkey, _score
+                    _target_name_combo = (getattr(tbp.card, "name", "") or "").strip()
+                    _score = _pg * 5000 + _energy_count_combo * 500 + 1000
+                    # マクノシタ/ハリテヤマ進化前はどすこいキャッチャー脅威 → 優先的に排除
+                    if _target_name_combo == "マクノシタ":
+                        _score += 3000
+                    if _score > best_prize_gain:
+                        best_target, best_target_key, best_prize_gain = tbp, tkey, _score
                 # バトル場: カースドボムで削って攻撃でKOできるか
                 elif tkey == "active" and _is_drapa:
                     remaining = hp - bomb_damage

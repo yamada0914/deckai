@@ -1677,33 +1677,6 @@ def run_turn_auto(state: GameState) -> bool:
                         if our_remaining <= opp_prize_val or not opp_win.bench:
                             break  # 即攻撃フェーズへ��サイド取り切り or 種切れ勝ち）
 
-        used_fushiginaame = False
-        if state.turn_count >= 2:
-            # ふしぎなアメの前にていさつしれいを使う（ドロンチ→ドラパルトex進化で失われるため）
-            _has_ame_in_hand = any(
-                is_goods(c) and (getattr(c, "id", "") == "fushiginaame" or getattr(c, "name", "") == "ふしぎなアメ")
-                for c in p.hand
-            )
-            if _has_ame_in_hand:
-                while _try_use_ability_teisatsushirei(state):
-                    acted = True
-                    p = state.active_player_state()
-                    state._record_frame()
-            for i, c in enumerate(p.hand):
-                if not is_goods(c):
-                    continue
-                if getattr(c, "id", "") != "fushiginaame" and getattr(c, "name", "") != "ふしぎなアメ":
-                    continue
-                if use_trainer_goods(state, i):
-                    acted = True
-                    used_fushiginaame = True
-                    p = state.active_player_state()
-                    state._record_frame()
-                    _try_put_bench_until_full()
-                    break
-            if used_fushiginaame:
-                continue
-
         can_evolve = state.turn_count >= 2
         # 進化前にていさつしれいを使い切る（ドロンチ→ドラパルトex進化で失われるため）
         # リーリエが手札にあっても、ドラパルトex進化が控えているならていさつしれいを先に使う
@@ -1768,41 +1741,10 @@ def run_turn_auto(state: GameState) -> bool:
                     state._record_frame()
                     break
 
-        if _try_faitogongu_engine_opener(state):
-            acted = True
-            p = state.active_player_state()
-            state._record_frame()
-            _try_put_bench_until_full()
-            continue
-
         if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
             # ボール系ループの前では手札を捨てないサポートのみ使う。
             # ゼイユ等の手札刷新はボール系でグッズを使い切ってから。
             if _try_support_no_discard_only(state):
-                acted = True
-                p = state.active_player_state()
-                state._record_frame()
-                _try_put_bench_until_full()
-                continue
-
-        if not _is_first_player_first_turn(state) and _try_erekijienereta(state):
-            acted = True
-            p = state.active_player_state()
-            state._record_frame()
-            _try_put_bench_until_full()
-            continue
-
-        # ハイパーボールの前にルナサイクルを使う:
-        # エンジン揃い＋ルナサイクル未使用＋手札にエネ＋ハイパーボールが手札にある場合、
-        # ルナサイクルで3枚引いてからハイパーボールで不要カードを捨てる方が得。
-        if (
-            getattr(state, "ability_declared_this_turn", None) != "ルナサイクル"
-            and _field_has_pokemon(p, _is_lunatone)
-            and _field_has_pokemon(p, _is_solrock)
-            and any(is_energy(c) and getattr(c, "energy_type", None) == "fighting" for c in p.hand)
-            and any(getattr(c, "id", "") == "haipaboru" for c in p.hand)
-        ):
-            if _try_use_ability_runasaikuru(state):
                 acted = True
                 p = state.active_player_state()
                 state._record_frame()
@@ -2004,158 +1946,37 @@ def run_turn_auto(state: GameState) -> bool:
                 else:
                     break
 
-        # ていさつしれい: 毎ターン未使用ドロンチがいれば使う（進化後以外でも）
-        # リーリエの決心等が手札にある場合はリーリエを先に使う
-        # ていさつしれいでリーリエを引いたら→リーリエ使用→次のていさつしれい
-        _HR_IDS_FOR_TEISATSU = ("riirienokesshin", "zeiyu", "hakasenokenkyuu")
-        _has_hr_teisatsu3 = any(
-            is_support(c) and (getattr(c, "id", "") or "") in _HR_IDS_FOR_TEISATSU
-            for c in p.hand
-        ) and not state.support_used_this_turn
-        if not _has_hr_teisatsu3:
-            while _try_use_ability_teisatsushirei(state):
+        # 特性（ていさつしれい、さかてにとる、ルナサイクル、カースドボム）
+        _did_ability = False
+        while _try_use_ability_teisatsushirei(state):
+            _did_ability = True
+            acted = True
+            p = state.active_player_state()
+            state._record_frame()
+            _try_put_bench_until_full()
+        if _try_use_ability_sakatenitori(state):
+            _did_ability = True
+            acted = True
+            p = state.active_player_state()
+            state._record_frame()
+            _try_put_bench_until_full()
+        if _try_use_ability_runasaikuru(state):
+            _did_ability = True
+            acted = True
+            p = state.active_player_state()
+            state._record_frame()
+            _try_put_bench_until_full()
+        # カースドボム
+        if not _is_first_player_first_turn(state) and state.turn_count > 0:
+            if _try_use_ability_cursed_bomb(state):
+                _did_ability = True
                 acted = True
                 p = state.active_player_state()
+                opp = state.defending_player_state()
                 state._record_frame()
                 _try_put_bench_until_full()
-                # ていさつしれいでリーリエ等を引いたら先にサポートを使う
-                if not state.support_used_this_turn:
-                    _drew_hr = any(
-                        is_support(c) and (getattr(c, "id", "") or "") in _HR_IDS_FOR_TEISATSU
-                        for c in p.hand
-                    )
-                    if _drew_hr:
-                        break  # メインループに戻りサポート使用→再度ていさつしれい
-
-        # 暗号マニアはサポートのため先行 1 ターン目は試さない。ルナサイクルは特性のため先行 1 ターン目でもエネ付与前に試す。
-        if not _is_first_player_first_turn(state):
-            if _try_angou_before_luna_cycle(state):
-                acted = True
-                p = state.active_player_state()
-                state._record_frame()
-                _try_put_bench_until_full()
-                continue
-        # ルナサイクル: 手札刷新サポート（リーリエの決心等）があるなら後回し。
-        # リーリエ→ルナサイクルの順の方が手札が増える（リーリエで6-8枚→ルナサイクルで+3枚）。
-        # ルナサイクルを先にすると、引いた3枚がリーリエで山に戻ってしまい無駄。
-        # 例外: サポートが既に使用済み、または先行1ターン目（サポート不可）。
-        has_hand_refresh_for_luna_delay = (
-            not _is_first_player_first_turn(state)
-            and not state.support_used_this_turn
-            and any(
-                is_support(c) and getattr(c, "id", "") in _SUPPORT_IDS_HAND_REFRESH_FIRST
-                for c in p.hand
-            )
-        )
-        if not has_hand_refresh_for_luna_delay:
-            # ルナサイクルをエネ付与より先に実行する。
-            # ルナサイクルで3枚引いた後の方がエネ付与先の判断が良くなる。
-            # ただしエネ付けてKOできる確定ケースのみエネ付与を先にする。
-            _did_attach_for_ko = False
-            if not state.energy_attached_this_turn and not _is_first_player_first_turn(state):
-                from .turn_energy import _pick_energy_hand_idx
-                from .trainers import attach_energy as _direct_attach
-                has_energy = any(is_energy(c) for c in p.hand)
-                if has_energy and p.active:
-                    opp_lc = state.defending_player_state()
-                    our_dmg_now = _our_max_effective_damage(state)
-                    # エネ付けてKOできる確定ケースのみ先にエネ付与
-                    # ただしルナサイクル可能+夜のタンカがあればルナサイクル先（タンカでエネ回収→KOも後からできる）
-                    _luna_can_use = (
-                        _field_has_pokemon(p, _is_lunatone)
-                        and _field_has_pokemon(p, _is_solrock)
-                        and getattr(state, "ability_declared_this_turn", None) != "ルナサイクル"
-                    )
-                    _has_tanka = any(getattr(c, "id", "") == "yorunotanka" for c in p.hand)
-                    _can_luna_then_ko = _luna_can_use and _has_tanka
-                    if opp_lc.active and opp_lc.active.hp is not None and opp_lc.active.hp > 0:
-                        from .evaluate import _can_ko_with_one_more_energy
-                        if (
-                            our_dmg_now < opp_lc.active.hp
-                            and _can_ko_with_one_more_energy(state, p.active, opp_lc.active, state.current_player)
-                            and not _can_luna_then_ko
-                        ):
-                            # KOに必要なエネタイプを特定し、そのタイプのエネを選ぶ
-                            from .damage import _max_effective_damage_if_attach
-                            _ko_eidx = None
-                            _active_types = list(getattr(p.active, "attached_energy_types", []) or [])
-                            for _ei, _ec in enumerate(p.hand):
-                                if not is_energy(_ec):
-                                    continue
-                                _etype = getattr(_ec, "energy_type", None) or "colorless"
-                                # ドラパルトexデッキ: 同じタイプのエネを重複して付けない
-                                from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ko
-                                if _is_drapa_ko(state, state.current_player):
-                                    _an = (getattr(p.active.card, "name", "") or "").strip()
-                                    if _an in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
-                                        if _etype == "darkness":
-                                            continue
-                                        if _etype in ("fire", "psychic") and _etype in _active_types:
-                                            continue
-                                _dmg_after = _max_effective_damage_if_attach(
-                                    state, p.active.card, p.active.attached_energy,
-                                    _active_types, _etype, opp_lc.active, state.current_player,
-                                )
-                                if _dmg_after >= opp_lc.active.hp:
-                                    _ko_eidx = _ei
-                                    break
-                            if _ko_eidx is not None:
-                                _direct_attach(state, _ko_eidx)
-                                acted = True
-                                _did_attach_for_ko = True
-                                p = state.active_player_state()
-                                state._record_frame()
-
-            # バトル場が攻撃不可+逃げエネ不足+ベンチにアタッカー → 逃げエネ付与
-            # ただしルナサイクルが使えるなら3枚ドローの方が価値が高い → ルナサイクル優先
-            if not _did_attach_for_ko and not state.energy_attached_this_turn and not _is_first_player_first_turn(state):
-                _p_ret = state.active_player_state()
-                _luna_can_use_ret = (
-                    _field_has_pokemon(_p_ret, _is_lunatone)
-                    and _field_has_pokemon(_p_ret, _is_solrock)
-                    and getattr(state, "ability_declared_this_turn", None) != "ルナサイクル"
-                    and any(
-                        is_energy(c) and (getattr(c, "id", "") or "") == "basic-energy-fighting"
-                        for c in _p_ret.hand
-                    )
-                )
-                if not _luna_can_use_ret and _p_ret.active and _p_ret.bench:
-                    _opp_ret = state.defending_player_state()
-                    _legal_active = get_legal_attack_indices(state, _p_ret, _opp_ret) if _opp_ret else []
-                    if not _legal_active:
-                        _raw_rc = getattr(_p_ret.active.card, "retreat_cost", 1)
-                        _tool_ret = getattr(_p_ret.active, "attached_tool", None)
-                        _eff_rc = max(0, _raw_rc - (2 if _tool_ret and (getattr(_tool_ret, "id", "") or "") == "fuusen" else 0))
-                        if _eff_rc > 0 and _p_ret.active.attached_energy < _eff_rc:
-                            # ドラパルトexデッキ: サポートポケモン（ヨノワール等）の逃げにエネを使うのは無駄
-                            # ベンチのドラパルトexにエネを付けた方がファントムダイブへの投資になる
-                            _skip_ret_for_drapa = False
-                            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ret
-                            if _is_drapa_ret(state, state.current_player):
-                                _ret_active_name = (getattr(_p_ret.active.card, "name", "") or "").strip()
-                                _drapa_support_ret = frozenset({"ヨノワール", "サマヨール", "ヨマワル", "キチキギスex", "ニャースex", "マシマシラ"})
-                                if _ret_active_name in _drapa_support_ret:
-                                    _skip_ret_for_drapa = True
-                            if not _skip_ret_for_drapa:
-                                _has_energy_hand = any(is_energy(c) for c in _p_ret.hand)
-                                if _has_energy_hand:
-                                    from .turn_energy import _pick_energy_hand_idx
-                                    from .trainers import attach_energy as _ret_attach
-                                    _eidx = _pick_energy_hand_idx(_p_ret, state)
-                                    if _eidx is not None:
-                                        _ret_attach(state, _eidx)
-                                        acted = True
-                                        _did_attach_for_ko = True
-                                        p = state.active_player_state()
-                                        state._record_frame()
-
-            if not _did_attach_for_ko:
-                if _try_use_ability_runasaikuru(state):
-                    acted = True
-                    p = state.active_player_state()
-                    state._record_frame()
-                    _try_put_bench_until_full()
-                    continue
+        if _did_ability:
+            continue
 
         # Joint Q: サポート+エネルギーを同時決定（有効なプレイヤーのみ）
         if not state.support_used_this_turn and not state.energy_attached_this_turn:
@@ -2294,6 +2115,11 @@ def run_turn_auto(state: GameState) -> bool:
                 _try_put_bench_until_full()
                 if _try_evolve_rounds_after_hand_change(state):
                     acted = True
+                # サポート使用後にエネ付与（リーリエで引いたエネを次のリーリエで山に戻さないため）
+                if not state.energy_attached_this_turn and _try_attach_energy_with_attack_lookahead(state):
+                    acted = True
+                    p = state.active_player_state()
+                    state._record_frame()
                 continue
             _try_put_bench_until_full()
 
@@ -2431,14 +2257,6 @@ def run_turn_auto(state: GameState) -> bool:
     p = state.active_player_state()
     opp = state.defending_player_state()
 
-    # カースドボム: 攻撃前にサマヨール/ヨノワールで仕留める
-    if not _is_first_player_first_turn(state) and state.turn_count > 0:
-        if _try_use_ability_cursed_bomb(state):
-            acted = True
-            p = state.active_player_state()
-            opp = state.defending_player_state()
-            state._record_frame()
-
     # メガブレイブ封印解除トリック:
     # メガルカリオexのメガブレイブが封印されているとき、
     # ポケモンいれかえ → ふうせん付きベンチポケモンに交代 → 即にげるでメガルカリオexを戻す
@@ -2569,6 +2387,34 @@ def run_turn_auto(state: GameState) -> bool:
                     p = state.active_player_state()
                     opp = state.defending_player_state()
                     state._record_frame()
+
+    # 攻撃前: 残りのグッズを使う（スペシャルレッドカード等）
+    if not _is_first_player_first_turn(state):
+        for _gi, _gc in enumerate(p.hand):
+            if is_goods(_gc) and not getattr(_gc, "is_tool", False):
+                _gid = getattr(_gc, "id", "") or ""
+                if _gid in ("supeshiyarureddokado", "anfeasutanpu", "yorunotanka"):
+                    if use_trainer_goods(state, _gi):
+                        acted = True
+                        p = state.active_player_state()
+                        state._record_frame()
+                        _try_put_bench_until_full()
+                        break
+
+    # 攻撃前: カースドボム（FDのベンチダメカンと連携KO）
+    if not _is_first_player_first_turn(state) and state.turn_count > 0:
+        if _try_use_ability_cursed_bomb(state):
+            acted = True
+            p = state.active_player_state()
+            opp = state.defending_player_state()
+            state._record_frame()
+            _try_put_bench_until_full()
+
+    # 攻撃前: ていさつしれいを使い切る
+    while _try_use_ability_teisatsushirei(state):
+        acted = True
+        p = state.active_player_state()
+        state._record_frame()
 
     if _do_attack_phase(state, p, opp):
         acted = True
