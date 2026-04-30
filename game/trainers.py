@@ -1072,6 +1072,9 @@ def use_trainer_goods(
         return True
     if cid == "supeshiyarureddokado":
         opp = state.defending_player_state()
+        # カード効果: 相手のサイドの残り枚数が3枚以下のときにしか使えない
+        if len(opp.prize_pile) > 3:
+            return False
         used_card = p.hand.pop(hand_index)
         # 「ウラにして切り」を、手札順非公開のランダム順にして山札の下へ戻す挙動として扱う
         opp_hidden = list(opp.hand)

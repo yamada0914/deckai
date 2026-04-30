@@ -2388,19 +2388,6 @@ def run_turn_auto(state: GameState) -> bool:
                     opp = state.defending_player_state()
                     state._record_frame()
 
-    # 攻撃前: 残りのグッズを使う（スペシャルレッドカード等）
-    if not _is_first_player_first_turn(state):
-        for _gi, _gc in enumerate(p.hand):
-            if is_goods(_gc) and not getattr(_gc, "is_tool", False):
-                _gid = getattr(_gc, "id", "") or ""
-                if _gid in ("supeshiyarureddokado", "anfeasutanpu", "yorunotanka"):
-                    if use_trainer_goods(state, _gi):
-                        acted = True
-                        p = state.active_player_state()
-                        state._record_frame()
-                        _try_put_bench_until_full()
-                        break
-
     # 攻撃前: カースドボム（FDのベンチダメカンと連携KO）
     if not _is_first_player_first_turn(state) and state.turn_count > 0:
         if _try_use_ability_cursed_bomb(state):
@@ -2409,6 +2396,20 @@ def run_turn_auto(state: GameState) -> bool:
             opp = state.defending_player_state()
             state._record_frame()
             _try_put_bench_until_full()
+
+    # 攻撃前: 残りのグッズを使う（スペシャルレッドカード等）
+    # カースドボム後に相手サイドが減るのでスペシャルレッドカードの条件を満たす場合がある
+    if not _is_first_player_first_turn(state):
+        for _gi, _gc in enumerate(p.hand):
+            if is_goods(_gc) and not getattr(_gc, "is_tool", False):
+                _gid = getattr(_gc, "id", "") or ""
+                if _gid in ("supeshiyarureddokado", "anfeasutanpu"):
+                    if use_trainer_goods(state, _gi):
+                        acted = True
+                        p = state.active_player_state()
+                        state._record_frame()
+                        _try_put_bench_until_full()
+                        break
 
     # 攻撃前: ていさつしれいを使い切る
     while _try_use_ability_teisatsushirei(state):
