@@ -1283,6 +1283,88 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
     )
     return True
 
+
+
+def _use_power_protein(state, hand_index: int) -> bool:
+    """パワープロテインのカード効果を実行する。"""
+    p = state.active_player_state()
+    card = p.hand[hand_index]
+    if _is_first_player_first_turn(state):
+        return False
+    if not p.active or getattr(p.active.card, "pokemon_type", None) != "fighting":
+        return False
+    # 攻撃できない状態（ねむり・マヒ等）なら、ダメージ上振せのためのパワープロテインも打たない
+    if getattr(p.active, "special_state", None) in ("sleep", "paralysis"):
+        return False
+    opp = state.defending_player_state()
+    # 手札全捨てサポートの有無を先にチェック
+    _TRASH_HAND_SUPPORT_IDS = (ZEIYU, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase")
+    will_trash_hand = not state.support_used_this_turn and any(
+        is_support(c) and (getattr(c, "id", "") or "") in _TRASH_HAND_SUPPORT_IDS
+        for c in p.hand
+    )
+    # 攻撃不可でもゼイユ等で捨てるくらいなら使う（+30バフはターン中有効）
+    if not get_legal_attack_indices(state, p, opp) and not will_trash_hand:
+        return False
+    if True:  # 常に温存チェックを行う（手札全捨てサポートがあっても倒せないなら使わない）
+        # 過剰ダメージ抑制:
+        # このターンのパワープロテインで相手 active を倒せる場合でも、
+        # 倒しきり量が大きい（=無駄になりやすい）なら次ターンに回す。
+        hp = getattr(opp.active, "hp", None) if opp and getattr(opp, "active", None) else None
+        n_before = getattr(state, "fighting_damage_plus_30_count_this_turn", 0)
+        # プロテイン前の最大有効ダメージ
+        dmg_before = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player) if opp.active else 0
+        # プロテイン後の最大有効ダメージ（一時的に count を増やして試算）
+        n_after_tmp = n_before + 1
+        state.fighting_damage_plus_30_count_this_turn = n_after_tmp
+        try:
+            dmg_after = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player) if opp.active else 0
+        finally:
+            state.fighting_damage_plus_30_count_this_turn = n_before
+
+        # 既にプロテインなしで倒せるなら、温存する
+        # ただし手札全捨てサポートがある場合は使っても損しない
+        if hp is not None and hp > 0 and dmg_before >= hp and not will_trash_hand:
+            return False
+
+        # プロテイン込みでも倒せないなら、温存する
+        # ただし手札全捨てサポート（ゼイユ等）があるなら、どうせ捨てるので使った方が+30ダメ分得
+        if hp is not None and hp > 0 and dmg_after < hp and not will_trash_hand:
+            # 手札に残っているパワプロ枚数を数えて、全部使えば倒せるか試算
+            pp_remaining = sum(
+                1 for c in p.hand
+                if getattr(c, "id", "") == "pawaapurotein" and c is not card
+            )
+            if pp_remaining > 0:
+                state.fighting_damage_plus_30_count_this_turn = n_before + 1 + pp_remaining
+                try:
+                    dmg_all_pp = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player) if opp.active else 0
+                finally:
+                    state.fighting_damage_plus_30_count_this_turn = n_before
+                if dmg_all_pp >= hp:
+                    # 全部使えば倒せる → この1枚は使う（残りも順次使われる）
+                    pass
+                else:
+                    return False
+            else:
+                return False
+
+        # プロテイン後に倒せてしまう場合のみ、倒し切り量が大きいなら温存する
+        # ただし手札全捨てサポートがあるなら温存不要（どうせ捨てられる）
+        if hp is not None and hp > 0 and dmg_after >= hp and not will_trash_hand:
+            overkill = dmg_after - hp
+            ratio = overkill / float(hp)
+            threshold = float(os.getenv("DECKAI_POWERPROTEIN_OVERKILL_RATIO", "0.5"))
+            if ratio >= threshold:
+                return False
+
+    n_before = getattr(state, "fighting_damage_plus_30_count_this_turn", 0)
+    state.fighting_damage_plus_30_count_this_turn = n_before + 1
+    p.discard.append(p.hand.pop(hand_index))
+    n = state.fighting_damage_plus_30_count_this_turn
+    state.log(f"{state.player_name(state.current_player)}: パワープロテインを使用 → この番、自分の闘ポケモンのワザダメージ+{30 * n}（{n} 枚目）")
+    return True
+
 def use_trainer_goods(
     state: GameState,
     hand_index: int,
@@ -1528,81 +1610,7 @@ def use_trainer_goods(
         )
         return True
     if cid == "pawaapurotein":
-        if _is_first_player_first_turn(state):
-            return False
-        if not p.active or getattr(p.active.card, "pokemon_type", None) != "fighting":
-            return False
-        # 攻撃できない状態（ねむり・マヒ等）なら、ダメージ上振せのためのパワープロテインも打たない
-        if getattr(p.active, "special_state", None) in ("sleep", "paralysis"):
-            return False
-        opp = state.defending_player_state()
-        # 手札全捨てサポートの有無を先にチェック
-        _TRASH_HAND_SUPPORT_IDS = (ZEIYU, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase")
-        will_trash_hand = not state.support_used_this_turn and any(
-            is_support(c) and (getattr(c, "id", "") or "") in _TRASH_HAND_SUPPORT_IDS
-            for c in p.hand
-        )
-        # 攻撃不可でもゼイユ等で捨てるくらいなら使う（+30バフはターン中有効）
-        if not get_legal_attack_indices(state, p, opp) and not will_trash_hand:
-            return False
-        if True:  # 常に温存チェックを行う（手札全捨てサポートがあっても倒せないなら使わない）
-            # 過剰ダメージ抑制:
-            # このターンのパワープロテインで相手 active を倒せる場合でも、
-            # 倒しきり量が大きい（=無駄になりやすい）なら次ターンに回す。
-            hp = getattr(opp.active, "hp", None) if opp and getattr(opp, "active", None) else None
-            n_before = getattr(state, "fighting_damage_plus_30_count_this_turn", 0)
-            # プロテイン前の最大有効ダメージ
-            dmg_before = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player) if opp.active else 0
-            # プロテイン後の最大有効ダメージ（一時的に count を増やして試算）
-            n_after_tmp = n_before + 1
-            state.fighting_damage_plus_30_count_this_turn = n_after_tmp
-            try:
-                dmg_after = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player) if opp.active else 0
-            finally:
-                state.fighting_damage_plus_30_count_this_turn = n_before
-
-            # 既にプロテインなしで倒せるなら、温存する
-            # ただし手札全捨てサポートがある場合は使っても損しない
-            if hp is not None and hp > 0 and dmg_before >= hp and not will_trash_hand:
-                return False
-
-            # プロテイン込みでも倒せないなら、温存する
-            # ただし手札全捨てサポート（ゼイユ等）があるなら、どうせ捨てるので使った方が+30ダメ分得
-            if hp is not None and hp > 0 and dmg_after < hp and not will_trash_hand:
-                # 手札に残っているパワプロ枚数を数えて、全部使えば倒せるか試算
-                pp_remaining = sum(
-                    1 for c in p.hand
-                    if getattr(c, "id", "") == "pawaapurotein" and c is not card
-                )
-                if pp_remaining > 0:
-                    state.fighting_damage_plus_30_count_this_turn = n_before + 1 + pp_remaining
-                    try:
-                        dmg_all_pp = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player) if opp.active else 0
-                    finally:
-                        state.fighting_damage_plus_30_count_this_turn = n_before
-                    if dmg_all_pp >= hp:
-                        # 全部使えば倒せる → この1枚は使う（残りも順次使われる）
-                        pass
-                    else:
-                        return False
-                else:
-                    return False
-
-            # プロテイン後に倒せてしまう場合のみ、倒し切り量が大きいなら温存する
-            # ただし手札全捨てサポートがあるなら温存不要（どうせ捨てられる）
-            if hp is not None and hp > 0 and dmg_after >= hp and not will_trash_hand:
-                overkill = dmg_after - hp
-                ratio = overkill / float(hp)
-                threshold = float(os.getenv("DECKAI_POWERPROTEIN_OVERKILL_RATIO", "0.5"))
-                if ratio >= threshold:
-                    return False
-
-        n_before = getattr(state, "fighting_damage_plus_30_count_this_turn", 0)
-        state.fighting_damage_plus_30_count_this_turn = n_before + 1
-        p.discard.append(p.hand.pop(hand_index))
-        n = state.fighting_damage_plus_30_count_this_turn
-        state.log(f"{state.player_name(state.current_player)}: パワープロテインを使用 → この番、自分の闘ポケモンのワザダメージ+{30 * n}（{n} 枚目）")
-        return True
+        return _use_power_protein(state, hand_index)
     if cid == FIGHT_GONG and p.deck:
         return _use_fight_gong(state, hand_index)
 
@@ -3027,6 +3035,154 @@ def _use_support_mei(state, hand_index: int) -> bool:
     return True
 
 
+
+
+def _use_support_boss(state, hand_index: int) -> bool:
+    """ボスの指令のサポート効果を実行する。"""
+    p = state.active_player_state()
+    card = p.hand[hand_index]
+    opp = state.defending_player_state()
+    if not opp.bench or not opp.active:
+        return False
+
+    # メガルカリオexデッキ戦略準拠:
+    # 1. 相手バトル場を倒せるなら、ボスを温存（そのまま殴ればよい）
+    # 2. ベンチの倒せるポケモンをサイド効率順で呼び出す
+    #    - ex/メガ（サイド2〜3枚）を最優先
+    #    - 低HPのベンチポケモンも対象（はどうづきで倒しつつエネ加速）
+    #    - あと1枚で勝てるなら最も倒しやすいポケモンを呼ぶ
+    # 3. エネ付き/進化済み/特性サポート持ちを狙えばリソース浪費にもなる
+    if not p.active or not getattr(p.active, "card", None):
+        return False
+    if not getattr(p.active.card, "attacks", None):
+        return False
+
+    # 相手バトル場を倒せるなら、ボスを打つ必要はない
+    # ただし「なぐってかくれる」等でダメージ無効状態の場合は倒せない
+    can_ko_active = False
+    opp_protected = getattr(opp.active, "protected_next_opponent_turn", False) if opp.active else False
+    if opp.active and opp.active.hp is not None and opp.active.hp > 0 and not opp_protected:
+        dmg = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player)
+        can_ko_active = dmg >= opp.active.hp
+    if can_ko_active:
+        return False
+
+    # ドラパルトexデッキ: ボスの指令の使用条件
+    if is_dragapult_deck_for_player(state, state.current_player):
+        _active_name_boss = (getattr(p.active.card, "name", "") or "").strip()
+        if _active_name_boss == "ドラパルトex":
+            # ファントムダイブが撃てるか（エネ2以上 + 炎+超）
+            _en_boss = getattr(p.active, "attached_energy", 0) or 0
+            _types_boss = list(getattr(p.active, "attached_energy_types", []) or [])
+            _can_phantom = _en_boss >= 2 and "fire" in _types_boss and "psychic" in _types_boss
+            if _can_phantom:
+                # ファントムダイブ200点はHP高い相手に当てる方が効率的
+                # ボスで弱い相手を引っ張るとダメージが無駄になる
+                # ボスを使うのは:
+                #   1. サイド取り切りできる場合
+                #   2. ベンチにエネ付き完成アタッカーがいて脅威を排除したい場合
+                my_remaining = len(p.prize_pile)
+                _boss_wins = False
+                _boss_threat = False
+                for i, bp in enumerate(opp.bench):
+                    if not bp or bp.hp is None or bp.hp <= 0:
+                        continue
+                    prizes = _prizes_for_ko(bp)
+                    # サイド取り切り
+                    if 200 >= bp.hp and my_remaining <= prizes:
+                        _boss_wins = True
+                        break
+                    # ex倒し→残り2以下
+                    if 200 >= bp.hp and prizes >= 2 and my_remaining - prizes <= 2:
+                        _boss_wins = True
+                        break
+                    # ベンチのエネ付きアタッカー（脅威排除目的）
+                    _bp_energy = getattr(bp, "attached_energy", 0) or 0
+                    if _bp_energy >= 2 and 200 >= bp.hp:
+                        _boss_threat = True
+                # バトル場のHP > ベンチターゲットのHP なら、バトル場に撃つ方が効率的
+                _opp_active_hp = opp.active.hp if opp.active else 0
+                if not _boss_wins and not _boss_threat:
+                    return False  # バトル場にファントムダイブが最善
+                if not _boss_wins and _boss_threat and _opp_active_hp >= 200:
+                    return False  # バトル場のHP高い → バトル場に200点当てた方が効率的
+
+    my_remaining_prizes = len(p.prize_pile)
+
+    killable_bench: list[int] = []
+    killable_bench_values: dict[int, float] = {}
+    for i, bp in enumerate(opp.bench):
+        if not bp or bp.hp is None or bp.hp <= 0:
+            continue
+        dmg = _max_effective_damage_for_attacker(state, p.active, bp, state.current_player)
+        if dmg < bp.hp:
+            continue
+        killable_bench.append(i)
+        prizes = _prizes_for_ko(bp)
+        # サイド効率: ex/メガは高価値
+        value = prizes * 10000.0
+        # あと1〜2枚で勝てるなら、確実に取れるサイド数が足りるかで超高ボーナス
+        if my_remaining_prizes <= prizes:
+            value += 100000.0  # これで勝てる！
+        # エネ付き/進化済みを狙うとリソース浪費にもなる
+        energy_attached = getattr(bp, "attached_energy", 0) or 0
+        is_evolved = bool(getattr(bp.card, "evolves_from", None))
+        value += energy_attached * 200.0 + (300.0 if is_evolved else 0.0)
+        # サポート特性持ち（キチキギスex、ラティアスex等）を倒すと妨害にもなる
+        name = (getattr(bp.card, "name", "") or "").strip()
+        _ABILITY_DENY_NAMES = frozenset({
+            "キチキギスex", "ラティアスex", "ニャースex",
+        })
+        if name in _ABILITY_DENY_NAMES:
+            value += 2000.0
+        # HP低いほど倒しやすい（はどうづきで低HPを狩ってエネ加速する戦略）
+        value += 500.0 - min(bp.hp or 0, 500)
+        killable_bench_values[i] = value
+
+    # 学習モデルのスコアを混合（利用可能な場合）
+    try:
+        from .decision_models import score_boss_targets
+        ml_scores = score_boss_targets(state, state.current_player)
+        if ml_scores and killable_bench:
+            ml_dict = {idx: sc for idx, sc in ml_scores if idx >= 0}
+            for bi in killable_bench:
+                if bi in ml_dict:
+                    # モデルスコア（0-1程度）をルールベーススケールに変換して加算
+                    killable_bench_values[bi] += ml_dict[bi] * 5000.0
+    except Exception:
+        pass
+
+    if not killable_bench:
+        # KO可能ベンチがなくても、時間稼ぎ目的で弱いポケモンを引っ張る
+        # 条件: 相手バトル場がダメージを与えてくる + ベンチにエネなし逃げコスト高いポケモンがいる
+        from .damage import _opponent_max_effective_damage
+        _opp_dmg = _opponent_max_effective_damage(state)
+        if _opp_dmg > 0 and opp.bench:
+            stall_candidates = []
+            for i, bp in enumerate(opp.bench):
+                if not bp or bp.hp is None or bp.hp <= 0:
+                    continue
+                retreat_cost = getattr(bp.card, "retreat_cost", 1) or 1
+                energy = getattr(bp, "attached_energy", 0) or 0
+                # 逃げにくく攻撃できないポケモンが最適
+                stall_score = retreat_cost * 100 - energy * 200 - (bp.hp or 0)
+                stall_candidates.append((i, stall_score))
+            if stall_candidates:
+                idx = max(stall_candidates, key=lambda x: x[1])[0]
+                opp.active, opp.bench[idx] = opp.bench[idx], opp.active
+                p.discard.append(p.hand.pop(hand_index))
+                state.support_used_this_turn = True
+                state.log(f"{state.player_name(state.current_player)}: ボスの指令を使用 → 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
+                return True
+        return False
+
+    idx = max(killable_bench, key=lambda bi: killable_bench_values.get(bi, 0.0))
+    opp.active, opp.bench[idx] = opp.bench[idx], opp.active
+    p.discard.append(p.hand.pop(hand_index))
+    state.support_used_this_turn = True
+    state.log(f"{state.player_name(state.current_player)}: ボスの指令を使用 → 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
+    return True
+
 def use_support(state: GameState, hand_index: int) -> bool:
     """
     サポートカードを使用。1 ターンに 1 枚まで。先行の 1 ターン目は使用不可。
@@ -3099,147 +3255,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         state.log(f"{state.player_name(state.current_player)}: ゼイユを使用 → 手札をすべてトラッシュし、山札から 5 枚ドロー → [{drawn_names}]")
         return True
     if cid == BOSS_NO_SHIREI:
-        opp = state.defending_player_state()
-        if not opp.bench or not opp.active:
-            return False
-
-        # メガルカリオexデッキ戦略準拠:
-        # 1. 相手バトル場を倒せるなら、ボスを温存（そのまま殴ればよい）
-        # 2. ベンチの倒せるポケモンをサイド効率順で呼び出す
-        #    - ex/メガ（サイド2〜3枚）を最優先
-        #    - 低HPのベンチポケモンも対象（はどうづきで倒しつつエネ加速）
-        #    - あと1枚で勝てるなら最も倒しやすいポケモンを呼ぶ
-        # 3. エネ付き/進化済み/特性サポート持ちを狙えばリソース浪費にもなる
-        if not p.active or not getattr(p.active, "card", None):
-            return False
-        if not getattr(p.active.card, "attacks", None):
-            return False
-
-        # 相手バトル場を倒せるなら、ボスを打つ必要はない
-        # ただし「なぐってかくれる」等でダメージ無効状態の場合は倒せない
-        can_ko_active = False
-        opp_protected = getattr(opp.active, "protected_next_opponent_turn", False) if opp.active else False
-        if opp.active and opp.active.hp is not None and opp.active.hp > 0 and not opp_protected:
-            dmg = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player)
-            can_ko_active = dmg >= opp.active.hp
-        if can_ko_active:
-            return False
-
-        # ドラパルトexデッキ: ボスの指令の使用条件
-        if is_dragapult_deck_for_player(state, state.current_player):
-            _active_name_boss = (getattr(p.active.card, "name", "") or "").strip()
-            if _active_name_boss == "ドラパルトex":
-                # ファントムダイブが撃てるか（エネ2以上 + 炎+超）
-                _en_boss = getattr(p.active, "attached_energy", 0) or 0
-                _types_boss = list(getattr(p.active, "attached_energy_types", []) or [])
-                _can_phantom = _en_boss >= 2 and "fire" in _types_boss and "psychic" in _types_boss
-                if _can_phantom:
-                    # ファントムダイブ200点はHP高い相手に当てる方が効率的
-                    # ボスで弱い相手を引っ張るとダメージが無駄になる
-                    # ボスを使うのは:
-                    #   1. サイド取り切りできる場合
-                    #   2. ベンチにエネ付き完成アタッカーがいて脅威を排除したい場合
-                    my_remaining = len(p.prize_pile)
-                    _boss_wins = False
-                    _boss_threat = False
-                    for i, bp in enumerate(opp.bench):
-                        if not bp or bp.hp is None or bp.hp <= 0:
-                            continue
-                        prizes = _prizes_for_ko(bp)
-                        # サイド取り切り
-                        if 200 >= bp.hp and my_remaining <= prizes:
-                            _boss_wins = True
-                            break
-                        # ex倒し→残り2以下
-                        if 200 >= bp.hp and prizes >= 2 and my_remaining - prizes <= 2:
-                            _boss_wins = True
-                            break
-                        # ベンチのエネ付きアタッカー（脅威排除目的）
-                        _bp_energy = getattr(bp, "attached_energy", 0) or 0
-                        if _bp_energy >= 2 and 200 >= bp.hp:
-                            _boss_threat = True
-                    # バトル場のHP > ベンチターゲットのHP なら、バトル場に撃つ方が効率的
-                    _opp_active_hp = opp.active.hp if opp.active else 0
-                    if not _boss_wins and not _boss_threat:
-                        return False  # バトル場にファントムダイブが最善
-                    if not _boss_wins and _boss_threat and _opp_active_hp >= 200:
-                        return False  # バトル場のHP高い → バトル場に200点当てた方が効率的
-
-        my_remaining_prizes = len(p.prize_pile)
-
-        killable_bench: list[int] = []
-        killable_bench_values: dict[int, float] = {}
-        for i, bp in enumerate(opp.bench):
-            if not bp or bp.hp is None or bp.hp <= 0:
-                continue
-            dmg = _max_effective_damage_for_attacker(state, p.active, bp, state.current_player)
-            if dmg < bp.hp:
-                continue
-            killable_bench.append(i)
-            prizes = _prizes_for_ko(bp)
-            # サイド効率: ex/メガは高価値
-            value = prizes * 10000.0
-            # あと1〜2枚で勝てるなら、確実に取れるサイド数が足りるかで超高ボーナス
-            if my_remaining_prizes <= prizes:
-                value += 100000.0  # これで勝てる！
-            # エネ付き/進化済みを狙うとリソース浪費にもなる
-            energy_attached = getattr(bp, "attached_energy", 0) or 0
-            is_evolved = bool(getattr(bp.card, "evolves_from", None))
-            value += energy_attached * 200.0 + (300.0 if is_evolved else 0.0)
-            # サポート特性持ち（キチキギスex、ラティアスex等）を倒すと妨害にもなる
-            name = (getattr(bp.card, "name", "") or "").strip()
-            _ABILITY_DENY_NAMES = frozenset({
-                "キチキギスex", "ラティアスex", "ニャースex",
-            })
-            if name in _ABILITY_DENY_NAMES:
-                value += 2000.0
-            # HP低いほど倒しやすい（はどうづきで低HPを狩ってエネ加速する戦略）
-            value += 500.0 - min(bp.hp or 0, 500)
-            killable_bench_values[i] = value
-
-        # 学習モデルのスコアを混合（利用可能な場合）
-        try:
-            from .decision_models import score_boss_targets
-            ml_scores = score_boss_targets(state, state.current_player)
-            if ml_scores and killable_bench:
-                ml_dict = {idx: sc for idx, sc in ml_scores if idx >= 0}
-                for bi in killable_bench:
-                    if bi in ml_dict:
-                        # モデルスコア（0-1程度）をルールベーススケールに変換して加算
-                        killable_bench_values[bi] += ml_dict[bi] * 5000.0
-        except Exception:
-            pass
-
-        if not killable_bench:
-            # KO可能ベンチがなくても、時間稼ぎ目的で弱いポケモンを引っ張る
-            # 条件: 相手バトル場がダメージを与えてくる + ベンチにエネなし逃げコスト高いポケモンがいる
-            from .damage import _opponent_max_effective_damage
-            _opp_dmg = _opponent_max_effective_damage(state)
-            if _opp_dmg > 0 and opp.bench:
-                stall_candidates = []
-                for i, bp in enumerate(opp.bench):
-                    if not bp or bp.hp is None or bp.hp <= 0:
-                        continue
-                    retreat_cost = getattr(bp.card, "retreat_cost", 1) or 1
-                    energy = getattr(bp, "attached_energy", 0) or 0
-                    # 逃げにくく攻撃できないポケモンが最適
-                    stall_score = retreat_cost * 100 - energy * 200 - (bp.hp or 0)
-                    stall_candidates.append((i, stall_score))
-                if stall_candidates:
-                    idx = max(stall_candidates, key=lambda x: x[1])[0]
-                    opp.active, opp.bench[idx] = opp.bench[idx], opp.active
-                    p.discard.append(p.hand.pop(hand_index))
-                    state.support_used_this_turn = True
-                    state.log(f"{state.player_name(state.current_player)}: ボスの指令を使用 → 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
-                    return True
-            return False
-
-        idx = max(killable_bench, key=lambda bi: killable_bench_values.get(bi, 0.0))
-        opp.active, opp.bench[idx] = opp.bench[idx], opp.active
-        p.discard.append(p.hand.pop(hand_index))
-        state.support_used_this_turn = True
-        state.log(f"{state.player_name(state.current_player)}: ボスの指令を使用 → 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
-        return True
+        return _use_support_boss(state, hand_index)
     if cid == RIRIE_NO_KESSHIN:
         used_card = p.hand[hand_index]
         rest = [p.hand[j] for j in range(len(p.hand)) if j != hand_index]
