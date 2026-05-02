@@ -510,6 +510,362 @@ def use_potion(state: GameState, hand_index: int) -> bool:
 
 
 
+
+
+def _use_fight_gong(state: GameState, hand_index: int) -> bool:
+    """ファイトゴングのカード効果を実行する。"""
+    p = state.active_player_state()
+    card = p.hand[hand_index]
+    fighting_basic = [c for c in p.deck if is_pokemon(c) and getattr(c, "pokemon_type", None) == "fighting" and getattr(c, "evolution_stage", None) == "basic"]
+    # ファイトゴングで取れるのは「基本闘エネルギー」のみ（ロック闘などの特殊エネルギーは対象外）。
+    def _is_basic_fighting_energy(x) -> bool:
+        if not is_energy(x):
+            return False
+        cid = getattr(x, "id", "") or ""
+        name = getattr(x, "name", "") or ""
+        return cid in ("basic-energy-fighting", "kihontouenerugi") or name == "基本闘エネルギー"
+
+    fighting_energy = [c for c in p.deck if _is_basic_fighting_energy(c)]
+    candidates = fighting_basic + fighting_energy
+    if candidates:
+        weights = state.get_weights_for_player(state.current_player)
+        deck_index = state.deck_indices[state.current_player] if state.deck_indices else 0
+        has_energy_in_hand = any(is_energy(c) for c in p.hand)
+
+        # 盤面に意味があるときだけセットロジック ON（手札 or 場にエンジンペアの片割れがいる）
+        if _has_engine_pair_member_in_hand_or_field(p):
+            _fg_has_lunatone = _player_has_pokemon_by_name_or_id(p, "ルナトーン", {"runaton"})
+            _fg_has_solrock = _player_has_pokemon_by_name_or_id(p, "ソルロック", {"sorurokku-mc-372"})
+        else:
+            _fg_has_lunatone = False
+            _fg_has_solrock = False
+
+        _fg_engine_complete = _fg_has_lunatone and _fg_has_solrock
+
+        # メガルカリオexが手札にあり、リオルが場にも手札にもいない場合のフラグ
+        _has_mega_lucario_in_hand = any(
+            is_pokemon(c) and "メガルカリオ" in (getattr(c, "name", "") or "")
+            for c in (p.hand or [])
+        )
+        _has_rioru_in_hand_or_field = False
+        if _has_mega_lucario_in_hand:
+            for c in (p.hand or []):
+                if is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "リオル":
+                    _has_rioru_in_hand_or_field = True
+                    break
+            if not _has_rioru_in_hand_or_field:
+                if getattr(p, "active", None) and (getattr(p.active.card, "name", "") or "").strip() == "リオル":
+                    _has_rioru_in_hand_or_field = True
+                if not _has_rioru_in_hand_or_field:
+                    for bp in (p.bench or []):
+                        if (getattr(bp.card, "name", "") or "").strip() == "リオル":
+                            _has_rioru_in_hand_or_field = True
+                            break
+        _need_rioru_for_mega = _has_mega_lucario_in_hand and not _has_rioru_in_hand_or_field
+
+        # 場にリオルライン（リオル/メガルカリオex等）がいるか
+        def _has_rioru_line_in_field() -> bool:
+            _rioru_names = {"リオル", "メガルカリオex", "メガルカリオ", "ルカリオ"}
+            if getattr(p, "active", None) and getattr(p.active, "card", None):
+                if (getattr(p.active.card, "name", "") or "") in _rioru_names:
+                    return True
+            for bp in (p.bench or []):
+                c = getattr(bp, "card", None)
+                if c and (getattr(c, "name", "") or "") in _rioru_names:
+                    return True
+            # 手札にリオルがあれば次に出せる
+            for c in (p.hand or []):
+                if is_pokemon(c) and (getattr(c, "name", "") or "") in _rioru_names:
+                    return True
+            return False
+
+        _fg_has_rioru_line = _has_rioru_line_in_field()
+
+        # 展開が十分か判定: リオルライン2体+エンジン揃い+マクノシタがいればたねは不要
+        _rioru_names = {"リオル", "メガルカリオex", "メガルカリオ", "ルカリオ"}
+        _field_names = []
+        if p.active:
+            _field_names.append(getattr(p.active.card, "name", ""))
+        for bp in (p.bench or []):
+            _field_names.append(getattr(bp.card, "name", ""))
+        _rioru_line_count = sum(1 for n in _field_names if n in _rioru_names)
+        _has_makunoshita_line = any(n in ("マクノシタ", "ハリテヤマ") for n in _field_names)
+        _field_sufficient = _fg_engine_complete and _rioru_line_count >= 2 and _has_makunoshita_line
+
+        def _faitogongu_score(c):
+            w = get_faitogongu_fetch_weight(weights, c, deck_index)
+            if not has_energy_in_hand and is_energy(c):
+                w += 1000.0
+                # HBでリオルを後から取れる+サポートなし+タンカありでルナサイクル2回分確約
+                # → エネ取得でドロー力を確保する方が圧倒的に有利
+                _has_hb = any(getattr(hc, "id", "") == "haipaboru" for hc in p.hand)
+                _has_tanka = any(getattr(hc, "id", "") == "yorunotanka" for hc in p.hand)
+                _has_draw_support = any(
+                    is_support(hc) and getattr(hc, "id", "") in (
+                        "riirienokesshin", "zeiyu", "hakasenokenkyuu",
+                        "hakasenokenkyuufutouhakase", "jixyajjiman", "nemo"
+                    )
+                    for hc in p.hand
+                )
+                if _has_hb and not _has_draw_support:
+                    w += 500.0  # HBでポケモン取れるのでエネ優先
+                if _has_tanka and _fg_engine_complete:
+                    w += 500.0  # タンカ+エンジン揃い → ルナサイクル2回分確約
+            # 展開が十分ならエネルギー優先（ルナサイクルのコスト+手張りに使える）
+            if _field_sufficient and is_energy(c):
+                w += 800.0
+            if not rules_only_for_player(state, state.current_player):
+                w += get_fetch_bonus_for_card(deck_index, getattr(c, "id", "") or "")
+            # 条件付きカードは online 評価が有効なときだけ加点する（A/B 比較用に無効化可能）。
+            if use_online_eval(state):
+                if is_pokemon(c) and is_finisher(c):
+                    online = is_online(c, state)
+                    w += _ONLINE_FINISHER_POS_BONUS * online
+                    w -= _ONLINE_FINISHER_NEG_PENALTY * (1.0 - online)
+                if is_pokemon(c) and is_main_attacker(c):
+                    w += _ONLINE_MAIN_ATTACKER_BONUS * is_online(c, state)
+            # エンジンペアのセット優先: 片方だけ場にいるとき強く、両方いないとき少し
+            if is_engine_pair_member(c):
+                c_name = getattr(c, "name", "") or ""
+                if c_name == "ルナトーン":
+                    if _fg_has_solrock and (not _fg_has_lunatone):
+                        w += 600.0
+                    elif (not _fg_has_solrock) and (not _fg_has_lunatone):
+                        w += 250.0
+                elif c_name == "ソルロック":
+                    if _fg_has_lunatone and (not _fg_has_solrock):
+                        w += 600.0
+                    elif (not _fg_has_lunatone) and (not _fg_has_solrock):
+                        w += 250.0
+            # メガルカリオexが手札にあるのにリオルが場にも手札にもない → リオル最優先
+            if _need_rioru_for_mega and is_pokemon(c):
+                c_name = (getattr(c, "name", "") or "").strip()
+                if c_name == "リオル":
+                    w += 2000.0  # ルナトーンより高い最優先ボーナス
+            # エンジンペアが揃っているなら、リオルを優先（メガルカリオex育成）
+            # ソルロック/ルナトーンをこれ以上取る必要はない
+            if _fg_engine_complete and is_pokemon(c):
+                c_name = (getattr(c, "name", "") or "").strip()
+                if c_name == "リオル" and not _fg_has_rioru_line:
+                    w += 800.0  # エンジン揃い＋リオルなし → リオル最優先
+                elif c_name == "リオル" and _rioru_line_count <= 1:
+                    w += 400.0  # エンジン揃い＋リオル1体 → 2体目も優先
+                elif c_name == "リオル":
+                    w -= 500.0  # リオルライン2体以上 → もう不要
+                elif c_name == "マクノシタ" and not _has_makunoshita_line:
+                    w += 600.0  # マクノシタがいない → ハリテヤマ育成用で優先
+                elif c_name == "マクノシタ":
+                    w += 200.0
+            return (w, -p.deck.index(c))
+        chosen = max(candidates, key=_faitogongu_score)
+        p.deck.remove(chosen)
+        p.hand.append(chosen)
+        state.drawn_this_turn.append(chosen)
+        random.shuffle(p.deck)
+        mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
+        p.discard.append(p.hand.pop(hand_index))
+        state.log(f"{state.player_name(state.current_player)}: ファイトゴングを使用 → 山札から {_card_label(chosen)} を手札に加えた")
+        return True
+    return False
+
+
+
+def _use_pokepad(state: GameState, hand_index: int) -> bool:
+    """ポケパッドのカード効果を実行する。"""
+    p = state.active_player_state()
+    card = p.hand[hand_index]
+    no_rule = [c for c in p.deck if is_pokemon(c) and not getattr(c, "has_rule", False)]
+    if no_rule:
+        weights = state.get_weights_for_player(state.current_player)
+        deck_index = state.deck_indices[state.current_player] if state.deck_indices else 0
+        allow_duplicate_ids = get_allow_duplicate_bench_ids(deck_index)
+
+        def _card_key(x) -> str:
+            return getattr(x, "id", None) or getattr(x, "name", "") or ""
+
+        hand_keys = {_card_key(c) for c in (p.hand or []) if is_pokemon(c)}
+        active_key = _card_key(getattr(p, "active", None).card) if getattr(p, "active", None) else ""
+        bench_keys = {_card_key(bp.card) for bp in (p.bench or []) if getattr(bp, "card", None) and is_pokemon(bp.card)}
+
+        # 盤面に意味があるときだけセットロジック ON（手札 or 場にエンジンペアの片割れがいる）
+        if _has_engine_pair_member_in_hand_or_field(p):
+            _pp_has_lunatone = _player_has_pokemon_by_name_or_id(p, "ルナトーン", {"runaton"})
+            _pp_has_solrock = _player_has_pokemon_by_name_or_id(p, "ソルロック", {"sorurokku-mc-372"})
+        else:
+            _pp_has_lunatone = False
+            _pp_has_solrock = False
+        if len(p.bench) <= 2:
+            import sys as _sys
+
+        def _pokepaddo_score(c):
+            w = get_pokepaddo_fetch_weight(weights, c, deck_index)
+            if not rules_only_for_player(state, state.current_player):
+                w += get_fetch_bonus_for_card(deck_index, getattr(c, "id", "") or "")
+
+            ck = _card_key(c)
+            c_name = getattr(c, "name", "") or ""
+
+            # すでに「同じ種別」を持っているほど少しだけ優先度を落とす（強い -10000 禁止はしない）。
+            owned_cards: list[object] = []
+            owned_cards.extend([x for x in (p.hand or []) if is_pokemon(x)])
+            if getattr(getattr(p, "active", None), "card", None) and is_pokemon(getattr(p.active, "card")):
+                owned_cards.append(p.active.card)
+            owned_cards.extend([bp.card for bp in (p.bench or []) if getattr(bp, "card", None) and is_pokemon(bp.card)])
+
+            def _species(x: object) -> str:
+                nm = getattr(x, "name", "") or ""
+                if nm in ("リオル", "ルナトーン", "ソルロック", "マクノシタ"):
+                    return nm
+                return _card_key(x)
+
+            species = _species(c)
+            existing_count = sum(1 for x in owned_cards if _species(x) == species)
+
+            # 優先度（同じ種別内での相対バイアス）:
+            #  リオル1体目 > ルナトーン=ソルロック > リオル2体目 > マクノシタ
+            dup_pen = get_pokepaddo_duplicate_penalty(
+                weights,
+                species=species,
+                existing_count=existing_count,
+                deck_index=deck_index,
+            )
+
+            # exact 同一カードの重なりは少しだけ追加で減点（ただし極端な禁止にはしない）。
+            extra_pen = 0.0
+            if ck and ck in hand_keys:
+                extra_pen -= 50.0
+            if ck and ck in bench_keys:
+                extra_pen -= 50.0
+                if ck not in allow_duplicate_ids:
+                    extra_pen -= 80.0
+            if ck and ck == active_key:
+                extra_pen -= 70.0
+
+            w += dup_pen + extra_pen
+
+            # 条件付きカードは online 評価が有効なときだけ加点する（A/B 比較用に無効化可能）。
+            if use_online_eval(state):
+                if is_finisher(c):
+                    online = is_online(c, state)
+                    w += _ONLINE_FINISHER_POS_BONUS * online
+                    w -= _ONLINE_FINISHER_NEG_PENALTY * (1.0 - online)
+                if is_main_attacker(c):
+                    w += _ONLINE_MAIN_ATTACKER_BONUS * is_online(c, state)
+
+            # エンジンペアのセット優先: 片方だけ場にいるとき強く、両方いないとき少し
+            # 既に場にいるエンジンは取る意味がない（2体目は不要）
+            if is_engine_pair_member(c):
+                c_name = getattr(c, "name", "") or ""
+                if c_name == "ルナトーン":
+                    if _pp_has_lunatone:
+                        w -= 3000.0  # 既にいる→取らない
+                    elif _pp_has_solrock:
+                        w += 600.0
+                    else:
+                        w += 250.0
+                elif c_name == "ソルロック":
+                    if _pp_has_solrock:
+                        w -= 3000.0  # 既にいる→取らない
+                    elif _pp_has_lunatone:
+                        w += 600.0
+                    else:
+                        w += 250.0
+
+            # リオル進化ライン（リオル＋ルカリオ＋メガルカリオex）を同一グループとして数える
+            def _is_rioru_line(x) -> bool:
+                n = getattr(x, "name", "") or ""
+                return n in ("リオル", "メガルカリオex", "メガルカリオ", "ルカリオ")
+            rioru_line_count = sum(1 for x in owned_cards if _is_rioru_line(x))
+            has_solrock_line = any(_species(x) == "ソルロック" for x in owned_cards)
+
+            # エンジン揃い＋リオルラインが足りない → リオル優先（メガルカリオexで殴るために必須）
+            _pp_engine_complete = _pp_has_lunatone and _pp_has_solrock
+            if _pp_engine_complete and species == "リオル" and rioru_line_count <= 1:
+                w += 1500.0
+            elif rioru_line_count >= 1 and has_solrock_line:
+                if species == "リオル" and rioru_line_count == 1:
+                    w += 520.0   # ライン 2 体目のリオルは優先
+                elif species == "リオル" and rioru_line_count >= 2:
+                    w -= 800.0   # ライン 3 体目以降は大きく減点
+                elif species == "ソルロック" and existing_count >= 1:
+                    w -= 520.0
+            # リオルライン 2 体以上いるときはマクノシタ（ハリテヤマ育成）を優先
+            if rioru_line_count >= 2 and species == "マクノシタ" and existing_count == 0:
+                w += 400.0
+
+            # ベンチが満杯でベンチに出せないたねポケモンは大幅減点
+            if is_pokemon(c) and not getattr(c, "evolves_from", None) and len(p.bench) >= 5:
+                # 進化先がフィールドにいない純粋なたねは出す場所がない
+                _can_evolve_onto_field = any(
+                    (getattr(fc, "name", "") or "").strip() == (getattr(c, "name", "") or "").strip()
+                    for fc in owned_cards
+                )
+                if not _can_evolve_onto_field:
+                    w -= 5000.0
+
+            # ドラパルトexデッキ: 進化ライン優先度
+            from .deck_strategies import is_dragapult_deck as _is_drapa_pp
+            if _is_drapa_pp(deck_index):
+                _pp_field_cards = (
+                    ([p.active.card] if getattr(p, "active", None) else [])
+                    + [bp.card for bp in (p.bench or [])]
+                )
+                _pp_field_names = {(getattr(fc, "name", "") or "").strip() for fc in _pp_field_cards}
+                _has_drameshiya_field = "ドラメシヤ" in _pp_field_names
+                _has_yomawaru_field = "ヨマワル" in _pp_field_names
+                _has_samayoru_field = "サマヨール" in _pp_field_names
+                _has_yonowaru_field = "ヨノワール" in _pp_field_names
+                # 1ターン目は進化ポケモンの優先度を下げる（進化できないので手札で腐る）
+                _is_evo = bool(getattr(c, "evolves_from", None))
+                if _is_evo and state is not None and getattr(state, "turn_count", 99) <= 1:
+                    w -= 3000.0
+                # 場に進化元がいない進化カードは低優先（すぐに使えない）
+                # 進化元がいれば即進化→ていさつしれいで高優先
+                if c_name == "ドロンチ":
+                    if _has_drameshiya_field:
+                        w += 5000.0  # ドラメシヤ→ドロンチ進化→ていさつしれい（最優先）
+                    else:
+                        w -= 3000.0
+                if c_name == "サマヨール" and not _has_yomawaru_field:
+                    w -= 3000.0
+                if c_name == "ヨノワール" and not _has_samayoru_field:
+                    w -= 3000.0
+                # ドラメシヤ: ドラパルトexラインの基盤 → 高優先
+                _drapa_line_count = sum(
+                    1 for fn in _pp_field_names
+                    if fn in ("ドラメシヤ", "ドロンチ", "ドラパルトex")
+                )
+                if c_name == "ドラメシヤ":
+                    if _drapa_line_count >= 2:
+                        w += 1000.0  # ラインが2体以上 → スボミー・ヨマワルより低め
+                    else:
+                        w += 3000.0  # ラインが足りない → 最優先で展開
+                # 場にドラパルトラインが2体以上: スボミー > ヨマワル > ドラメシヤの順
+                if _drapa_line_count >= 2:
+                    _has_subomii_field = "スボミー" in _pp_field_names
+                    if c_name == "スボミー" and not _has_subomii_field:
+                        w += 2500.0  # むずむずかふん要員
+                    elif c_name == "ヨマワル" and not _has_yomawaru_field:
+                        w += 2000.0  # カースドボムライン
+                if c_name == "サマヨール" and _has_yomawaru_field and not _has_samayoru_field:
+                    w += 2000.0  # ヨマワルから進化可能 → サマヨール最優先
+                elif c_name == "ヨノワール" and _has_samayoru_field:
+                    w += 1500.0  # サマヨールから進化可能 → ヨノワール優先
+
+            return (w, -p.deck.index(c))
+        chosen = max(no_rule, key=_pokepaddo_score)
+        p.deck.remove(chosen)
+        p.hand.append(chosen)
+        state.drawn_this_turn.append(chosen)
+        random.shuffle(p.deck)
+        mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
+        p.discard.append(p.hand.pop(hand_index))
+        state.log(f"{state.player_name(state.current_player)}: ポケパッドを使用 → 山札から {_card_label(chosen)} を手札に加えた")
+        return True
+    return False
+
 def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
     """ハイパーボールのカード効果を実行する。use_trainer_goodsから呼び出される。"""
     p = state.active_player_state()
@@ -1224,349 +1580,11 @@ def use_trainer_goods(
         state.log(f"{state.player_name(state.current_player)}: パワープロテインを使用 → この番、自分の闘ポケモンのワザダメージ+{30 * n}（{n} 枚目）")
         return True
     if cid == "faitogongu" and p.deck:
-        fighting_basic = [c for c in p.deck if is_pokemon(c) and getattr(c, "pokemon_type", None) == "fighting" and getattr(c, "evolution_stage", None) == "basic"]
-        # ファイトゴングで取れるのは「基本闘エネルギー」のみ（ロック闘などの特殊エネルギーは対象外）。
-        def _is_basic_fighting_energy(x) -> bool:
-            if not is_energy(x):
-                return False
-            cid = getattr(x, "id", "") or ""
-            name = getattr(x, "name", "") or ""
-            return cid in ("basic-energy-fighting", "kihontouenerugi") or name == "基本闘エネルギー"
+        return _use_fight_gong(state, hand_index)
 
-        fighting_energy = [c for c in p.deck if _is_basic_fighting_energy(c)]
-        candidates = fighting_basic + fighting_energy
-        if candidates:
-            weights = state.get_weights_for_player(state.current_player)
-            deck_index = state.deck_indices[state.current_player] if state.deck_indices else 0
-            has_energy_in_hand = any(is_energy(c) for c in p.hand)
-
-            # 盤面に意味があるときだけセットロジック ON（手札 or 場にエンジンペアの片割れがいる）
-            if _has_engine_pair_member_in_hand_or_field(p):
-                _fg_has_lunatone = _player_has_pokemon_by_name_or_id(p, "ルナトーン", {"runaton"})
-                _fg_has_solrock = _player_has_pokemon_by_name_or_id(p, "ソルロック", {"sorurokku-mc-372"})
-            else:
-                _fg_has_lunatone = False
-                _fg_has_solrock = False
-
-            _fg_engine_complete = _fg_has_lunatone and _fg_has_solrock
-
-            # メガルカリオexが手札にあり、リオルが場にも手札にもいない場合のフラグ
-            _has_mega_lucario_in_hand = any(
-                is_pokemon(c) and "メガルカリオ" in (getattr(c, "name", "") or "")
-                for c in (p.hand or [])
-            )
-            _has_rioru_in_hand_or_field = False
-            if _has_mega_lucario_in_hand:
-                for c in (p.hand or []):
-                    if is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "リオル":
-                        _has_rioru_in_hand_or_field = True
-                        break
-                if not _has_rioru_in_hand_or_field:
-                    if getattr(p, "active", None) and (getattr(p.active.card, "name", "") or "").strip() == "リオル":
-                        _has_rioru_in_hand_or_field = True
-                    if not _has_rioru_in_hand_or_field:
-                        for bp in (p.bench or []):
-                            if (getattr(bp.card, "name", "") or "").strip() == "リオル":
-                                _has_rioru_in_hand_or_field = True
-                                break
-            _need_rioru_for_mega = _has_mega_lucario_in_hand and not _has_rioru_in_hand_or_field
-
-            # 場にリオルライン（リオル/メガルカリオex等）がいるか
-            def _has_rioru_line_in_field() -> bool:
-                _rioru_names = {"リオル", "メガルカリオex", "メガルカリオ", "ルカリオ"}
-                if getattr(p, "active", None) and getattr(p.active, "card", None):
-                    if (getattr(p.active.card, "name", "") or "") in _rioru_names:
-                        return True
-                for bp in (p.bench or []):
-                    c = getattr(bp, "card", None)
-                    if c and (getattr(c, "name", "") or "") in _rioru_names:
-                        return True
-                # 手札にリオルがあれば次に出せる
-                for c in (p.hand or []):
-                    if is_pokemon(c) and (getattr(c, "name", "") or "") in _rioru_names:
-                        return True
-                return False
-
-            _fg_has_rioru_line = _has_rioru_line_in_field()
-
-            # 展開が十分か判定: リオルライン2体+エンジン揃い+マクノシタがいればたねは不要
-            _rioru_names = {"リオル", "メガルカリオex", "メガルカリオ", "ルカリオ"}
-            _field_names = []
-            if p.active:
-                _field_names.append(getattr(p.active.card, "name", ""))
-            for bp in (p.bench or []):
-                _field_names.append(getattr(bp.card, "name", ""))
-            _rioru_line_count = sum(1 for n in _field_names if n in _rioru_names)
-            _has_makunoshita_line = any(n in ("マクノシタ", "ハリテヤマ") for n in _field_names)
-            _field_sufficient = _fg_engine_complete and _rioru_line_count >= 2 and _has_makunoshita_line
-
-            def _faitogongu_score(c):
-                w = get_faitogongu_fetch_weight(weights, c, deck_index)
-                if not has_energy_in_hand and is_energy(c):
-                    w += 1000.0
-                    # HBでリオルを後から取れる+サポートなし+タンカありでルナサイクル2回分確約
-                    # → エネ取得でドロー力を確保する方が圧倒的に有利
-                    _has_hb = any(getattr(hc, "id", "") == "haipaboru" for hc in p.hand)
-                    _has_tanka = any(getattr(hc, "id", "") == "yorunotanka" for hc in p.hand)
-                    _has_draw_support = any(
-                        is_support(hc) and getattr(hc, "id", "") in (
-                            "riirienokesshin", "zeiyu", "hakasenokenkyuu",
-                            "hakasenokenkyuufutouhakase", "jixyajjiman", "nemo"
-                        )
-                        for hc in p.hand
-                    )
-                    if _has_hb and not _has_draw_support:
-                        w += 500.0  # HBでポケモン取れるのでエネ優先
-                    if _has_tanka and _fg_engine_complete:
-                        w += 500.0  # タンカ+エンジン揃い → ルナサイクル2回分確約
-                # 展開が十分ならエネルギー優先（ルナサイクルのコスト+手張りに使える）
-                if _field_sufficient and is_energy(c):
-                    w += 800.0
-                if not rules_only_for_player(state, state.current_player):
-                    w += get_fetch_bonus_for_card(deck_index, getattr(c, "id", "") or "")
-                # 条件付きカードは online 評価が有効なときだけ加点する（A/B 比較用に無効化可能）。
-                if use_online_eval(state):
-                    if is_pokemon(c) and is_finisher(c):
-                        online = is_online(c, state)
-                        w += _ONLINE_FINISHER_POS_BONUS * online
-                        w -= _ONLINE_FINISHER_NEG_PENALTY * (1.0 - online)
-                    if is_pokemon(c) and is_main_attacker(c):
-                        w += _ONLINE_MAIN_ATTACKER_BONUS * is_online(c, state)
-                # エンジンペアのセット優先: 片方だけ場にいるとき強く、両方いないとき少し
-                if is_engine_pair_member(c):
-                    c_name = getattr(c, "name", "") or ""
-                    if c_name == "ルナトーン":
-                        if _fg_has_solrock and (not _fg_has_lunatone):
-                            w += 600.0
-                        elif (not _fg_has_solrock) and (not _fg_has_lunatone):
-                            w += 250.0
-                    elif c_name == "ソルロック":
-                        if _fg_has_lunatone and (not _fg_has_solrock):
-                            w += 600.0
-                        elif (not _fg_has_lunatone) and (not _fg_has_solrock):
-                            w += 250.0
-                # メガルカリオexが手札にあるのにリオルが場にも手札にもない → リオル最優先
-                if _need_rioru_for_mega and is_pokemon(c):
-                    c_name = (getattr(c, "name", "") or "").strip()
-                    if c_name == "リオル":
-                        w += 2000.0  # ルナトーンより高い最優先ボーナス
-                # エンジンペアが揃っているなら、リオルを優先（メガルカリオex育成）
-                # ソルロック/ルナトーンをこれ以上取る必要はない
-                if _fg_engine_complete and is_pokemon(c):
-                    c_name = (getattr(c, "name", "") or "").strip()
-                    if c_name == "リオル" and not _fg_has_rioru_line:
-                        w += 800.0  # エンジン揃い＋リオルなし → リオル最優先
-                    elif c_name == "リオル" and _rioru_line_count <= 1:
-                        w += 400.0  # エンジン揃い＋リオル1体 → 2体目も優先
-                    elif c_name == "リオル":
-                        w -= 500.0  # リオルライン2体以上 → もう不要
-                    elif c_name == "マクノシタ" and not _has_makunoshita_line:
-                        w += 600.0  # マクノシタがいない → ハリテヤマ育成用で優先
-                    elif c_name == "マクノシタ":
-                        w += 200.0
-                return (w, -p.deck.index(c))
-            chosen = max(candidates, key=_faitogongu_score)
-            p.deck.remove(chosen)
-            p.hand.append(chosen)
-            state.drawn_this_turn.append(chosen)
-            random.shuffle(p.deck)
-            mark_own_deck_shuffled(state)
-            mark_deck_searched(state)
-            p.discard.append(p.hand.pop(hand_index))
-            state.log(f"{state.player_name(state.current_player)}: ファイトゴングを使用 → 山札から {_card_label(chosen)} を手札に加えた")
-            return True
-        return False
     if cid == "pokepaddo" and p.deck:
-        no_rule = [c for c in p.deck if is_pokemon(c) and not getattr(c, "has_rule", False)]
-        if no_rule:
-            weights = state.get_weights_for_player(state.current_player)
-            deck_index = state.deck_indices[state.current_player] if state.deck_indices else 0
-            allow_duplicate_ids = get_allow_duplicate_bench_ids(deck_index)
+        return _use_pokepad(state, hand_index)
 
-            def _card_key(x) -> str:
-                return getattr(x, "id", None) or getattr(x, "name", "") or ""
-
-            hand_keys = {_card_key(c) for c in (p.hand or []) if is_pokemon(c)}
-            active_key = _card_key(getattr(p, "active", None).card) if getattr(p, "active", None) else ""
-            bench_keys = {_card_key(bp.card) for bp in (p.bench or []) if getattr(bp, "card", None) and is_pokemon(bp.card)}
-
-            # 盤面に意味があるときだけセットロジック ON（手札 or 場にエンジンペアの片割れがいる）
-            if _has_engine_pair_member_in_hand_or_field(p):
-                _pp_has_lunatone = _player_has_pokemon_by_name_or_id(p, "ルナトーン", {"runaton"})
-                _pp_has_solrock = _player_has_pokemon_by_name_or_id(p, "ソルロック", {"sorurokku-mc-372"})
-            else:
-                _pp_has_lunatone = False
-                _pp_has_solrock = False
-            if len(p.bench) <= 2:
-                import sys as _sys
-
-            def _pokepaddo_score(c):
-                w = get_pokepaddo_fetch_weight(weights, c, deck_index)
-                if not rules_only_for_player(state, state.current_player):
-                    w += get_fetch_bonus_for_card(deck_index, getattr(c, "id", "") or "")
-
-                ck = _card_key(c)
-                c_name = getattr(c, "name", "") or ""
-
-                # すでに「同じ種別」を持っているほど少しだけ優先度を落とす（強い -10000 禁止はしない）。
-                owned_cards: list[object] = []
-                owned_cards.extend([x for x in (p.hand or []) if is_pokemon(x)])
-                if getattr(getattr(p, "active", None), "card", None) and is_pokemon(getattr(p.active, "card")):
-                    owned_cards.append(p.active.card)
-                owned_cards.extend([bp.card for bp in (p.bench or []) if getattr(bp, "card", None) and is_pokemon(bp.card)])
-
-                def _species(x: object) -> str:
-                    nm = getattr(x, "name", "") or ""
-                    if nm in ("リオル", "ルナトーン", "ソルロック", "マクノシタ"):
-                        return nm
-                    return _card_key(x)
-
-                species = _species(c)
-                existing_count = sum(1 for x in owned_cards if _species(x) == species)
-
-                # 優先度（同じ種別内での相対バイアス）:
-                #  リオル1体目 > ルナトーン=ソルロック > リオル2体目 > マクノシタ
-                dup_pen = get_pokepaddo_duplicate_penalty(
-                    weights,
-                    species=species,
-                    existing_count=existing_count,
-                    deck_index=deck_index,
-                )
-
-                # exact 同一カードの重なりは少しだけ追加で減点（ただし極端な禁止にはしない）。
-                extra_pen = 0.0
-                if ck and ck in hand_keys:
-                    extra_pen -= 50.0
-                if ck and ck in bench_keys:
-                    extra_pen -= 50.0
-                    if ck not in allow_duplicate_ids:
-                        extra_pen -= 80.0
-                if ck and ck == active_key:
-                    extra_pen -= 70.0
-
-                w += dup_pen + extra_pen
-
-                # 条件付きカードは online 評価が有効なときだけ加点する（A/B 比較用に無効化可能）。
-                if use_online_eval(state):
-                    if is_finisher(c):
-                        online = is_online(c, state)
-                        w += _ONLINE_FINISHER_POS_BONUS * online
-                        w -= _ONLINE_FINISHER_NEG_PENALTY * (1.0 - online)
-                    if is_main_attacker(c):
-                        w += _ONLINE_MAIN_ATTACKER_BONUS * is_online(c, state)
-
-                # エンジンペアのセット優先: 片方だけ場にいるとき強く、両方いないとき少し
-                # 既に場にいるエンジンは取る意味がない（2体目は不要）
-                if is_engine_pair_member(c):
-                    c_name = getattr(c, "name", "") or ""
-                    if c_name == "ルナトーン":
-                        if _pp_has_lunatone:
-                            w -= 3000.0  # 既にいる→取らない
-                        elif _pp_has_solrock:
-                            w += 600.0
-                        else:
-                            w += 250.0
-                    elif c_name == "ソルロック":
-                        if _pp_has_solrock:
-                            w -= 3000.0  # 既にいる→取らない
-                        elif _pp_has_lunatone:
-                            w += 600.0
-                        else:
-                            w += 250.0
-
-                # リオル進化ライン（リオル＋ルカリオ＋メガルカリオex）を同一グループとして数える
-                def _is_rioru_line(x) -> bool:
-                    n = getattr(x, "name", "") or ""
-                    return n in ("リオル", "メガルカリオex", "メガルカリオ", "ルカリオ")
-                rioru_line_count = sum(1 for x in owned_cards if _is_rioru_line(x))
-                has_solrock_line = any(_species(x) == "ソルロック" for x in owned_cards)
-
-                # エンジン揃い＋リオルラインが足りない → リオル優先（メガルカリオexで殴るために必須）
-                _pp_engine_complete = _pp_has_lunatone and _pp_has_solrock
-                if _pp_engine_complete and species == "リオル" and rioru_line_count <= 1:
-                    w += 1500.0
-                elif rioru_line_count >= 1 and has_solrock_line:
-                    if species == "リオル" and rioru_line_count == 1:
-                        w += 520.0   # ライン 2 体目のリオルは優先
-                    elif species == "リオル" and rioru_line_count >= 2:
-                        w -= 800.0   # ライン 3 体目以降は大きく減点
-                    elif species == "ソルロック" and existing_count >= 1:
-                        w -= 520.0
-                # リオルライン 2 体以上いるときはマクノシタ（ハリテヤマ育成）を優先
-                if rioru_line_count >= 2 and species == "マクノシタ" and existing_count == 0:
-                    w += 400.0
-
-                # ベンチが満杯でベンチに出せないたねポケモンは大幅減点
-                if is_pokemon(c) and not getattr(c, "evolves_from", None) and len(p.bench) >= 5:
-                    # 進化先がフィールドにいない純粋なたねは出す場所がない
-                    _can_evolve_onto_field = any(
-                        (getattr(fc, "name", "") or "").strip() == (getattr(c, "name", "") or "").strip()
-                        for fc in owned_cards
-                    )
-                    if not _can_evolve_onto_field:
-                        w -= 5000.0
-
-                # ドラパルトexデッキ: 進化ライン優先度
-                from .deck_strategies import is_dragapult_deck as _is_drapa_pp
-                if _is_drapa_pp(deck_index):
-                    _pp_field_cards = (
-                        ([p.active.card] if getattr(p, "active", None) else [])
-                        + [bp.card for bp in (p.bench or [])]
-                    )
-                    _pp_field_names = {(getattr(fc, "name", "") or "").strip() for fc in _pp_field_cards}
-                    _has_drameshiya_field = "ドラメシヤ" in _pp_field_names
-                    _has_yomawaru_field = "ヨマワル" in _pp_field_names
-                    _has_samayoru_field = "サマヨール" in _pp_field_names
-                    _has_yonowaru_field = "ヨノワール" in _pp_field_names
-                    # 1ターン目は進化ポケモンの優先度を下げる（進化できないので手札で腐る）
-                    _is_evo = bool(getattr(c, "evolves_from", None))
-                    if _is_evo and state is not None and getattr(state, "turn_count", 99) <= 1:
-                        w -= 3000.0
-                    # 場に進化元がいない進化カードは低優先（すぐに使えない）
-                    # 進化元がいれば即進化→ていさつしれいで高優先
-                    if c_name == "ドロンチ":
-                        if _has_drameshiya_field:
-                            w += 5000.0  # ドラメシヤ→ドロンチ進化→ていさつしれい（最優先）
-                        else:
-                            w -= 3000.0
-                    if c_name == "サマヨール" and not _has_yomawaru_field:
-                        w -= 3000.0
-                    if c_name == "ヨノワール" and not _has_samayoru_field:
-                        w -= 3000.0
-                    # ドラメシヤ: ドラパルトexラインの基盤 → 高優先
-                    _drapa_line_count = sum(
-                        1 for fn in _pp_field_names
-                        if fn in ("ドラメシヤ", "ドロンチ", "ドラパルトex")
-                    )
-                    if c_name == "ドラメシヤ":
-                        if _drapa_line_count >= 2:
-                            w += 1000.0  # ラインが2体以上 → スボミー・ヨマワルより低め
-                        else:
-                            w += 3000.0  # ラインが足りない → 最優先で展開
-                    # 場にドラパルトラインが2体以上: スボミー > ヨマワル > ドラメシヤの順
-                    if _drapa_line_count >= 2:
-                        _has_subomii_field = "スボミー" in _pp_field_names
-                        if c_name == "スボミー" and not _has_subomii_field:
-                            w += 2500.0  # むずむずかふん要員
-                        elif c_name == "ヨマワル" and not _has_yomawaru_field:
-                            w += 2000.0  # カースドボムライン
-                    if c_name == "サマヨール" and _has_yomawaru_field and not _has_samayoru_field:
-                        w += 2000.0  # ヨマワルから進化可能 → サマヨール最優先
-                    elif c_name == "ヨノワール" and _has_samayoru_field:
-                        w += 1500.0  # サマヨールから進化可能 → ヨノワール優先
-
-                return (w, -p.deck.index(c))
-            chosen = max(no_rule, key=_pokepaddo_score)
-            p.deck.remove(chosen)
-            p.hand.append(chosen)
-            state.drawn_this_turn.append(chosen)
-            random.shuffle(p.deck)
-            mark_own_deck_shuffled(state)
-            mark_deck_searched(state)
-            p.discard.append(p.hand.pop(hand_index))
-            state.log(f"{state.player_name(state.current_player)}: ポケパッドを使用 → 山札から {_card_label(chosen)} を手札に加えた")
-            return True
-        return False
     if cid == "yorunotanka":
         pokemon_or_basic = [c for c in p.discard if is_pokemon(c) or (is_energy(c) and getattr(c, "energy_type", None) in _BASIC_ENERGY_TYPES)]
         if pokemon_or_basic:
