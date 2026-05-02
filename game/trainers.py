@@ -23,7 +23,14 @@ _ONLINE_MAIN_ATTACKER_BONUS = float(os.getenv("DECKAI_ONLINE_MAIN_ATTACKER_BONUS
 from .attack import get_legal_attack_indices
 from .damage import _max_effective_damage_for_attacker
 from .card_roles import is_engine_pair_member, is_finisher, is_main_attacker, is_online, use_online_eval
-from .deck_strategies import get_allow_duplicate_bench_ids, get_fetch_bonus_for_card
+from .deck_strategies import (
+    get_allow_duplicate_bench_ids,
+    get_fetch_bonus_for_card,
+    is_dragapult_deck_for_player,
+    DRAPA_LINE_NAMES,
+    DRAPA_SUPPORT_NAMES,
+    DRAPA_ENERGY_BANNED_NAMES,
+)
 from .evolution import _apply_evolution, _can_evolve_onto
 from .weights import (
     get_faitogongu_fetch_weight,
@@ -427,10 +434,9 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
         _is_luna_bench = _target_name_bench == "ルナトーン"
         if _is_luna_bench and not getattr(state, "_ko_plan_executing", False):
             return False
-        # ドラパルトデッキ: スボミーにエネルギーは絶対に付けない
-        if _target_name_bench == "スボミー":
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_sb
-            if _is_drapa_sb(state, state.current_player):
+        # ドラパルトデッキ: エネ付与禁止ポケモン（スボミー等）
+        if _target_name_bench in DRAPA_ENERGY_BANNED_NAMES:
+            if is_dragapult_deck_for_player(state, state.current_player):
                 return False
         target.attached_energy += 1
         target.attached_energy_types.append(slot_type)
@@ -448,10 +454,9 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
     # ルナトーンにはKOプランナー経由以外でエネを付けない
     if _active_name_ae == "ルナトーン" and not getattr(state, "_ko_plan_executing", False):
         return False
-    # ドラパルトデッキ: スボミーにエネルギーは絶対に付けない
-    if _active_name_ae == "スボミー":
-        from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_sb2
-        if _is_drapa_sb2(state, state.current_player):
+    # ドラパルトデッキ: エネ付与禁止ポケモン（スボミー等）
+    if _active_name_ae in DRAPA_ENERGY_BANNED_NAMES:
+        if is_dragapult_deck_for_player(state, state.current_player):
             return False
     p.active.attached_energy += 1
     p.active.attached_energy_types.append(slot_type)
@@ -542,7 +547,6 @@ def use_trainer_goods(
             _ame_candidates.append((i, c, _s1id))
         # ドラパルトexデッキ: ドラパルトexを優先
         if _ame_candidates:
-            from .deck_strategies import is_dragapult_deck_for_player
             if is_dragapult_deck_for_player(state, state.current_player):
                 def _ame_score(tup):
                     _, cc, _ = tup
@@ -786,7 +790,7 @@ def use_trainer_goods(
                     )
                     # 場のドラパルトexラインでこのタイプのエネがまだ付いていないポケモン
                     _drapa_needing = 0
-                    _drapa_line_names_hb = {"ドラパルトex", "ドロンチ", "ドラメシヤ"}
+                    _drapa_line_names_hb = DRAPA_LINE_NAMES
                     for _bp in ([p.active] if p.active else []) + list(p.bench):
                         _bp_name_hb = (getattr(_bp.card, "name", "") or "").strip()
                         if _bp_name_hb in _drapa_line_names_hb:
@@ -797,7 +801,7 @@ def use_trainer_goods(
                     _completes_fd = False
                     for _bp in ([p.active] if p.active else []) + list(p.bench):
                         _bp_name_hb2 = (getattr(_bp.card, "name", "") or "").strip()
-                        if _bp_name_hb2 in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
+                        if _bp_name_hb2 in DRAPA_LINE_NAMES:
                             _bp_types_hb2 = list(getattr(_bp, "attached_energy_types", []) or [])
                             _bp_en_hb2 = getattr(_bp, "attached_energy", 0) or 0
                             _other_type = "psychic" if etype_hb == "fire" else "fire"
@@ -1591,9 +1595,8 @@ def use_trainer_goods(
             _luna_in_trash = [c for c in pokemon_or_basic if is_pokemon(c) and getattr(c, "name", "") == "ルナトーン"]
 
             # ドラパルトexデッキ: ドラパルトexがトラッシュ＋ドロンチが場にいる → ドラパルトex最優先回収
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_tanka
             _drapa_in_trash = [c for c in pokemon_or_basic if is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "ドラパルトex"]
-            if _is_drapa_tanka(state, state.current_player) and _drapa_in_trash:
+            if is_dragapult_deck_for_player(state, state.current_player) and _drapa_in_trash:
                 _has_doronchi_to_evolve = any(
                     (getattr(bp.card, "name", "") or "").strip() == "ドロンチ"
                     and not getattr(bp, "evolved_this_turn", False)
@@ -1683,7 +1686,6 @@ def use_trainer_goods(
         for bp in p.bench:
             existing_names.add(getattr(bp.card, "name", ""))
         # ドラパルトexデッキ: ドラメシヤ・ヨマワルの重複を許可
-        from .deck_strategies import is_dragapult_deck_for_player
         _is_drapa_pofin = is_dragapult_deck_for_player(state, state.current_player)
         _drapa_dup_names = {"ドラメシヤ", "ヨマワル"} if _is_drapa_pofin else set()
         # 場にいないたねを優先（ドラパルトexデッキでは指定名の重複を許可）
@@ -2052,9 +2054,7 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
     # 相手のKO可能なターゲットを探す
     our_prizes_remaining = len(p.prize_pile)
     opp_prizes_remaining = len(opp.prize_pile)
-
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drap_bomb
-    _is_drapa = _is_drap_bomb(state, state.current_player)
+    _is_drapa = is_dragapult_deck_for_player(state, state.current_player)
     _phantom_bench_dmg = 60  # ファントムダイブのベンチダメカン
 
     for bomb_i, bomb_bp, bomb_damage in bomb_candidates:
@@ -2354,7 +2354,6 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
         support_idx = None
     else:
         # サポートの優先度スコアリング
-        from .deck_strategies import is_dragapult_deck_for_player
         _is_drapa_oku = is_dragapult_deck_for_player(state, state.current_player)
         # ドロー系サポートが手札にあるかだけをチェック（ブライア・ボスの指令はドローではない）
         _draw_support_ids = {"riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari", "nemo", "akamatsu"}
@@ -2367,14 +2366,14 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
         if _is_drapa_oku:
             _all_bp_oku = ([p.active] if p.active else []) + list(p.bench or [])
             for _bp_oku in _all_bp_oku:
-                if (getattr(_bp_oku.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
+                if (getattr(_bp_oku.card, "name", "") or "").strip() in DRAPA_LINE_NAMES:
                     if (getattr(_bp_oku, "attached_energy", 0) or 0) < 2:
                         _drapa_needs_energy_oku = True
                         break
         _hand_size_oku = len(p.hand)
         # ドラパルトexラインが場にいるか（アカマツの価値判定用）
         _drapa_line_on_field_oku = _is_drapa_oku and any(
-            (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")
+            (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
             for bp in ([p.active] if p.active else []) + list(p.bench or [])
         )
         # ドラパルトexが場にいるか（進化済み）
@@ -2720,8 +2719,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
             return False
 
         # ドラパルトexデッキ: ボスの指令の使用条件
-        from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_boss
-        if _is_drapa_boss(state, state.current_player):
+        if is_dragapult_deck_for_player(state, state.current_player):
             _active_name_boss = (getattr(p.active.card, "name", "") or "").strip()
             if _active_name_boss == "ドラパルトex":
                 # ファントムダイブが撃てるか（エネ2以上 + 炎+超）
@@ -2995,8 +2993,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
             elif stage == "stage2":
                 stage2_candidates.append((i, c, cname))
         # ドラパルトデッキ: メインアタッカーラインを優先
-        from .deck_strategies import is_dragapult_deck_for_player as _is_drap_hk
-        if _is_drap_hk(state, state.current_player):
+        if is_dragapult_deck_for_player(state, state.current_player):
             _drapa_basic_prio = {"ドラメシヤ": 100, "ヨマワル": 50, "スボミー": 30}
             _drapa_s1_prio = {"ドロンチ": 100, "サマヨール": 50}
             _drapa_s2_prio = {"ドラパルトex": 100, "ヨノワール": 50}
@@ -3028,13 +3025,12 @@ def use_support(state: GameState, hand_index: int) -> bool:
     # アカマツ: 山札からタイプの違う基本エネルギーを2枚まで選び、1枚を手札に加え、残りを自分のポケモンにつける
     if cid == "akamatsu":
         # ドラパルトexデッキ: 炎＋超を優先的に取る
-        from .deck_strategies import is_dragapult_deck_for_player
         _is_drapa = is_dragapult_deck_for_player(state, state.current_player)
         # ドラパルトデッキ: このターンにファントムダイブに届く場合のみ使う
         # （届かないなら付けたエネが次ターンにKOされて無駄になるリスク）
         if _is_drapa:
             _drapa_line_on_field = any(
-                (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")
+                (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
                 for bp in ([p.active] if p.active else []) + list(p.bench or [])
             )
             if not _drapa_line_on_field:
@@ -3053,7 +3049,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         # ドラパルトexデッキ: ターゲットに既に付いているタイプは後回し（不足タイプを最優先）
         if _is_drapa and _preferred_types:
             _drapa_attach_targets = [bp for bp in ([p.active] if p.active else []) + list(p.bench)
-                                     if (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")]
+                                     if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES]
             if _drapa_attach_targets:
                 # HP低いバトル場ポケモンは避ける（KOされてエネ無駄になるリスク）
                 opp_bt = state.defending_player_state()
@@ -3120,7 +3116,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
             if _is_drapa:
                 # ドラパルトex系のポケモンを探す
                 _drapa_targets = [bp for bp in all_pokemon
-                                  if (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")]
+                                  if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES]
                 if _drapa_targets:
                     # ターゲット選択: ドラパルトex優先、エネ多い方優先
                     # ただし次ターンKOされそう（HPが低い）バトル場のポケモンは避ける
@@ -3285,7 +3281,6 @@ def use_support(state: GameState, hand_index: int) -> bool:
         if not energy_in_discard:
             return False
         # 最もエネルギーが必要な2進化ポケモンを選ぶ
-        from .deck_strategies import is_dragapult_deck_for_player
         _is_drapa_mei = is_dragapult_deck_for_player(state, state.current_player)
         # ドラパルトexデッキ: トラッシュにファントムダイブに必要なタイプのエネがなければ使わない
         # また、ターゲットのドラパルトexに既に付いているタイプしかトラッシュにないなら無駄

@@ -3,6 +3,12 @@ from card import is_energy, is_goods, is_pokemon, is_support
 
 from .damage import _max_effective_damage_if_attach
 from .damage import _max_effective_damage_for_attacker
+from .deck_strategies import (
+    is_dragapult_deck_for_player,
+    DRAPA_LINE_NAMES,
+    DRAPA_SUPPORT_NAMES,
+    DRAPA_ENERGY_BANNED_NAMES,
+)
 from .evolution import _can_evolve_onto, evolve_pokemon
 from .state import (
     GameState,
@@ -187,7 +193,6 @@ def _try_evolve_once(state: GameState) -> bool:
 
         # ドラパルトexデッキ: ドロンチ進化を最優先（ていさつしれいを先に使い切る）
         # ドラパルトex進化はドロンチ進化が全部終わってから
-        from .deck_strategies import is_dragapult_deck_for_player
         if is_dragapult_deck_for_player(state, state.current_player):
             if evo_name_ == "ドロンチ":
                 w += 5000.0  # ていさつしれいを先に使うため最優先
@@ -289,7 +294,6 @@ def _pick_energy_hand_idx(p: PlayerState, state: GameState | None = None) -> int
 
     _is_drapa = False
     if state is not None:
-        from .deck_strategies import is_dragapult_deck_for_player
         _is_drapa = is_dragapult_deck_for_player(state, state.current_player)
 
     # ドラパルトデッキ: 悪エネはファントムダイブに不要（炎+超の2エネのみ）
@@ -336,7 +340,7 @@ def _pick_energy_hand_idx(p: PlayerState, state: GameState | None = None) -> int
                 _all_bp = ([state.active_player_state().active] if state.active_player_state().active else []) + list(state.active_player_state().bench or [])
                 for _bp in _all_bp:
                     _bpn = (getattr(_bp.card, "name", "") or "").strip()
-                    if _bpn not in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
+                    if _bpn not in DRAPA_LINE_NAMES:
                         continue
                     _bp_types = list(getattr(_bp, "attached_energy_types", []) or [])
                     _bp_en = getattr(_bp, "attached_energy", 0) or 0
@@ -441,9 +445,7 @@ def _build_energy_attach_input(
             )
             candidates.append((None, dmg))
     # ドラパルトexデッキ: サポートポケモンにエネを付ける候補を除外
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_build
-    _is_drapa_deck = _is_drapa_build(state, state.current_player)
-    _drapa_support_names = frozenset({"スボミー", "キチキギスex", "ニャースex", "ヨマワル", "サマヨール", "ヨノワール"})
+    _is_drapa_deck = is_dragapult_deck_for_player(state, state.current_player)
 
     # ドラパルトデッキ: バトル場が次ターンKO確定ならエネをベンチに回す（付けたエネが無駄になる）
     if _is_drapa_deck and candidates and p.active and opp.active and p.bench:
@@ -456,10 +458,9 @@ def _build_energy_attach_input(
     # ファントムダイブは炎+超が必要。悪エネを付けるとファントムダイブが使えなくなる。
     # また同じタイプのエネを2個付けない（ファントムダイブは火1+超1）
     if _is_drapa_deck:
-        _drapa_line_for_energy_filter = frozenset({"ドラパルトex", "ドロンチ", "ドラメシヤ"})
         if candidates:
             active_name = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
-            if active_name in _drapa_line_for_energy_filter:
+            if active_name in DRAPA_LINE_NAMES:
                 if new_type == "darkness":
                     # 悪エネはファントムダイブに貢献しない（炎+超のみ必要）
                     # ドラメシヤの逃げ用のみ許可
@@ -478,10 +479,9 @@ def _build_energy_attach_input(
                     if new_type in _existing_types:
                         candidates.clear()
     # ドラパルトex系が場にいてエネが足りない場合はサポートをフィルタ
-    _drapa_line_names = frozenset({"ドラパルトex", "ドロンチ", "ドラメシヤ"})
     _drapa_all_pokemon = ([p.active] if p.active else []) + list(p.bench or [])
     _drapa_needs_energy = _is_drapa_deck and any(
-        (getattr(bp.card, "name", "") or "").strip() in _drapa_line_names
+        (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
         and (getattr(bp, "attached_energy", 0) or 0) < 2
         for bp in _drapa_all_pokemon
     )
@@ -491,7 +491,7 @@ def _build_energy_attach_input(
         active_name = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
         if active_name == "ヨマワル" and new_type == "darkness" and (getattr(p.active, "attached_energy", 0) or 0) == 0:
             pass  # 悪エネ+ヨマワルエネ0 → 逃げ用OK（悪エネはドラパルトラインに付けられないため）
-        elif active_name in _drapa_support_names or active_name == "マシマシラ":
+        elif active_name in DRAPA_SUPPORT_NAMES:
             candidates.clear()  # サポートがバトル場→候補から除外
 
     for bi, b in enumerate(p.bench):
@@ -512,13 +512,13 @@ def _build_energy_attach_input(
             bench_name = (getattr(b.card, "name", "") or "").strip()
             if bench_name == "ヨマワル" and new_type == "darkness" and b.attached_energy == 0:
                 pass  # 悪エネ+ヨマワルエネ0 → 逃げ用に付けてOK（悪エネはドラパルトラインに付けられないため）
-            elif bench_name in _drapa_support_names or bench_name == "マシマシラ":
+            elif bench_name in DRAPA_SUPPORT_NAMES:
                 continue
         # ドラパルトexデッキ: 悪エネはファントムダイブに不要（炎+超の2エネのみ必要）
         # 同じタイプのエネを2個付けない（火1+超1が必須）
         if _is_drapa_deck:
             bench_name_ene = (getattr(b.card, "name", "") or "").strip()
-            if bench_name_ene in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
+            if bench_name_ene in DRAPA_LINE_NAMES:
                 if new_type == "darkness":
                     continue  # 悪エネはドラパルトラインに付けない
                 if new_type in ("fire", "psychic"):
@@ -574,8 +574,7 @@ def _try_attach_energy_auto(state: GameState) -> bool:
 
     # ドラパルトexデッキ: ファントムダイブ完成即時パス（最優先、他の全パスより先）
     # 手札にfire/psychicがあり、ドラパルトexに不足タイプを付ければファントムダイブが撃てる
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_early
-    if _is_drapa_early(state, state.current_player) and not state.energy_attached_this_turn:
+    if is_dragapult_deck_for_player(state, state.current_player) and not state.energy_attached_this_turn:
         _all_bp_pd = ([p.active] if p.active else []) + list(p.bench or [])
         for _bp_pd in _all_bp_pd:
             if (getattr(_bp_pd.card, "name", "") or "").strip() != "ドラパルトex":
@@ -607,11 +606,11 @@ def _try_attach_energy_auto(state: GameState) -> bool:
                         return True
 
     # ドラパルトexデッキ: 悪エネをドラパルトexラインに付ける早期パスをスキップ
-    _drapa_line_early = frozenset({"ドラパルトex", "ドロンチ", "ドラメシヤ"})
+    _drapa_line_early = DRAPA_LINE_NAMES
 
     def _drapa_darkness_block(target_bp) -> bool:
         """ドラパルトexデッキで悪エネをドラパルトexラインに付けようとしているかチェック"""
-        if not _is_drapa_early(state, state.current_player):
+        if not is_dragapult_deck_for_player(state, state.current_player):
             return False
         eidx = _pick_energy_hand_idx(p, state)
         if eidx is None:
@@ -671,9 +670,9 @@ def _try_attach_energy_auto(state: GameState) -> bool:
     # ドラパルトexデッキ: サポートポケモンにエネを付けてにげるのは非効率。
     # ベンチのドラパルトexに直接エネを付けた方がファントムダイブへの投資になる。
     # ただしKO可能な場合（ケース1）のみ許可。
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_retreat
+    # ドラパルトexデッキ: サポートポケモンにエネを付けてにげるのは非効率
     _skip_retreat_attach = False
-    if _is_drapa_retreat(state, state.current_player):
+    if is_dragapult_deck_for_player(state, state.current_player):
         active_name = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
         if active_name in ("キチキギスex", "ニャースex", "スボミー"):
             # exサポート/スボミーにエネを付けて逃げるのは無駄（エネはドラパルトexに回す）
@@ -697,7 +696,7 @@ def _try_attach_energy_auto(state: GameState) -> bool:
                     if _etype_chk in ("fire", "psychic"):
                         # ドラパルトラインにエネが必要か
                         _drapa_line_need = any(
-                            (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")
+                            (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
                             and (getattr(bp, "attached_energy", 0) or 0) < 2
                             for bp in (([p.active] if p.active else []) + list(p.bench or []))
                         )
@@ -746,8 +745,7 @@ def _try_attach_energy_auto(state: GameState) -> bool:
         return False
     energy_hand_idx, energy_card, candidates = result
 
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ene_prio
-    if _is_drapa_ene_prio(state, state.current_player) and len(candidates) >= 2:
+    if is_dragapult_deck_for_player(state, state.current_player) and len(candidates) >= 2:
         _active_name_ep = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
         if _active_name_ep == "ドラメシヤ":
             # ベンチにドロンチ/ドラパルトexがいれば、バトル場のドラメシヤ候補を除外

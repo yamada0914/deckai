@@ -11,6 +11,11 @@ from .attack import (
     get_legal_attack_indices,
     get_legal_attack_indices_for_attacker,
 )
+from .deck_strategies import (
+    is_dragapult_deck_for_player,
+    DRAPA_LINE_NAMES,
+    DRAPA_SUPPORT_NAMES,
+)
 from .evaluate import evaluate_board
 from .damage import (
     _attack_damage_for_eval,
@@ -202,8 +207,7 @@ def retreat(state: GameState, bench_index: int) -> bool:
         return False
     # ドラパルトデッキ: ドロンチをバトル場に出さない（次ターンで即KOされるリスク）
     # ドラパルトexのみバトル場に出す
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ret
-    if _is_drapa_ret(state, state.current_player):
+    if is_dragapult_deck_for_player(state, state.current_player):
         target_name = (getattr(p.bench[bench_index].card, "name", "") or "").strip()
         if target_name == "ドロンチ":
             return False  # ドロンチは前に出さない
@@ -576,8 +580,7 @@ def _try_retreat_when_koed(state: GameState) -> bool:
     would_be_koed = p.active and opp_max_effective > 0 and p.active.hp <= opp_max_effective
     can_ko_opponent = opp.active and our_max_effective >= opp.active.hp
     # ドラパルトexデッキ: スボミーがバトル場でKO確定 → ベンチにFD準備完了のドラパルトexがいなければ壁として残す
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_subomii_wall
-    if _is_drapa_subomii_wall(state, state.current_player):
+    if is_dragapult_deck_for_player(state, state.current_player):
         _active_name_koed = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
         if _active_name_koed == "スボミー":
             # ベンチにFD準備完了(エネ2+)のドラパルトexがいるなら逃げて攻撃に回す
@@ -611,9 +614,7 @@ def _try_retreat_when_koed(state: GameState) -> bool:
     )
 
     opp_remaining_prizes = len(opp.prize_pile) if hasattr(opp, "prize_pile") else PRIZE_COUNT
-
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_koed
-    _is_drapa_koed_deck = _is_drapa_koed(state, state.current_player)
+    _is_drapa_koed_deck = is_dragapult_deck_for_player(state, state.current_player)
     if solrock_plan_ok:
         # 条件を満たしているなら、逃げ先はソルロック固定（優先順位の遵守）
         best_idx = solrock_bi
@@ -703,8 +704,7 @@ def _try_retreat_voluntary(state: GameState) -> bool:
     # ベンチに攻撃可能なポケモンがいるか（KOできなくても攻撃できれば交代する価値あり）
     best_idx = None
     best_score = -1
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_vol
-    _is_drapa_vol_deck = _is_drapa_vol(state, state.current_player)
+    _is_drapa_vol_deck = is_dragapult_deck_for_player(state, state.current_player)
     for i, bp in enumerate(p.bench):
         if not get_legal_attack_indices_for_attacker(state, p, opp, bp):
             continue
@@ -1258,8 +1258,7 @@ def _try_attach_energy_with_attack_lookahead(state: GameState) -> bool:
 
     # ドラパルトexデッキ: ファントムダイブ完成即時パス（最優先）
     # ※スボミーへのエネ付与禁止はattach_energy関数内で統一ガード済み
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_la
-    if _is_drapa_la(state, state.current_player) and not state.energy_attached_this_turn:
+    if is_dragapult_deck_for_player(state, state.current_player) and not state.energy_attached_this_turn:
         p_la = state.active_player_state()
         _all_bp_la = ([p_la.active] if p_la.active else []) + list(p_la.bench or [])
         for _bp_la in _all_bp_la:
@@ -1415,8 +1414,7 @@ def run_turn_auto(state: GameState) -> bool:
         nonlocal p, acted
         # ドラパルトデッキ: ベンチ3体以上でポフィンが手札にあれば先に空打ちして使い切る
         # ポフィンを先に使わないとベンチが埋まって使えなくなり、デッキ圧縮もできない
-        from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_pf
-        if _is_drapa_pf(state, state.current_player) and len(p.bench) >= 3:
+        if is_dragapult_deck_for_player(state, state.current_player) and len(p.bench) >= 3:
             while len(p.bench) < 5:
                 _pf_idx = None
                 for _pi, _pc in enumerate(p.hand):
@@ -1703,9 +1701,8 @@ def run_turn_auto(state: GameState) -> bool:
         # リーリエが手札にあっても、ドラパルトex進化が控えているならていさつしれいを先に使う
         if can_evolve:
             # ドラパルトex進化が可能か（手札にドラパルトex + 場にドロンチ）
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_pre_evo
             _drapa_evo_pending = False
-            if _is_drapa_pre_evo(state, state.current_player):
+            if is_dragapult_deck_for_player(state, state.current_player):
                 _has_drapa_hand = any(
                     is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "ドラパルトex"
                     for c in p.hand
@@ -1795,8 +1792,7 @@ def run_turn_auto(state: GameState) -> bool:
             )
 
             # ドラパルトexデッキ: なかよしポフィンを最優先（ドラメシヤ・ヨマワルを展開）
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ball
-            _is_drapa_deck = _is_drapa_ball(state, state.current_player)
+            _is_drapa_deck = is_dragapult_deck_for_player(state, state.current_player)
             # ドラパルトデッキ: 1ターン目はHBを使わない（ポフィン/ポケパッドで展開、HBは次ターンにニャースex等に温存）
             # ニャースexが山札にある場合: サポートが手札にない時はHBを温存
             # （次ターンHB→ニャースex→おくのてキャッチ→サポートサーチの連携に使う）
@@ -1843,7 +1839,7 @@ def run_turn_auto(state: GameState) -> bool:
                     # ただしドラパルトexラインが場に十分ならスキップ
                     _drapa_line_on_field = sum(
                         1 for bp in ([p.active] if p.active else []) + list(p.bench or [])
-                        if (getattr(bp.card, "name", "") or "").strip() in ("ドラメシヤ", "ドロンチ", "ドラパルトex")
+                        if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
                     )
                     if _drapa_line_on_field >= 2:
                         _skip_hb = True  # ライン十分 → スキップ
@@ -2097,8 +2093,7 @@ def run_turn_auto(state: GameState) -> bool:
         if not _is_first_player_first_turn(state) and not state.support_used_this_turn:
             # ドラパルトexデッキ: アンフェアスタンプの前にHB→ニャースex→おくのてキャッチ→アカマツで
             # エネルギーを確保してからアンスタを使う（運任せにしない）
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ansta
-            if _is_drapa_ansta(state, state.current_player):
+            if is_dragapult_deck_for_player(state, state.current_player):
                 _has_ansta = any(
                     (getattr(c, "id", "") or "") == "anfeasutanpu" for c in p.hand
                 )
@@ -2195,8 +2190,7 @@ def run_turn_auto(state: GameState) -> bool:
         # ドラパルトデッキ: HBを残りグッズでも使わない
         # 1. ドローサポート未使用 → リーリエ等で引いてから判断すべき
         # 2. サポート使用済み → ニャースex取っても今ターン活用できない
-        from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_goods
-        if _is_drapa_goods(state, state.current_player):
+        if is_dragapult_deck_for_player(state, state.current_player):
             _skip_hb_goods = False
             if not state.support_used_this_turn:
                 _has_draw_support_goods = any(
@@ -2365,8 +2359,7 @@ def run_turn_auto(state: GameState) -> bool:
 
     # ドラパルトデッキ: 攻撃前にバトル場がexサポートポケモンなら逃げる
     # exがバトル場に残るとサイド2枚献上リスク
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_ex_retreat
-    if _is_drapa_ex_retreat(state, state.current_player) and p.active and p.bench:
+    if is_dragapult_deck_for_player(state, state.current_player) and p.active and p.bench:
         _ex_active_name = (getattr(p.active.card, "name", "") or "").strip()
         _is_ex_support = _ex_active_name in ("キチキギスex", "ニャースex")
         if _is_ex_support and not getattr(state, "retreat_used_this_turn", False):

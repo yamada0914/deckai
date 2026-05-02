@@ -84,3 +84,34 @@ def is_dragapult_deck_for_player(state, player_index: int) -> bool:
         return False
     idx = state.deck_indices[player_index] if player_index < len(state.deck_indices) else 0
     return is_dragapult_deck(idx)
+
+
+# ─── ドラパルトexデッキ共通定数 ───
+# 各ファイルで重複定義されていたfrozensetを集約
+
+# ドラパルトexの進化ライン（エネ付与・進化の優先対象）
+DRAPA_LINE_NAMES: frozenset[str] = frozenset({"ドラパルトex", "ドロンチ", "ドラメシヤ"})
+
+# サポートポケモン（エネ付与を避ける対象）
+DRAPA_SUPPORT_NAMES: frozenset[str] = frozenset({
+    "スボミー", "キチキギスex", "ニャースex",
+    "ヨマワル", "サマヨール", "ヨノワール", "マシマシラ",
+})
+
+# エネルギー付与を完全禁止するポケモン
+DRAPA_ENERGY_BANNED_NAMES: frozenset[str] = frozenset({"スボミー"})
+
+
+def is_drapa_line(card_name: str) -> bool:
+    """ドラパルトexの進化ライン（ドラメシヤ/ドロンチ/ドラパルトex）か。"""
+    return card_name in DRAPA_LINE_NAMES
+
+
+def is_drapa_support(card_name: str) -> bool:
+    """ドラパルトデッキのサポートポケモンか（エネ付与を避ける対象）。"""
+    return card_name in DRAPA_SUPPORT_NAMES
+
+
+def is_drapa_energy_banned(card_name: str) -> bool:
+    """エネルギー付与を完全禁止するポケモンか。"""
+    return card_name in DRAPA_ENERGY_BANNED_NAMES
