@@ -23,6 +23,7 @@ import random
 from typing import Any
 
 from .attack import get_legal_attack_indices
+from .deck_strategies import is_dragapult_deck_for_player, DRAPA_LINE_NAMES, DRAPA_SUPPORT_NAMES
 from .damage import (
     _max_effective_damage_for_attacker,
     _opponent_max_effective_damage,
@@ -237,7 +238,6 @@ def heuristic_logits_retreat_before_attack(state: GameState) -> list[float]:
 
     # ドラパルトexデッキ: エネルギーを貯めたドラパルトexのにげるは大きなペナルティ
     # ファントムダイブ用のfire/psychicエネルギーを失うのは致命的
-    from .deck_strategies import is_dragapult_deck_for_player
     if is_dragapult_deck_for_player(state, state.current_player):
         p = state.active_player_state()
         if p.active:

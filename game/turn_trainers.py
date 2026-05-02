@@ -2,6 +2,7 @@
 from card import is_goods, is_support
 
 from .damage import _max_effective_damage_for_attacker
+from .deck_strategies import is_dragapult_deck_for_player, DRAPA_LINE_NAMES, DRAPA_SUPPORT_NAMES
 from .state import BattlePokemon, GameState, PlayerState, _is_first_player_first_turn, _log_choice
 from .trainers import attach_tool, use_potion, use_support, use_trainer_goods
 from .weights import get_goods_use_weight, get_support_use_weight, get_tool_attach_weight
@@ -225,9 +226,8 @@ def _support_try_order(p: PlayerState, state: GameState) -> list[int]:
 
     # ドラパルトexデッキ: アカマツは「このターンにファントムダイブが撃てる」場合のみ高優先
     # ファントムダイブに届かないならアカマツの優先度は低い（エネを付けても次ターンに倒されるリスク）
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_supp
     _drapa_akamatsu_enables_phantom = False
-    if _is_drapa_supp(state, state.current_player):
+    if is_dragapult_deck_for_player(state, state.current_player):
         _all_bp = ([p.active] if p.active else []) + list(p.bench or [])
         # ドラパルトexが場にいればアカマツ使用OK（エネを貯め始める）
         _drapa_akamatsu_enables_phantom = any(
@@ -296,7 +296,6 @@ def _try_support_no_discard_only(state: GameState) -> bool:
         return False
 
     # ドラパルトexデッキ: アカマツはファントムダイブに届く時のみ高優先
-    from .deck_strategies import is_dragapult_deck_for_player
     _is_drapa_nds = is_dragapult_deck_for_player(state, state.current_player)
     _nds_phantom_reachable = False
     if _is_drapa_nds:
@@ -380,9 +379,8 @@ def _try_goods_before_hand_refresh(state: GameState) -> bool:
 
     # ドラパルトデッキ: ドローサポートが手札にあるならHBを使わない
     # （リーリエの決心で引いてから判断すべき。HBで貴重なカードを捨てるリスクを避ける）
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_gbhr
     _drapa_skip_hb_gbhr = False
-    if _is_drapa_gbhr(state, state.current_player):
+    if is_dragapult_deck_for_player(state, state.current_player):
         _has_draw_supp_gbhr = any(
             is_support(c) and (getattr(c, "id", "") or "") in (
                 "riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari",

@@ -32,6 +32,7 @@ import math
 import random
 from typing import Any
 
+from .deck_strategies import is_dragapult_deck_for_player, DRAPA_LINE_NAMES, DRAPA_SUPPORT_NAMES
 from .state import BENCH_SIZE, GameState, _log_choice, _is_first_player_first_turn, rules_only_for_player
 from .weights import get_energy_attach_weight
 
@@ -260,7 +261,6 @@ def heuristic_logits_energy_attach(
             w += 1200.0
 
         # ---- ドラパルトexデッキ固有ロジック ----
-        from .deck_strategies import is_dragapult_deck_for_player
         if is_dragapult_deck_for_player(state, state.current_player):
             card_name = (getattr(card, "name", "") or "").strip()
 
@@ -351,7 +351,7 @@ def heuristic_logits_energy_attach(
                     and new_type == "darkness"  # 悪エネ（ドラパルトexに不要なので無駄にならない）
                     and bp_en == 0  # まだエネが付いていない
                     and any(
-                        (getattr(bp2.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")
+                        (getattr(bp2.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
                         for bp2 in (p.bench or [])
                     )
                 ):

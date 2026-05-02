@@ -22,6 +22,7 @@ import random
 from typing import Any
 
 from card import is_energy, is_support
+from .deck_strategies import is_dragapult_deck_for_player, DRAPA_LINE_NAMES, DRAPA_SUPPORT_NAMES
 
 from .encoders import encode_state_basic
 from .state import BENCH_SIZE, GameState, PlayerState, _log_choice, rules_only_for_player
@@ -329,8 +330,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
 
         # ---- アカマツ（山札から2タイプのエネルギー取得） ----
         elif sid == "akamatsu":
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_sp
-            if _is_drapa_sp(state, state.current_player):
+            if is_dragapult_deck_for_player(state, state.current_player):
                 # ドラパルトexデッキ: アカマツは炎+超の確保→ファントムダイブ発動に直結
                 # 場にドラパルトex/ドロンチ/ドラメシヤがいて、エネルギーが足りないなら超高スコア
                 _has_drapa_target = False
@@ -338,7 +338,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 all_bp = ([p.active] if p.active else []) + list(p.bench or [])
                 for bp in all_bp:
                     bpn = (getattr(bp.card, "name", "") or "").strip()
-                    if bpn in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
+                    if bpn in DRAPA_LINE_NAMES:
                         _has_drapa_target = True
                         if bpn == "ドラパルトex" and (getattr(bp, "attached_energy", 0) or 0) < 3:
                             _drapa_needs_energy = True
@@ -355,8 +355,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
 
         # ---- メイのはげまし（トラッシュからStage2にエネ2枚） ----
         elif sid == "meinohagemashi":
-            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_sp2
-            if _is_drapa_sp2(state, state.current_player):
+            if is_dragapult_deck_for_player(state, state.current_player):
                 # 条件チェック: サイドが相手より多い（遅れている）
                 _behind_on_prizes = len(p.prize_pile) > len(opp.prize_pile)
                 # Stage2がいるか

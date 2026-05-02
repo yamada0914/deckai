@@ -11,7 +11,13 @@ from typing import Callable, Literal
 
 from card import PokemonCard, get_card_by_id, is_basic_pokemon, is_energy, is_goods, is_pokemon, is_stadium, is_stage2_pokemon, is_support
 from deck import STARTING_HAND_SIZE, create_deck, create_deck_from_deck_code, get_deck_name
-from .deck_strategies import get_allow_duplicate_bench_ids, get_priority_setup_pokemon_ids
+from .deck_strategies import (
+    get_allow_duplicate_bench_ids,
+    get_priority_setup_pokemon_ids,
+    is_dragapult_deck_for_player,
+    DRAPA_LINE_NAMES,
+    DRAPA_SUPPORT_NAMES,
+)
 from .weights import GameWeights, get_promote_weight
 
 BENCH_SIZE = 5
@@ -1044,8 +1050,7 @@ def _put_one_pokemon_on_bench(
         return False
     # ドラパルトデッキ: 手札が少ない+ニャースexが山札にある → ベンチ1枠温存
     # ニャースex(おくのてキャッチ→サポートサーチ)でドロー手段を確保するため
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_bench
-    if _is_drapa_bench(state, player_index) and len(player.bench) >= BENCH_SIZE - 1:
+    if is_dragapult_deck_for_player(state, player_index) and len(player.bench) >= BENCH_SIZE - 1:
         _hand_size = len(player.hand)
         _has_support = any(is_support(c) for c in player.hand)
         _nyarth_in_deck = any(
@@ -1068,17 +1073,16 @@ def _put_one_pokemon_on_bench(
     # ドラパルトデッキ: サポート使用済みターンではニャースexを出さない
     # （おくのてキャッチで取ったサポートは今ターン使えない。ベンチ枠はドラパルトexラインに回す）
     # ただしサポート未使用なら出す（おくのてキャッチ→サポートサーチ→即使用の連携が可能）
-    from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_nyarth
     # 相手にどすこいキャッチャー持ち（ハリテヤマ/マクノシタ）がいるか
     _opp_has_dosukoi = False
-    if _is_drapa_nyarth(state, player_index):
+    if is_dragapult_deck_for_player(state, player_index):
         opp_state = state.players[1 - player_index]
         _opp_has_dosukoi = any(
             (getattr(getattr(bp, "card", None), "name", "") or "").strip() == "マクノシタ"
             for bp in ([opp_state.active] if opp_state.active else []) + list(opp_state.bench or [])
         )
     _drapa_skip_nyarth = False
-    if _is_drapa_nyarth(state, player_index):
+    if is_dragapult_deck_for_player(state, player_index):
         if state.support_used_this_turn:
             _drapa_skip_nyarth = True
         else:
@@ -1123,7 +1127,7 @@ def _put_one_pokemon_on_bench(
             # ドラパルトデッキ: キチキギスexは必要になるまで出さない
             # さかてにとるは前ターンに自分のポケモンがきぜつしていないと使えない
             # 序盤に出してもボスの指令で呼ばれてサイド2枚献上するだけ
-            if _is_drapa_bench(state, player_index) and c_name == "キチキギスex":
+            if is_dragapult_deck_for_player(state, player_index) and c_name == "キチキギスex":
                 _any_ko = getattr(state, "any_ko_by_opponent_last_turn", [False, False])
                 _our_ko = getattr(state, "our_ko_by_damage_last_turn", [False, False])
                 _ko_happened = (_any_ko[player_index] if len(_any_ko) > player_index else False) or \
@@ -1131,7 +1135,7 @@ def _put_one_pokemon_on_bench(
                 if not _ko_happened:
                     continue  # きぜつしていない → さかてにとる使えない → 出す意味なし
             # ドラパルトデッキ: マシマシラはベンチに出さない（ただし種切れ防止で他にたねがなければ出す）
-            if _is_drapa_bench(state, player_index) and c_name == "マシマシラ":
+            if is_dragapult_deck_for_player(state, player_index) and c_name == "マシマシラ":
                 _has_other_basic_in_hand = any(
                     is_pokemon(hc) and not getattr(hc, "evolves_from", None)
                     and (getattr(hc, "name", "") or "") != "マシマシラ"
@@ -1143,8 +1147,8 @@ def _put_one_pokemon_on_bench(
                     continue  # 他にたねがあるか場に2体以上いるなら出さない
             # ドラパルトデッキ: ドラメシヤは場に3体以上なら追加しない（ベンチ枠を温存）
             # スボミーやニャースex用の枠を残す。やられる分も考慮して3体が目安。
-            if _is_drapa_bench(state, player_index) and c_name == "ドラメシヤ":
-                _drapa_line_names_bench = {"ドラメシヤ", "ドロンチ", "ドラパルトex"}
+            if is_dragapult_deck_for_player(state, player_index) and c_name == "ドラメシヤ":
+                _drapa_line_names_bench = DRAPA_LINE_NAMES
                 _drapa_line_count = sum(
                     1 for bp in player.bench
                     if getattr(bp.card, "name", "") in _drapa_line_names_bench
@@ -1152,7 +1156,7 @@ def _put_one_pokemon_on_bench(
                 if _drapa_line_count >= 4:
                     continue
             # ドラパルトデッキ: ヨマワルラインは場に合計1体まで
-            if _is_drapa_bench(state, player_index) and c_name == "ヨマワル":
+            if is_dragapult_deck_for_player(state, player_index) and c_name == "ヨマワル":
                 _yoma_line_names = {"ヨマワル", "サマヨール", "ヨノワール"}
                 _yoma_count = sum(
                     1 for bp in player.bench
@@ -1308,7 +1312,6 @@ def _promote_from_bench(player: PlayerState, state: GameState, player_index: int
             base += 5000
 
         # ドラパルトex デッキ: メインアタッカーとしてボーナス
-        from .deck_strategies import is_dragapult_deck_for_player
         if is_dragapult_deck_for_player(state, player_index):
             _bp_energy = getattr(bp, "attached_energy", 0) or 0
             if bp_name == "ドラパルトex":
@@ -1327,7 +1330,7 @@ def _promote_from_bench(player: PlayerState, state: GameState, player_index: int
                 base -= 12000  # ex 2枚サイド献上を強く回避
             # エネ付きサポートポケモンは前に出さない（やられてエネ失う）
             # ドラメシヤ/ドロンチ（進化先にエネ引き継ぎ）やアタッカーは除外
-            _drapa_support_names = {"マシマシラ", "ヨマワル", "サマヨール"}
+            _drapa_support_names = DRAPA_SUPPORT_NAMES
             if bp_name in _drapa_support_names and _bp_energy > 0:
                 base -= 4000  # サポート役のエネ付きは温存
 
