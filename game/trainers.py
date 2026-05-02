@@ -894,6 +894,21 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
     """ハイパーボールのカード効果を実行する。use_trainer_goodsから呼び出される。"""
     p = state.active_player_state()
     card = p.hand[hand_index]
+    # ドラパルトデッキ: ドローサポートが手札にあり未使用 → HBをスキップ（リーリエで引いてから判断）
+    # ニャースexが山札にある場合のみ例外（HB→ニャースex→おくのてキャッチ連携）
+    if is_dragapult_deck_for_player(state, state.current_player) and not state.support_used_this_turn:
+        _has_draw_supp_hb = any(
+            is_support(c) and (getattr(c, "id", "") or "") in (
+                RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU, HIKARI,
+            )
+            for c in p.hand
+        )
+        _nyarth_in_deck_hb = any(
+            "ニャースex" in (getattr(dc, "name", "") or "")
+            for dc in p.deck
+        )
+        if _has_draw_supp_hb and not _nyarth_in_deck_hb:
+            return False
     weights = state.get_weights_for_player(state.current_player)
     # 手札が少ないのにハイパーボールを打つと（実質 -2 枚前後になりやすく）ゲームのリソースが枯れやすい。
     # その場合、学習/重みが無いと「サポートを捨てる」確率が上がるため、サポートを強めに減点する。
@@ -912,6 +927,24 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
     non_support_count = len(hand_without_haipaboru) - support_count
     if support_count == 1 and non_support_count == 1:
         return False
+    # ドラパルトデッキ: HBで2枚捨てた結果リーリエの決心を捨てざるを得ない場合はHBを使わない
+    # （リーリエがないと立て直せない。手札が少ない時は特に重要）
+    if is_dragapult_deck_for_player(state, state.current_player):
+        _has_ririe_hb = any(
+            is_support(hc) and (getattr(hc, "id", "") or "") == RIRIE_NO_KESSHIN
+            for _, hc in hand_without_haipaboru
+        )
+        if _has_ririe_hb:
+            # リーリエ以外で捨てられるカードが2枚以上あるか
+            # （保護カード: リーリエ、アンフェアスタンプ、アカマツ）
+            _protected_ids = {RIRIE_NO_KESSHIN, UNFAIR_STAMP, AKAMATSU}
+            _discardable = sum(
+                1 for _, hc in hand_without_haipaboru
+                if not (is_support(hc) and (getattr(hc, "id", "") or "") in _protected_ids)
+                and not (is_goods(hc) and (getattr(hc, "id", "") or "") == UNFAIR_STAMP)
+            )
+            if _discardable < 2:
+                return False  # リーリエを捨てざるを得ない → HBを使わない
     # 持ってくるカードが手札に既にあるもの(同名)しかない場合、使う意味がない
     found = _find_pokemon_for_haipaboru(p, state)
     if found is None:
