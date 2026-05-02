@@ -56,6 +56,27 @@ from .state import (
 )
 
 
+def _player_has_pokemon_by_name_or_id(p: PlayerState, name: str, ids: set[str]) -> bool:
+    """手札・バトル場・ベンチに指定名/IDのポケモンがいるか。
+    ファイトゴング・ポケパッドのエンジン判定で共通使用。"""
+    for x in (p.hand or []):
+        if not is_pokemon(x):
+            continue
+        if (getattr(x, "name", "") or "") == name or (getattr(x, "id", "") or "") in ids:
+            return True
+    if getattr(p, "active", None) and getattr(p.active, "card", None):
+        a = p.active.card
+        if (getattr(a, "name", "") or "") == name or (getattr(a, "id", "") or "") in ids:
+            return True
+    for bp in (p.bench or []):
+        c = getattr(bp, "card", None)
+        if not c:
+            continue
+        if (getattr(c, "name", "") or "") == name or (getattr(c, "id", "") or "") in ids:
+            return True
+    return False
+
+
 def would_haipaboru_fetch_evolution(p: PlayerState) -> bool:
     """ハイパーボールを使ったときに山札から取ってくる 1 枚が進化ポケモンかどうか。"""
     found = _find_pokemon_for_haipaboru(p)
@@ -1213,25 +1234,8 @@ def use_trainer_goods(
 
             # 盤面に意味があるときだけセットロジック ON（手札 or 場にエンジンペアの片割れがいる）
             if _has_engine_pair_member_in_hand_or_field(p):
-                def _has_by_name_or_id(name: str, ids: set[str]) -> bool:
-                    for x in (p.hand or []):
-                        if not is_pokemon(x):
-                            continue
-                        if (getattr(x, "name", "") or "") == name or (getattr(x, "id", "") or "") in ids:
-                            return True
-                    if getattr(p, "active", None) and getattr(p.active, "card", None):
-                        a = p.active.card
-                        if (getattr(a, "name", "") or "") == name or (getattr(a, "id", "") or "") in ids:
-                            return True
-                    for bp in (p.bench or []):
-                        c = getattr(bp, "card", None)
-                        if not c:
-                            continue
-                        if (getattr(c, "name", "") or "") == name or (getattr(c, "id", "") or "") in ids:
-                            return True
-                    return False
-                _fg_has_lunatone = _has_by_name_or_id("ルナトーン", {"runaton"})
-                _fg_has_solrock = _has_by_name_or_id("ソルロック", {"sorurokku-mc-372"})
+                _fg_has_lunatone = _player_has_pokemon_by_name_or_id(p, "ルナトーン", {"runaton"})
+                _fg_has_solrock = _player_has_pokemon_by_name_or_id(p, "ソルロック", {"sorurokku-mc-372"})
             else:
                 _fg_has_lunatone = False
                 _fg_has_solrock = False
@@ -1380,25 +1384,8 @@ def use_trainer_goods(
 
             # 盤面に意味があるときだけセットロジック ON（手札 or 場にエンジンペアの片割れがいる）
             if _has_engine_pair_member_in_hand_or_field(p):
-                def _has_by_name_or_id(name: str, ids: set[str]) -> bool:
-                    for x in (p.hand or []):
-                        if not is_pokemon(x):
-                            continue
-                        if (getattr(x, "name", "") or "") == name or (getattr(x, "id", "") or "") in ids:
-                            return True
-                    if getattr(p, "active", None) and getattr(p.active, "card", None):
-                        a = p.active.card
-                        if (getattr(a, "name", "") or "") == name or (getattr(a, "id", "") or "") in ids:
-                            return True
-                    for bp in (p.bench or []):
-                        c = getattr(bp, "card", None)
-                        if not c:
-                            continue
-                        if (getattr(c, "name", "") or "") == name or (getattr(c, "id", "") or "") in ids:
-                            return True
-                    return False
-                _pp_has_lunatone = _has_by_name_or_id("ルナトーン", {"runaton"})
-                _pp_has_solrock = _has_by_name_or_id("ソルロック", {"sorurokku-mc-372"})
+                _pp_has_lunatone = _player_has_pokemon_by_name_or_id(p, "ルナトーン", {"runaton"})
+                _pp_has_solrock = _player_has_pokemon_by_name_or_id(p, "ソルロック", {"sorurokku-mc-372"})
             else:
                 _pp_has_lunatone = False
                 _pp_has_solrock = False
