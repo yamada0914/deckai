@@ -2606,13 +2606,11 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
         if is_support(c):
             cid_v = (getattr(c, "id", "") or "").strip()
             if cid_v == AKAMATSU:
+                # アカマツは常にエネルギーより価値が高い（1枚手張りvs2枚確保）
+                # リーリエを使う予定でも、アカマツはリーリエで引き直せる保証がないため温存
                 if _akamatsu_over_ririe:
-                    # アカマツを使う方が優先 → 取る
-                    return 1800
-                if _has_hand_refresh:
-                    # リーリエを使う予定でアカマツ不要 → 山札に戻されるので低価値
-                    return 200
-                return 1100
+                    return 1800  # ドラパルトex場+エネ不足 → 最優先
+                return 1100  # それ以外でもエネルギー(500)より高い
             # 手札刷新サポートを使う予定なら他のサポートも価値低
             if _has_hand_refresh:
                 return 200
