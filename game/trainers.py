@@ -2633,6 +2633,376 @@ def _jamming_tower_active(state: GameState) -> bool:
     return sid == "jixyamingutawa" or "ジャミングタワー" in sname
 
 
+
+
+def _use_support_akamatsu(state, hand_index: int) -> bool:
+    """アカマツのサポート効果を実行する。"""
+    p = state.active_player_state()
+    # ドラパルトexデッキ: 炎＋超を優先的に取る
+    _is_drapa = is_dragapult_deck_for_player(state, state.current_player)
+    # ドラパルトデッキ: このターンにファントムダイブに届く場合のみ使う
+    # （届かないなら付けたエネが次ターンにKOされて無駄になるリスク）
+    if _is_drapa:
+        _drapa_line_on_field = any(
+            (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
+            for bp in ([p.active] if p.active else []) + list(p.bench or [])
+        )
+        if not _drapa_line_on_field:
+            return False
+        # ドラパルトexが場にいればアカマツ使用OK（エネを貯め始める）
+        # ドラメシヤ/ドロンチのみ（ドラパルトex未進化）の場合は
+        # 付けたエネがKOで無駄になるリスクがあるためスキップ
+        _has_drapa_ex = any(
+            (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
+            for bp in ([p.active] if p.active else []) + list(p.bench or [])
+        )
+        if not _has_drapa_ex:
+            return False
+    _preferred_types = ["fire", "psychic"] if _is_drapa else []
+
+    # ドラパルトexデッキ: ターゲットに既に付いているタイプは後回し（不足タイプを最優先）
+    if _is_drapa and _preferred_types:
+        _drapa_attach_targets = [bp for bp in ([p.active] if p.active else []) + list(p.bench)
+                                 if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES]
+        if _drapa_attach_targets:
+            # HP低いバトル場ポケモンは避ける（KOされてエネ無駄になるリスク）
+            opp_bt = state.defending_player_state()
+            def _bt_score(bp):
+                _is_ex = 1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0
+                _en = getattr(bp, "attached_energy", 0) or 0
+                _pen = 0
+                if bp is p.active and opp_bt and opp_bt.active:
+                    from .damage import _max_effective_damage_for_attacker
+                    if _max_effective_damage_for_attacker(state, opp_bt.active, bp, 1 - state.current_player) >= (bp.hp or 0):
+                        _pen = -10
+                return (_pen, _is_ex, _en)
+            _best_target = max(_drapa_attach_targets, key=_bt_score)
+            _on_types = list(getattr(_best_target, "attached_energy_types", []) or [])
+            # 不足タイプを先にする（例: 超が付いていれば炎を最優先）
+            _needed = [t for t in _preferred_types if t not in _on_types]
+            _have = [t for t in _preferred_types if t in _on_types]
+            _preferred_types = _needed + _have
+
+    energy_by_type: dict[str, int] = {}
+    # まず優先タイプを探す
+    for ptype in _preferred_types:
+        if ptype in energy_by_type:
+            continue
+        for i, c in enumerate(p.deck):
+            if is_energy(c) and getattr(c, "energy_type", None) == ptype and i not in energy_by_type.values():
+                energy_by_type[ptype] = i
+                break
+    # 足りない分は任意のタイプ
+    for i, c in enumerate(p.deck):
+        if len(energy_by_type) >= 2:
+            break
+        if is_energy(c):
+            etype = getattr(c, "energy_type", None)
+            if etype and etype not in energy_by_type:
+                energy_by_type[etype] = i
+    if not energy_by_type:
+        return False
+    fetched = []
+    indices = sorted(energy_by_type.values(), reverse=True)
+    for idx in indices:
+        c = p.deck.pop(idx)
+        fetched.append(c)
+    random.shuffle(p.deck)
+    mark_own_deck_shuffled(state)
+    mark_deck_searched(state)
+    if len(fetched) == 1:
+        # 1枚しか見つからなかった場合: 手札に加える
+        p.hand.append(fetched[0])
+        state.drawn_this_turn.append(fetched[0])
+        p.discard.append(p.hand.pop(hand_index))
+        state.support_used_this_turn = True
+        state.log(
+            f"{state.player_name(state.current_player)}: アカマツを使用 → 山札から基本エネルギー 1 枚を手札に加えた → [{_card_label(fetched[0])}]"
+        )
+    else:
+        # 2枚見つかった場合: 1枚を手札に、1枚をポケモンにつける
+        # 手札に加えるカードと付けるカードを決める
+        attach_card = None
+        hand_card = None
+        all_pokemon = ([p.active] if p.active else []) + list(p.bench)
+
+        # ドラパルトexデッキ: ドラパルトex/ドロンチ/ドラメシヤに必要なタイプを付ける
+        if _is_drapa:
+            # ドラパルトex系のポケモンを探す
+            _drapa_targets = [bp for bp in all_pokemon
+                              if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES]
+            if _drapa_targets:
+                # ターゲット選択: ドラパルトex優先、エネ多い方優先
+                # ただし次ターンKOされそう（HPが低い）バトル場のポケモンは避ける
+                opp_ak = state.defending_player_state()
+                def _drapa_target_score(bp):
+                    _is_ex = 1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0
+                    _en = getattr(bp, "attached_energy", 0) or 0
+                    _is_active = (bp is p.active)
+                    # バトル場でHPが低い → 次ターンKOされてエネが無駄になるリスク
+                    _hp_penalty = 0
+                    if _is_active and opp_ak and opp_ak.active:
+                        from .damage import _max_effective_damage_for_attacker
+                        _opp_dmg = _max_effective_damage_for_attacker(state, opp_ak.active, bp, 1 - state.current_player)
+                        if _opp_dmg >= (bp.hp or 0):
+                            _hp_penalty = -10  # 次ターンKO確定 → 大幅減点
+                    return (_hp_penalty, _is_ex, _en)
+                _best_drapa = max(_drapa_targets, key=_drapa_target_score)
+                _types_on = list(getattr(_best_drapa, "attached_energy_types", []) or [])
+                # 付いてないタイプのエネを優先的に付ける
+                for fc in fetched:
+                    et = getattr(fc, "energy_type", None)
+                    if et in ("fire", "psychic") and et not in _types_on:
+                        attach_card = fc
+                        break
+                if attach_card is None:
+                    # 両方付いている or 両方同じ → 炎/超のうちファントムダイブに有用な方を付ける
+                    # ただし既に同じタイプが付いている場合は付けない（無色枠はどのタイプでもOK）
+                    for fc in fetched:
+                        et = getattr(fc, "energy_type", None)
+                        if et in ("fire", "psychic") and et not in _types_on:
+                            attach_card = fc
+                            break
+                    # それでも見つからない場合: 無色枠用に任意のエネを付ける
+                    # ただし既に付いているタイプは避ける（重複は無意味）
+                    if attach_card is None and len(_types_on) < 3:
+                        for fc in fetched:
+                            et = getattr(fc, "energy_type", None)
+                            if et not in _types_on:
+                                attach_card = fc
+                                break
+            # ドラパルトex系がいない場合も、炎/超を手札に残す（後で手張りで付けるため）
+            # attach_card は None のままにして、両方手札に加える
+        else:
+            # 非ドラパルト: pokemon_type matching（既存ロジック）
+            for fc in fetched:
+                etype = getattr(fc, "energy_type", None)
+                for bp in all_pokemon:
+                    ptype = getattr(bp.card, "pokemon_type", None)
+                    if ptype and ptype == etype:
+                        attach_card = fc
+                        break
+                if attach_card:
+                    break
+        if attach_card is None:
+            # ドラパルトexデッキで場にドラパルトex系がいない → 両方手札に加える
+            if _is_drapa:
+                for fc in fetched:
+                    p.hand.append(fc)
+                    state.drawn_this_turn.append(fc)
+                p.discard.append(p.hand.pop(hand_index))
+                state.support_used_this_turn = True
+                state.log(
+                    f"{state.player_name(state.current_player)}: アカマツを使用 → "
+                    f"基本エネルギー 2 枚を手札に加えた → [{', '.join(_card_label(fc) for fc in fetched)}]"
+                )
+                return True
+            attach_card = fetched[1]
+        hand_card = fetched[0] if attach_card is fetched[1] else fetched[1]
+        # 手札に加える
+        p.hand.append(hand_card)
+        state.drawn_this_turn.append(hand_card)
+        # ポケモンにつける: タイプが合うポケモン or エネが少ないポケモン
+        attach_target = None
+        best_score = -1
+        for bp in all_pokemon:
+            score = 0
+            bp_name = (getattr(bp.card, "name", "") or "").strip()
+            ptype = getattr(bp.card, "pokemon_type", None)
+            etype = getattr(attach_card, "energy_type", None)
+            if ptype and ptype == etype:
+                score += 100
+            # エネルギーが少ないほど優先
+            score -= getattr(bp, "attached_energy", 0) * 10
+            # ドラパルトexデッキ: ドラパルトex/ドロンチ/ドラメシヤにエネ付け優先
+            if _is_drapa:
+                if bp_name == "ドラパルトex":
+                    score += 500
+                    # 必要な色がまだ付いてなければさらにボーナス
+                    types_on = list(getattr(bp, "attached_energy_types", []) or [])
+                    if etype == "fire" and "fire" not in types_on:
+                        score += 200
+                    elif etype == "psychic" and "psychic" not in types_on:
+                        score += 200
+                    # バトル場で次ターンKOされそう → エネが無駄になる、ベンチ優先
+                    if bp is p.active:
+                        _opp_ak2 = state.defending_player_state()
+                        if _opp_ak2 and _opp_ak2.active:
+                            from .damage import _max_effective_damage_for_attacker as _med_aka
+                            _opp_dmg2 = _med_aka(state, _opp_ak2.active, bp, 1 - state.current_player)
+                            if _opp_dmg2 >= (bp.hp or 0):
+                                score -= 2000  # 次ターンKO確定 → ベンチに回す
+                elif bp_name in ("ドロンチ", "ドラメシヤ"):
+                    score += 300
+                elif bp_name in ("スボミー", "キチキギスex", "ニャースex", "ヨマワル", "サマヨール", "ヨノワール", "マシマシラ"):
+                    score -= 500  # サポート/カースドボム用にエネは不要
+            if score > best_score:
+                best_score = score
+                attach_target = bp
+        if attach_target is None and all_pokemon:
+            attach_target = all_pokemon[0]
+        if attach_target:
+            attach_target.attached_energy += 1
+            et = getattr(attach_card, "energy_type", None) or "colorless"
+            if not hasattr(attach_target, "attached_energy_types"):
+                attach_target.attached_energy_types = []
+            attach_target.attached_energy_types.append(et)
+            attach_loc = "バトル場の" if attach_target is p.active else "ベンチの"
+            state.log(
+                f"{state.player_name(state.current_player)}: アカマツを使用 → {_card_label(hand_card)} を手札に加え、"
+                f"{_card_label(attach_card)} を{attach_loc}{attach_target.card.name} につけた"
+            )
+        else:
+            # ポケモンがいない場合は両方手札に（フォールバック）
+            p.hand.append(attach_card)
+            state.drawn_this_turn.append(attach_card)
+            state.log(
+                f"{state.player_name(state.current_player)}: アカマツを使用 → ポケモンがいないため基本エネルギー 2 枚を手札に加えた"
+            )
+        p.discard.append(p.hand.pop(hand_index))
+        state.support_used_this_turn = True
+    return True
+
+    # ブライア: 相手のサイドの残り枚数が2枚のときにしか使えない。
+    # テラスタルポケモンのKOでサイド1枚多く取る。
+
+
+
+def _use_support_mei(state, hand_index: int) -> bool:
+    """メイのはげましのサポート効果を実行する。"""
+    p = state.active_player_state()
+    opp = state.defending_player_state()
+    # 条件: 自分のサイドが相手より多い（=負けている）
+    if len(p.prize_pile) <= len(opp.prize_pile):
+        return False
+    # 2進化ポケモンを探す
+    all_pokemon = ([p.active] if p.active else []) + list(p.bench)
+    stage2_pokemon = [bp for bp in all_pokemon if getattr(bp.card, "evolution_stage", "") == "stage2"]
+    if not stage2_pokemon:
+        return False
+    # トラッシュから基本エネルギーを探す
+    energy_in_discard = [c for c in p.discard if is_energy(c)]
+    if not energy_in_discard:
+        return False
+    # 最もエネルギーが必要な2進化ポケモンを選ぶ
+    _is_drapa_mei = is_dragapult_deck_for_player(state, state.current_player)
+    # ドラパルトexデッキ: トラッシュにファントムダイブに必要なタイプのエネがなければ使わない
+    # また、ターゲットのドラパルトexに既に付いているタイプしかトラッシュにないなら無駄
+    if _is_drapa_mei:
+        _useful_energy = [e for e in energy_in_discard if getattr(e, "energy_type", None) in ("fire", "psychic")]
+        if not _useful_energy:
+            return False
+        # ドラパルトexが場にいて、そのドラパルトexに不足しているタイプがトラッシュにあるかチェック
+        _drapa_targets = [bp for bp in stage2_pokemon if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"]
+        if _drapa_targets:
+            _best_drapa = max(_drapa_targets, key=lambda bp: getattr(bp, "attached_energy", 0) or 0)
+            _on_types = list(getattr(_best_drapa, "attached_energy_types", []) or [])
+            _needed = [t for t in ("fire", "psychic") if t not in _on_types]
+            if not _needed:
+                return False  # 炎+超が既に揃っている → メイのはげまし不要
+            _trash_has_needed = any(
+                getattr(e, "energy_type", None) in _needed for e in _useful_energy
+            )
+            if not _trash_has_needed:
+                return False  # 不足タイプがトラッシュにない → 同タイプ重複になるので使わない
+
+    def _stage2_score(bp):
+        max_cost = max((a.energy_cost for a in bp.card.attacks), default=0)
+        score = max_cost - bp.attached_energy
+        # ドラパルトexデッキ: ドラパルトexを最優先、ヨノワールにはエネ不要
+        if _is_drapa_mei:
+            bp_name = (getattr(bp.card, "name", "") or "").strip()
+            if bp_name == "ドラパルトex":
+                score += 100
+            elif bp_name == "ヨノワール":
+                score -= 200  # カースドボム用→エネ不要。かげしばりにエネを使うのは非効率
+        return score
+    target_bp = max(stage2_pokemon, key=_stage2_score)
+    # ドラパルトexデッキ: ヨノワールしかStage2がいないなら使わない(エネの無駄)
+    if _is_drapa_mei:
+        target_name = (getattr(target_bp.card, "name", "") or "").strip()
+        if target_name == "ヨノワール":
+            return False
+    # 最大2枚つける
+    to_attach = min(2, len(energy_in_discard))
+    attached = []
+
+    # ドラパルトex向け: 技のenergy_cost_typedから必要タイプを計算
+    _needed_types: list[str] = []
+    if _is_drapa_mei and (getattr(target_bp.card, "name", "") or "").strip() == "ドラパルトex":
+        types_on = list(getattr(target_bp, "attached_energy_types", []) or [])
+        for atk in (target_bp.card.attacks or []):
+            typed = getattr(atk, "energy_cost_typed", None)
+            if typed and atk.energy_cost >= 2:
+                for t in typed:
+                    if t != "colorless" and types_on.count(t) < typed.count(t):
+                        _needed_types.append(t)
+                break
+
+    for _ in range(to_attach):
+        best_e = None
+        # ドラパルトex: 必要なタイプのエネルギーを優先（火→超の順）
+        if _needed_types:
+            for need_t in _needed_types:
+                for e in energy_in_discard:
+                    if e in attached:
+                        continue
+                    etype = getattr(e, "energy_type", None)
+                    if etype == need_t:
+                        best_e = e
+                        _needed_types.remove(need_t)
+                        break
+                if best_e:
+                    break
+        if best_e is None:
+            # タイプが合うエネルギーを優先（既存ロジック）
+            ptype = getattr(target_bp.card, "pokemon_type", None)
+            for e in energy_in_discard:
+                if e in attached:
+                    continue
+                etype = getattr(e, "energy_type", None)
+                if etype == ptype:
+                    best_e = e
+                    break
+        if best_e is None:
+            # 悪エネルギーはドラパルトexには付けない（ファントムダイブに使えない）
+            for e in energy_in_discard:
+                if e not in attached:
+                    etype = getattr(e, "energy_type", None)
+                    if _is_drapa_mei and (getattr(target_bp.card, "name", "") or "").strip() == "ドラパルトex" and etype == "darkness":
+                        continue
+                    best_e = e
+                    break
+        if best_e is None:
+            # フォールバック: 何でもよい（ただしドラパルトexに悪エネは絶対付けない）
+            for e in energy_in_discard:
+                if e not in attached:
+                    etype = getattr(e, "energy_type", None)
+                    if _is_drapa_mei and (getattr(target_bp.card, "name", "") or "").strip() == "ドラパルトex" and etype == "darkness":
+                        continue
+                    best_e = e
+                    break
+        if best_e is None:
+            break
+        attached.append(best_e)
+        energy_in_discard = [e for e in energy_in_discard if e is not best_e]
+    for e in attached:
+        p.discard.remove(e)
+        target_bp.attached_energy += 1
+        et = getattr(e, "energy_type", None) or "colorless"
+        if not hasattr(target_bp, "attached_energy_types"):
+            target_bp.attached_energy_types = []
+        target_bp.attached_energy_types.append(et)
+    p.discard.append(p.hand.pop(hand_index))
+    state.support_used_this_turn = True
+    attached_names = ", ".join(_card_label(c) for c in attached)
+    target_loc = "バトル場の" if target_bp is p.active else "ベンチの"
+    state.log(
+        f"{state.player_name(state.current_player)}: メイのはげましを使用 → トラッシュから基本エネルギー {len(attached)} 枚を{target_loc}{target_bp.card.name} につけた → [{attached_names}]"
+    )
+    return True
+
+
 def use_support(state: GameState, hand_index: int) -> bool:
     """
     サポートカードを使用。1 ターンに 1 枚まで。先行の 1 ターン目は使用不可。
@@ -3037,233 +3407,8 @@ def use_support(state: GameState, hand_index: int) -> bool:
 
     # アカマツ: 山札からタイプの違う基本エネルギーを2枚まで選び、1枚を手札に加え、残りを自分のポケモンにつける
     if cid == "akamatsu":
-        # ドラパルトexデッキ: 炎＋超を優先的に取る
-        _is_drapa = is_dragapult_deck_for_player(state, state.current_player)
-        # ドラパルトデッキ: このターンにファントムダイブに届く場合のみ使う
-        # （届かないなら付けたエネが次ターンにKOされて無駄になるリスク）
-        if _is_drapa:
-            _drapa_line_on_field = any(
-                (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
-                for bp in ([p.active] if p.active else []) + list(p.bench or [])
-            )
-            if not _drapa_line_on_field:
-                return False
-            # ドラパルトexが場にいればアカマツ使用OK（エネを貯め始める）
-            # ドラメシヤ/ドロンチのみ（ドラパルトex未進化）の場合は
-            # 付けたエネがKOで無駄になるリスクがあるためスキップ
-            _has_drapa_ex = any(
-                (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
-                for bp in ([p.active] if p.active else []) + list(p.bench or [])
-            )
-            if not _has_drapa_ex:
-                return False
-        _preferred_types = ["fire", "psychic"] if _is_drapa else []
+        return _use_support_akamatsu(state, hand_index)
 
-        # ドラパルトexデッキ: ターゲットに既に付いているタイプは後回し（不足タイプを最優先）
-        if _is_drapa and _preferred_types:
-            _drapa_attach_targets = [bp for bp in ([p.active] if p.active else []) + list(p.bench)
-                                     if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES]
-            if _drapa_attach_targets:
-                # HP低いバトル場ポケモンは避ける（KOされてエネ無駄になるリスク）
-                opp_bt = state.defending_player_state()
-                def _bt_score(bp):
-                    _is_ex = 1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0
-                    _en = getattr(bp, "attached_energy", 0) or 0
-                    _pen = 0
-                    if bp is p.active and opp_bt and opp_bt.active:
-                        from .damage import _max_effective_damage_for_attacker
-                        if _max_effective_damage_for_attacker(state, opp_bt.active, bp, 1 - state.current_player) >= (bp.hp or 0):
-                            _pen = -10
-                    return (_pen, _is_ex, _en)
-                _best_target = max(_drapa_attach_targets, key=_bt_score)
-                _on_types = list(getattr(_best_target, "attached_energy_types", []) or [])
-                # 不足タイプを先にする（例: 超が付いていれば炎を最優先）
-                _needed = [t for t in _preferred_types if t not in _on_types]
-                _have = [t for t in _preferred_types if t in _on_types]
-                _preferred_types = _needed + _have
-
-        energy_by_type: dict[str, int] = {}
-        # まず優先タイプを探す
-        for ptype in _preferred_types:
-            if ptype in energy_by_type:
-                continue
-            for i, c in enumerate(p.deck):
-                if is_energy(c) and getattr(c, "energy_type", None) == ptype and i not in energy_by_type.values():
-                    energy_by_type[ptype] = i
-                    break
-        # 足りない分は任意のタイプ
-        for i, c in enumerate(p.deck):
-            if len(energy_by_type) >= 2:
-                break
-            if is_energy(c):
-                etype = getattr(c, "energy_type", None)
-                if etype and etype not in energy_by_type:
-                    energy_by_type[etype] = i
-        if not energy_by_type:
-            return False
-        fetched = []
-        indices = sorted(energy_by_type.values(), reverse=True)
-        for idx in indices:
-            c = p.deck.pop(idx)
-            fetched.append(c)
-        random.shuffle(p.deck)
-        mark_own_deck_shuffled(state)
-        mark_deck_searched(state)
-        if len(fetched) == 1:
-            # 1枚しか見つからなかった場合: 手札に加える
-            p.hand.append(fetched[0])
-            state.drawn_this_turn.append(fetched[0])
-            p.discard.append(p.hand.pop(hand_index))
-            state.support_used_this_turn = True
-            state.log(
-                f"{state.player_name(state.current_player)}: アカマツを使用 → 山札から基本エネルギー 1 枚を手札に加えた → [{_card_label(fetched[0])}]"
-            )
-        else:
-            # 2枚見つかった場合: 1枚を手札に、1枚をポケモンにつける
-            # 手札に加えるカードと付けるカードを決める
-            attach_card = None
-            hand_card = None
-            all_pokemon = ([p.active] if p.active else []) + list(p.bench)
-
-            # ドラパルトexデッキ: ドラパルトex/ドロンチ/ドラメシヤに必要なタイプを付ける
-            if _is_drapa:
-                # ドラパルトex系のポケモンを探す
-                _drapa_targets = [bp for bp in all_pokemon
-                                  if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES]
-                if _drapa_targets:
-                    # ターゲット選択: ドラパルトex優先、エネ多い方優先
-                    # ただし次ターンKOされそう（HPが低い）バトル場のポケモンは避ける
-                    opp_ak = state.defending_player_state()
-                    def _drapa_target_score(bp):
-                        _is_ex = 1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0
-                        _en = getattr(bp, "attached_energy", 0) or 0
-                        _is_active = (bp is p.active)
-                        # バトル場でHPが低い → 次ターンKOされてエネが無駄になるリスク
-                        _hp_penalty = 0
-                        if _is_active and opp_ak and opp_ak.active:
-                            from .damage import _max_effective_damage_for_attacker
-                            _opp_dmg = _max_effective_damage_for_attacker(state, opp_ak.active, bp, 1 - state.current_player)
-                            if _opp_dmg >= (bp.hp or 0):
-                                _hp_penalty = -10  # 次ターンKO確定 → 大幅減点
-                        return (_hp_penalty, _is_ex, _en)
-                    _best_drapa = max(_drapa_targets, key=_drapa_target_score)
-                    _types_on = list(getattr(_best_drapa, "attached_energy_types", []) or [])
-                    # 付いてないタイプのエネを優先的に付ける
-                    for fc in fetched:
-                        et = getattr(fc, "energy_type", None)
-                        if et in ("fire", "psychic") and et not in _types_on:
-                            attach_card = fc
-                            break
-                    if attach_card is None:
-                        # 両方付いている or 両方同じ → 炎/超のうちファントムダイブに有用な方を付ける
-                        # ただし既に同じタイプが付いている場合は付けない（無色枠はどのタイプでもOK）
-                        for fc in fetched:
-                            et = getattr(fc, "energy_type", None)
-                            if et in ("fire", "psychic") and et not in _types_on:
-                                attach_card = fc
-                                break
-                        # それでも見つからない場合: 無色枠用に任意のエネを付ける
-                        # ただし既に付いているタイプは避ける（重複は無意味）
-                        if attach_card is None and len(_types_on) < 3:
-                            for fc in fetched:
-                                et = getattr(fc, "energy_type", None)
-                                if et not in _types_on:
-                                    attach_card = fc
-                                    break
-                # ドラパルトex系がいない場合も、炎/超を手札に残す（後で手張りで付けるため）
-                # attach_card は None のままにして、両方手札に加える
-            else:
-                # 非ドラパルト: pokemon_type matching（既存ロジック）
-                for fc in fetched:
-                    etype = getattr(fc, "energy_type", None)
-                    for bp in all_pokemon:
-                        ptype = getattr(bp.card, "pokemon_type", None)
-                        if ptype and ptype == etype:
-                            attach_card = fc
-                            break
-                    if attach_card:
-                        break
-            if attach_card is None:
-                # ドラパルトexデッキで場にドラパルトex系がいない → 両方手札に加える
-                if _is_drapa:
-                    for fc in fetched:
-                        p.hand.append(fc)
-                        state.drawn_this_turn.append(fc)
-                    p.discard.append(p.hand.pop(hand_index))
-                    state.support_used_this_turn = True
-                    state.log(
-                        f"{state.player_name(state.current_player)}: アカマツを使用 → "
-                        f"基本エネルギー 2 枚を手札に加えた → [{', '.join(_card_label(fc) for fc in fetched)}]"
-                    )
-                    return True
-                attach_card = fetched[1]
-            hand_card = fetched[0] if attach_card is fetched[1] else fetched[1]
-            # 手札に加える
-            p.hand.append(hand_card)
-            state.drawn_this_turn.append(hand_card)
-            # ポケモンにつける: タイプが合うポケモン or エネが少ないポケモン
-            attach_target = None
-            best_score = -1
-            for bp in all_pokemon:
-                score = 0
-                bp_name = (getattr(bp.card, "name", "") or "").strip()
-                ptype = getattr(bp.card, "pokemon_type", None)
-                etype = getattr(attach_card, "energy_type", None)
-                if ptype and ptype == etype:
-                    score += 100
-                # エネルギーが少ないほど優先
-                score -= getattr(bp, "attached_energy", 0) * 10
-                # ドラパルトexデッキ: ドラパルトex/ドロンチ/ドラメシヤにエネ付け優先
-                if _is_drapa:
-                    if bp_name == "ドラパルトex":
-                        score += 500
-                        # 必要な色がまだ付いてなければさらにボーナス
-                        types_on = list(getattr(bp, "attached_energy_types", []) or [])
-                        if etype == "fire" and "fire" not in types_on:
-                            score += 200
-                        elif etype == "psychic" and "psychic" not in types_on:
-                            score += 200
-                        # バトル場で次ターンKOされそう → エネが無駄になる、ベンチ優先
-                        if bp is p.active:
-                            _opp_ak2 = state.defending_player_state()
-                            if _opp_ak2 and _opp_ak2.active:
-                                from .damage import _max_effective_damage_for_attacker as _med_aka
-                                _opp_dmg2 = _med_aka(state, _opp_ak2.active, bp, 1 - state.current_player)
-                                if _opp_dmg2 >= (bp.hp or 0):
-                                    score -= 2000  # 次ターンKO確定 → ベンチに回す
-                    elif bp_name in ("ドロンチ", "ドラメシヤ"):
-                        score += 300
-                    elif bp_name in ("スボミー", "キチキギスex", "ニャースex", "ヨマワル", "サマヨール", "ヨノワール", "マシマシラ"):
-                        score -= 500  # サポート/カースドボム用にエネは不要
-                if score > best_score:
-                    best_score = score
-                    attach_target = bp
-            if attach_target is None and all_pokemon:
-                attach_target = all_pokemon[0]
-            if attach_target:
-                attach_target.attached_energy += 1
-                et = getattr(attach_card, "energy_type", None) or "colorless"
-                if not hasattr(attach_target, "attached_energy_types"):
-                    attach_target.attached_energy_types = []
-                attach_target.attached_energy_types.append(et)
-                attach_loc = "バトル場の" if attach_target is p.active else "ベンチの"
-                state.log(
-                    f"{state.player_name(state.current_player)}: アカマツを使用 → {_card_label(hand_card)} を手札に加え、"
-                    f"{_card_label(attach_card)} を{attach_loc}{attach_target.card.name} につけた"
-                )
-            else:
-                # ポケモンがいない場合は両方手札に（フォールバック）
-                p.hand.append(attach_card)
-                state.drawn_this_turn.append(attach_card)
-                state.log(
-                    f"{state.player_name(state.current_player)}: アカマツを使用 → ポケモンがいないため基本エネルギー 2 枚を手札に加えた"
-                )
-            p.discard.append(p.hand.pop(hand_index))
-            state.support_used_this_turn = True
-        return True
-
-    # ブライア: 相手のサイドの残り枚数が2枚のときにしか使えない。
-    # テラスタルポケモンのKOでサイド1枚多く取る。
     if cid == "buraia":
         opp = state.defending_player_state()
         if len(opp.prize_pile) != 2:
@@ -3280,136 +3425,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
 
     # メイのはげまし: 自分のサイドが相手より多いときのみ使用可。トラッシュから基本エネルギーを2枚まで、自分の2進化ポケモン1匹につける。
     if cid == "meinohagemashi":
-        opp = state.defending_player_state()
-        # 条件: 自分のサイドが相手より多い（=負けている）
-        if len(p.prize_pile) <= len(opp.prize_pile):
-            return False
-        # 2進化ポケモンを探す
-        all_pokemon = ([p.active] if p.active else []) + list(p.bench)
-        stage2_pokemon = [bp for bp in all_pokemon if getattr(bp.card, "evolution_stage", "") == "stage2"]
-        if not stage2_pokemon:
-            return False
-        # トラッシュから基本エネルギーを探す
-        energy_in_discard = [c for c in p.discard if is_energy(c)]
-        if not energy_in_discard:
-            return False
-        # 最もエネルギーが必要な2進化ポケモンを選ぶ
-        _is_drapa_mei = is_dragapult_deck_for_player(state, state.current_player)
-        # ドラパルトexデッキ: トラッシュにファントムダイブに必要なタイプのエネがなければ使わない
-        # また、ターゲットのドラパルトexに既に付いているタイプしかトラッシュにないなら無駄
-        if _is_drapa_mei:
-            _useful_energy = [e for e in energy_in_discard if getattr(e, "energy_type", None) in ("fire", "psychic")]
-            if not _useful_energy:
-                return False
-            # ドラパルトexが場にいて、そのドラパルトexに不足しているタイプがトラッシュにあるかチェック
-            _drapa_targets = [bp for bp in stage2_pokemon if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"]
-            if _drapa_targets:
-                _best_drapa = max(_drapa_targets, key=lambda bp: getattr(bp, "attached_energy", 0) or 0)
-                _on_types = list(getattr(_best_drapa, "attached_energy_types", []) or [])
-                _needed = [t for t in ("fire", "psychic") if t not in _on_types]
-                if not _needed:
-                    return False  # 炎+超が既に揃っている → メイのはげまし不要
-                _trash_has_needed = any(
-                    getattr(e, "energy_type", None) in _needed for e in _useful_energy
-                )
-                if not _trash_has_needed:
-                    return False  # 不足タイプがトラッシュにない → 同タイプ重複になるので使わない
-
-        def _stage2_score(bp):
-            max_cost = max((a.energy_cost for a in bp.card.attacks), default=0)
-            score = max_cost - bp.attached_energy
-            # ドラパルトexデッキ: ドラパルトexを最優先、ヨノワールにはエネ不要
-            if _is_drapa_mei:
-                bp_name = (getattr(bp.card, "name", "") or "").strip()
-                if bp_name == "ドラパルトex":
-                    score += 100
-                elif bp_name == "ヨノワール":
-                    score -= 200  # カースドボム用→エネ不要。かげしばりにエネを使うのは非効率
-            return score
-        target_bp = max(stage2_pokemon, key=_stage2_score)
-        # ドラパルトexデッキ: ヨノワールしかStage2がいないなら使わない(エネの無駄)
-        if _is_drapa_mei:
-            target_name = (getattr(target_bp.card, "name", "") or "").strip()
-            if target_name == "ヨノワール":
-                return False
-        # 最大2枚つける
-        to_attach = min(2, len(energy_in_discard))
-        attached = []
-
-        # ドラパルトex向け: 技のenergy_cost_typedから必要タイプを計算
-        _needed_types: list[str] = []
-        if _is_drapa_mei and (getattr(target_bp.card, "name", "") or "").strip() == "ドラパルトex":
-            types_on = list(getattr(target_bp, "attached_energy_types", []) or [])
-            for atk in (target_bp.card.attacks or []):
-                typed = getattr(atk, "energy_cost_typed", None)
-                if typed and atk.energy_cost >= 2:
-                    for t in typed:
-                        if t != "colorless" and types_on.count(t) < typed.count(t):
-                            _needed_types.append(t)
-                    break
-
-        for _ in range(to_attach):
-            best_e = None
-            # ドラパルトex: 必要なタイプのエネルギーを優先（火→超の順）
-            if _needed_types:
-                for need_t in _needed_types:
-                    for e in energy_in_discard:
-                        if e in attached:
-                            continue
-                        etype = getattr(e, "energy_type", None)
-                        if etype == need_t:
-                            best_e = e
-                            _needed_types.remove(need_t)
-                            break
-                    if best_e:
-                        break
-            if best_e is None:
-                # タイプが合うエネルギーを優先（既存ロジック）
-                ptype = getattr(target_bp.card, "pokemon_type", None)
-                for e in energy_in_discard:
-                    if e in attached:
-                        continue
-                    etype = getattr(e, "energy_type", None)
-                    if etype == ptype:
-                        best_e = e
-                        break
-            if best_e is None:
-                # 悪エネルギーはドラパルトexには付けない（ファントムダイブに使えない）
-                for e in energy_in_discard:
-                    if e not in attached:
-                        etype = getattr(e, "energy_type", None)
-                        if _is_drapa_mei and (getattr(target_bp.card, "name", "") or "").strip() == "ドラパルトex" and etype == "darkness":
-                            continue
-                        best_e = e
-                        break
-            if best_e is None:
-                # フォールバック: 何でもよい（ただしドラパルトexに悪エネは絶対付けない）
-                for e in energy_in_discard:
-                    if e not in attached:
-                        etype = getattr(e, "energy_type", None)
-                        if _is_drapa_mei and (getattr(target_bp.card, "name", "") or "").strip() == "ドラパルトex" and etype == "darkness":
-                            continue
-                        best_e = e
-                        break
-            if best_e is None:
-                break
-            attached.append(best_e)
-            energy_in_discard = [e for e in energy_in_discard if e is not best_e]
-        for e in attached:
-            p.discard.remove(e)
-            target_bp.attached_energy += 1
-            et = getattr(e, "energy_type", None) or "colorless"
-            if not hasattr(target_bp, "attached_energy_types"):
-                target_bp.attached_energy_types = []
-            target_bp.attached_energy_types.append(et)
-        p.discard.append(p.hand.pop(hand_index))
-        state.support_used_this_turn = True
-        attached_names = ", ".join(_card_label(c) for c in attached)
-        target_loc = "バトル場の" if target_bp is p.active else "ベンチの"
-        state.log(
-            f"{state.player_name(state.current_player)}: メイのはげましを使用 → トラッシュから基本エネルギー {len(attached)} 枚を{target_loc}{target_bp.card.name} につけた → [{attached_names}]"
-        )
-        return True
+        return _use_support_mei(state, hand_index)
 
     if effect == "draw_3" or cid in ("nemo", "nemokako", "nemomirai"):
         n = getattr(card, "draw_count", 3)
