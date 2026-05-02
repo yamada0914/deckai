@@ -1417,93 +1417,10 @@ def _try_attach_energy_with_attack_lookahead(state: GameState) -> bool:
     return True
 
 
-def run_turn_auto(state: GameState) -> bool:
-    """
-    現在のプレイヤーが「可能な行動を順番に実行」する。
-    順序：0. ベンチにポケモン出す、1. 進化、2. スタジアム（1 枚まで）、3. 手札を捨てないサポート（キハダ・ネモ）、4. エレキジェネ、5. ボール系グッズ、6. 進化（ボール後）、7. エネルギー付与（優先度低め・捨て札刷新サポートより前）、8. 手札刷新前グッズ／サポート、9. いれかえ、10. にげる（次相手ターンきぜつ確定かつにげで助かる等は `_try_retreat_when_koed`。「攻撃不可だけ」の無目的交代はしない）、11. どうぐ・グッズ、12. 進化（再）、13. 攻撃。
-    サポートまたはグッズを使用した場合は優先順位 1（進化）から手札を再確認する（MAX_TURN_ACTION_ROUNDS 回まで）。
-    何もできなければ False を返す。True = ターン内で何かした。
-    """
-    p = state.active_player_state()
-    opp = state.defending_player_state()
-    if not p.active:
-        return False
 
-    acted = False
 
-    def _try_put_bench_until_full():
-        nonlocal p, acted
-        # ドラパルトデッキ: ベンチ3体以上でポフィンが手札にあれば先に空打ちして使い切る
-        # ポフィンを先に使わないとベンチが埋まって使えなくなり、デッキ圧縮もできない
-        if is_dragapult_deck_for_player(state, state.current_player) and len(p.bench) >= 3:
-            while len(p.bench) < 5:
-                _pf_idx = None
-                for _pi, _pc in enumerate(p.hand):
-                    if (getattr(_pc, "id", "") or "") == NAKAYOSHI_POFIN:
-                        _pf_idx = _pi
-                        break
-                if _pf_idx is None:
-                    break
-                from .trainers import use_trainer_goods as _use_pf
-                if _use_pf(state, _pf_idx):
-                    acted = True
-                    p = state.active_player_state()
-                    state._record_frame()
-                else:
-                    break
-        put_count = 0
-        while put_count < BENCH_SIZE and _put_one_pokemon_on_bench(p, state, state.current_player):
-            put_count += 1
-            acted = True
-            p = state.active_player_state()
-            # ニャースex: おくのてキャッチ（ベンチに出したとき発動）
-            # サポート使用済みでも次ターン用にサーチする価値はある
-            if p.bench:
-                last_bp = p.bench[-1]
-                if (getattr(last_bp.card, "name", "") or "").strip() == "ニャースex":
-                    if getattr(last_bp, "put_on_bench_this_turn", False):
-                        _try_use_ability_okunote_catch(state)
-                        p = state.active_player_state()
-            state._record_frame()
-
-    # 種切れ即勝ち: 相手ベンチなしでKO可能なら余計なアクションを全てスキップ
-    if not _is_first_player_first_turn(state) and state.turn_count > 0:
-        _opp_sw = state.defending_player_state()
-        if _opp_sw.active and not _opp_sw.bench and _opp_sw.active.hp and _opp_sw.active.hp > 0:
-            # 今すぐKOできるか
-            if _can_win_now_check(state):
-                p = state.active_player_state()
-                opp = state.defending_player_state()
-                if _do_attack_phase(state, p, opp):
-                    return True
-            # ファイトゴングでエネ取得→付与→KO��きるか
-            _p_sw = state.active_player_state()
-            if not state.energy_attached_this_turn and any(is_energy(c) for c in _p_sw.hand) is False:
-                _fg_idx = next((i for i, c in enumerate(_p_sw.hand) if getattr(c, "id", "") == FIGHT_GONG), None)
-                if _fg_idx is not None:
-                    # ファイトゴングで闘エネまたは基本闘エネを取れるか
-                    _has_energy_in_deck = any(
-                        is_energy(c) and getattr(c, "energy_type", None) == "fighting"
-                        for c in _p_sw.deck
-                    )
-                    if _has_energy_in_deck:
-                        use_trainer_goods(state, _fg_idx)
-                        acted = True
-                        p = state.active_player_state()
-                        state._record_frame()
-                        # エネ付与
-                        from .turn_energy import _pick_energy_hand_idx
-                        eidx = _pick_energy_hand_idx(p, state)
-                        if eidx is not None:
-                            from .trainers import attach_energy as _sw_attach
-                            _sw_attach(state, eidx)
-                            p = state.active_player_state()
-                            state._record_frame()
-                        if _can_win_now_check(state):
-                            opp = state.defending_player_state()
-                            if _do_attack_phase(state, p, opp):
-                                return True
-
+def _execute_ko_plan(state):
+    """KOプラン探索と実行。確定行動の組み合わせでこのターンKOできる手順があれば実行する。"""
     # KOプラン探索: 確定行動の組み合わせでこのターンKOできる手順があるか
     from .turn_planner import find_ko_plan
     _ko_plan = None
@@ -1652,6 +1569,97 @@ def run_turn_auto(state: GameState) -> bool:
             # 攻撃前にサポート/グッズを使い切る（ゼイユでドロー等）。
             # 攻撃はメインループ末尾の_do_attack_phaseで実行される。
             p = state.active_player_state()
+
+
+def run_turn_auto(state: GameState) -> bool:
+    """
+    現在のプレイヤーが「可能な行動を順番に実行」する。
+    順序：0. ベンチにポケモン出す、1. 進化、2. スタジアム（1 枚まで）、3. 手札を捨てないサポート（キハダ・ネモ）、4. エレキジェネ、5. ボール系グッズ、6. 進化（ボール後）、7. エネルギー付与（優先度低め・捨て札刷新サポートより前）、8. 手札刷新前グッズ／サポート、9. いれかえ、10. にげる（次相手ターンきぜつ確定かつにげで助かる等は `_try_retreat_when_koed`。「攻撃不可だけ」の無目的交代はしない）、11. どうぐ・グッズ、12. 進化（再）、13. 攻撃。
+    サポートまたはグッズを使用した場合は優先順位 1（進化）から手札を再確認する（MAX_TURN_ACTION_ROUNDS 回まで）。
+    何もできなければ False を返す。True = ターン内で何かした。
+    """
+    p = state.active_player_state()
+    opp = state.defending_player_state()
+    if not p.active:
+        return False
+
+    acted = False
+
+    def _try_put_bench_until_full():
+        nonlocal p, acted
+        # ドラパルトデッキ: ベンチ3体以上でポフィンが手札にあれば先に空打ちして使い切る
+        # ポフィンを先に使わないとベンチが埋まって使えなくなり、デッキ圧縮もできない
+        if is_dragapult_deck_for_player(state, state.current_player) and len(p.bench) >= 3:
+            while len(p.bench) < 5:
+                _pf_idx = None
+                for _pi, _pc in enumerate(p.hand):
+                    if (getattr(_pc, "id", "") or "") == NAKAYOSHI_POFIN:
+                        _pf_idx = _pi
+                        break
+                if _pf_idx is None:
+                    break
+                from .trainers import use_trainer_goods as _use_pf
+                if _use_pf(state, _pf_idx):
+                    acted = True
+                    p = state.active_player_state()
+                    state._record_frame()
+                else:
+                    break
+        put_count = 0
+        while put_count < BENCH_SIZE and _put_one_pokemon_on_bench(p, state, state.current_player):
+            put_count += 1
+            acted = True
+            p = state.active_player_state()
+            # ニャースex: おくのてキャッチ（ベンチに出したとき発動）
+            # サポート使用済みでも次ターン用にサーチする価値はある
+            if p.bench:
+                last_bp = p.bench[-1]
+                if (getattr(last_bp.card, "name", "") or "").strip() == "ニャースex":
+                    if getattr(last_bp, "put_on_bench_this_turn", False):
+                        _try_use_ability_okunote_catch(state)
+                        p = state.active_player_state()
+            state._record_frame()
+
+    # 種切れ即勝ち: 相手ベンチなしでKO可能なら余計なアクションを全てスキップ
+    if not _is_first_player_first_turn(state) and state.turn_count > 0:
+        _opp_sw = state.defending_player_state()
+        if _opp_sw.active and not _opp_sw.bench and _opp_sw.active.hp and _opp_sw.active.hp > 0:
+            # 今すぐKOできるか
+            if _can_win_now_check(state):
+                p = state.active_player_state()
+                opp = state.defending_player_state()
+                if _do_attack_phase(state, p, opp):
+                    return True
+            # ファイトゴングでエネ取得→付与→KO��きるか
+            _p_sw = state.active_player_state()
+            if not state.energy_attached_this_turn and any(is_energy(c) for c in _p_sw.hand) is False:
+                _fg_idx = next((i for i, c in enumerate(_p_sw.hand) if getattr(c, "id", "") == FIGHT_GONG), None)
+                if _fg_idx is not None:
+                    # ファイトゴングで闘エネまたは基本闘エネを取れるか
+                    _has_energy_in_deck = any(
+                        is_energy(c) and getattr(c, "energy_type", None) == "fighting"
+                        for c in _p_sw.deck
+                    )
+                    if _has_energy_in_deck:
+                        use_trainer_goods(state, _fg_idx)
+                        acted = True
+                        p = state.active_player_state()
+                        state._record_frame()
+                        # エネ付与
+                        from .turn_energy import _pick_energy_hand_idx
+                        eidx = _pick_energy_hand_idx(p, state)
+                        if eidx is not None:
+                            from .trainers import attach_energy as _sw_attach
+                            _sw_attach(state, eidx)
+                            p = state.active_player_state()
+                            state._record_frame()
+                        if _can_win_now_check(state):
+                            opp = state.defending_player_state()
+                            if _do_attack_phase(state, p, opp):
+                                return True
+
+    _execute_ko_plan(state)
+    p = state.active_player_state()
 
     # 勝ち確ならベンチ出しも不要 → 即攻撃フェーズへ
     _can_win_now = False
