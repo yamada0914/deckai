@@ -1,6 +1,30 @@
 """トレーナー（グッズ・サポート・どうぐ・いれかえ・エネルギー付与）。"""
 import os
 import random
+from .card_ids import (
+    AKAMATSU,
+    BOSS_NO_SHIREI,
+    BURAIA,
+    FIGHT_GONG,
+    FUSHIGI_NA_AME,
+    FUUSEN,
+    HAKASE_NO_KENKYU,
+    HIKARI,
+    HYPER_BALL,
+    JUDGE,
+    KIHADA,
+    MEI_NO_HAGEMASHI,
+    NAKAYOSHI_POFIN,
+    POKEMON_IREKAE,
+    POKEPAD,
+    RIRIE_NO_KESSHIN,
+    SPECIAL_RED_CARD,
+    SUPER_BALL,
+    TANPAN_KOZOU,
+    UNFAIR_STAMP,
+    YORU_NO_TANKA,
+    ZEIYU,
+)
 
 from card import (
     get_card_by_id,
@@ -139,7 +163,7 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
         for hc in p.hand
     )
     _has_another_hb = any(
-        getattr(hc, "id", "") == "haipaboru" for hc in p.hand
+        getattr(hc, "id", "") == HYPER_BALL for hc in p.hand
     )
     if len(p.bench) == 0 and not _hand_has_basic_for_bench and not _has_another_hb:
         pool = candidates
@@ -190,7 +214,7 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
     # リーリエの決心等の大量ドローサポートが手札にあるか（ドロンチはドローで引けるので優先度下げる）
     _has_draw_support_hb = any(
         is_support(hc) and (getattr(hc, "id", "") or "") in (
-            "riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari",
+            RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU, HIKARI,
         )
         for hc in p.hand
     )
@@ -249,7 +273,7 @@ def _find_pokemon_for_haipaboru(p: PlayerState, state=None) -> tuple[int, object
                 if _is_first_turn:
                     return 3000.0 + strength
                 _has_ame = any(
-                    (getattr(hc, "id", "") or "") == "fushiginaame" for hc in p.hand
+                    (getattr(hc, "id", "") or "") == FUSHIGI_NA_AME for hc in p.hand
                 )
                 _has_doronchi_field = any(
                     (getattr(fc, "name", "") or "") == "ドロンチ" for fc in field_cards
@@ -419,17 +443,17 @@ def _haipaboru_judge_vs_lillie_adjustment(
     相手手札が 5 枚以上のとき、ジャッジマンはリーリエの決心より価値が下がりやすい（お互い 4 枚固定）。
     両方手札にあるならジャッジマンを捨てやすく、リーリエを捨てにくくする。
     """
-    has_lillie = any((getattr(hc, "id", "") or "") == "riirienokesshin" for _i, hc in hand_without_haipaboru)
-    has_judge = any((getattr(hc, "id", "") or "") == "jixyajjiman" for _i, hc in hand_without_haipaboru)
+    has_lillie = any((getattr(hc, "id", "") or "") == RIRIE_NO_KESSHIN for _i, hc in hand_without_haipaboru)
+    has_judge = any((getattr(hc, "id", "") or "") == JUDGE for _i, hc in hand_without_haipaboru)
     if not (has_lillie and has_judge):
         return 0.0
     opp = state.defending_player_state()
     if len(opp.hand) < 5:
         return 0.0
     cid = getattr(c, "id", "") or ""
-    if cid == "jixyajjiman":
+    if cid == JUDGE:
         return 2200.0
-    if cid == "riirienokesshin":
+    if cid == RIRIE_NO_KESSHIN:
         return -2600.0
     return 0.0
 
@@ -598,12 +622,12 @@ def _use_fight_gong(state: GameState, hand_index: int) -> bool:
                 w += 1000.0
                 # HBでリオルを後から取れる+サポートなし+タンカありでルナサイクル2回分確約
                 # → エネ取得でドロー力を確保する方が圧倒的に有利
-                _has_hb = any(getattr(hc, "id", "") == "haipaboru" for hc in p.hand)
-                _has_tanka = any(getattr(hc, "id", "") == "yorunotanka" for hc in p.hand)
+                _has_hb = any(getattr(hc, "id", "") == HYPER_BALL for hc in p.hand)
+                _has_tanka = any(getattr(hc, "id", "") == YORU_NO_TANKA for hc in p.hand)
                 _has_draw_support = any(
                     is_support(hc) and getattr(hc, "id", "") in (
-                        "riirienokesshin", "zeiyu", "hakasenokenkyuu",
-                        "hakasenokenkyuufutouhakase", "jixyajjiman", "nemo"
+                        RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU,
+                        "hakasenokenkyuufutouhakase", JUDGE, "nemo"
                     )
                     for hc in p.hand
                 )
@@ -993,10 +1017,10 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
                             break
                 # 夜のタンカがデッキ+手札にあるか（エネルギーをトラッシュから回収可能）
                 _has_tanka = any(
-                    (getattr(hc, "id", "") or "") == "yorunotanka"
+                    (getattr(hc, "id", "") or "") == YORU_NO_TANKA
                     for _, hc in hand_without_haipaboru
                 ) or any(
-                    (getattr(dc, "id", "") or "") == "yorunotanka"
+                    (getattr(dc, "id", "") or "") == YORU_NO_TANKA
                     for dc in p.deck
                 )
                 if _completes_fd:
@@ -1028,7 +1052,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
                 discard_score -= 8000.0  # メインアタッカー
             elif c_name_hb == "ドロンチ":
                 discard_score -= 7000.0  # 進化の要（ていさつしれい）
-        if _is_drapa_hb_discard and is_goods(c) and (getattr(c, "id", "") or "") == "fushiginaame":
+        if _is_drapa_hb_discard and is_goods(c) and (getattr(c, "id", "") or "") == FUSHIGI_NA_AME:
             # ドラパルトexが手札にあり場にドラメシヤがいれば即進化可能 → 超重要
             _has_drapa_in_hand = any(
                 (getattr(hc, "name", "") or "").strip() == "ドラパルトex"
@@ -1045,25 +1069,25 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
         # ドラパルトexデッキ: メイのはげまし/アカマツはエネ加速の生命線 → 捨てない
         if _is_drapa_hb_discard and is_support(c):
             c_id_hb = (getattr(c, "id", "") or "").strip()
-            if c_id_hb == "meinohagemashi":
+            if c_id_hb == MEI_NO_HAGEMASHI:
                 discard_score -= 4000.0  # メイのはげまし: Stage2にエネ2枚付ける唯一の手段
-            elif c_id_hb == "akamatsu":
+            elif c_id_hb == AKAMATSU:
                 discard_score -= 15000.0  # アカマツ: FDの生命線（炎+超を確実に確保）
         # アンフェアスタンプは終盤の逆転カード → 基本的に捨てない（全デッキ共通）
-        if is_goods(c) and (getattr(c, "id", "") or "") == "anfeasutanpu":
+        if is_goods(c) and (getattr(c, "id", "") or "") == UNFAIR_STAMP:
             discard_score -= 15000.0
         # リーリエの決心は最重要ドローサポート → 手札に2枚ある時のみ捨てOK
-        if is_support(c) and (getattr(c, "id", "") or "") == "riirienokesshin":
+        if is_support(c) and (getattr(c, "id", "") or "") == RIRIE_NO_KESSHIN:
             _lillie_count = sum(
                 1 for _, hc in hand_without_haipaboru
-                if is_support(hc) and (getattr(hc, "id", "") or "") == "riirienokesshin"
+                if is_support(hc) and (getattr(hc, "id", "") or "") == RIRIE_NO_KESSHIN
             )
             if _lillie_count < 2:
                 discard_score -= 15000.0  # 1枚しかない → 絶対捨てない
         # 闘エネは捨てにくくする。ルナサイクルのコスト+手張りに必要。
         # ただし手札全捨てサポート（ゼイユ等）があるなら、どうせ捨てるのでペナルティ不要。
         _has_trash_support = any(
-            is_support(hc) and (getattr(hc, "id", "") or "") in ("zeiyu", "hakasenokenkyuu", "hakasenokenkyuufutouhakase")
+            is_support(hc) and (getattr(hc, "id", "") or "") in (ZEIYU, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase")
             for _, hc in hand_without_haipaboru
         )
         # エネは常に少し捨てにくい。手札全捨てサポートがある場合のみ免除。
@@ -1073,7 +1097,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
             # 両方捨てるとエネ枯渇で攻撃不能になる → 超大ペナルティ
             if energy_count_in_hand <= 2:
                 _has_tanka = any(
-                    (getattr(hc, "id", "") or "") == "yorunotanka"
+                    (getattr(hc, "id", "") or "") == YORU_NO_TANKA
                     for _, hc in hand_without_haipaboru
                 )
                 _has_luna_cycle = (
@@ -1083,7 +1107,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
                 if not _has_tanka and not _has_luna_cycle:
                     discard_score -= 3000.0
         # ポケモンいれかえは攻撃可能なアタッカーに交代できる重要カード。捨てにくくする。
-        if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
+        if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", POKEMON_IREKAE)):
             discard_score -= 1000.0
             # Fix J: メガルカリオexが場or手札にある場合、メガブレイブリセットトリックに必要なので追加保護
             _mega_present = any(
@@ -1098,7 +1122,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
             if _mega_present:
                 discard_score -= 500.0
         # ドローサポート（ゼイユ、リーリエ等）: ルナサイクル不成立時は貴重なドロー源
-        _DRAW_SUPPORT_IDS = ("zeiyu", "riirienokesshin", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "nemo")
+        _DRAW_SUPPORT_IDS = (ZEIYU, RIRIE_NO_KESSHIN, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase", JUDGE, "nemo")
         if is_support(c) and (getattr(c, "id", "") or "") in _DRAW_SUPPORT_IDS:
             _luna_engine_ok = (
                 _field_has_pokemon(p, "ルナトーン", "runaton")
@@ -1109,7 +1133,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
             else:
                 discard_score -= 300.0  # エンジン成立でも一応保護
         # 夜のタンカはトラッシュからエネ/ポケモンを回収できる重要カード。捨てにくくする。
-        if getattr(c, "id", "") == "yorunotanka":
+        if getattr(c, "id", "") == YORU_NO_TANKA:
             discard_score -= 2000.0
         # 場のポケモンに進化できるカードは捨てない(メガルカリオexを捨ててまた取るのは無駄)
         if _is_evolution_for_field(c):
@@ -1131,7 +1155,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
         # --- データ分析から判明したカード別の調整 ---
         _cid = getattr(c, "id", "") or ""
         # スペシャルレッドカードは妨害手段として捨てにくい（統計: -7.1%）
-        if _cid == "supeshiyarureddokado":
+        if _cid == SPECIAL_RED_CARD:
             discard_score -= 700.0
         # ロケット団の監視塔: 相手に無色ポケモンがいなければ不要 → 捨てやすい
         if _cid == "rokettodannokanshitou":
@@ -1146,19 +1170,19 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
             if not opp_has_colorless:
                 discard_score += 500.0
         # ふうせんは逃げるコスト0にする重要カード（統計: -5.3%）
-        if _cid == "fuusen":
+        if _cid == FUUSEN:
             discard_score -= 500.0
         # Pattern 5: ボスの指令はターン0（先行1ターン目）のみ捨ててOK、それ以降は保護
-        if _cid == "bosunoshirei":
+        if _cid == BOSS_NO_SHIREI:
             if state.turn_count == 0:
                 discard_score += 500.0
             else:
                 discard_score -= 500.0
         # ミツルの思いやり/ポケパッドは捨てても勝率に影響しない（統計: +4.0%, +4.4%）
-        if _cid in ("mitsurunoomoiyari", "pokepaddo"):
+        if _cid in ("mitsurunoomoiyari", POKEPAD):
             discard_score += 400.0
         # 余剰ハイパーボール: メガルカリオexが手札/場にない場合はサーチ手段として保護
-        if _cid == "haipaboru":
+        if _cid == HYPER_BALL:
             _has_mega_anywhere = any(
                 "メガルカリオ" in (getattr(hc, "name", "") or "")
                 for hc in p.hand if is_pokemon(hc)
@@ -1222,7 +1246,7 @@ def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
     # 序盤のボスの指令は使えないので保護不要（捨ててOK��
     if _protect_last_support:
         _last_sup_id = getattr(p.hand[only_support_idx], "id", "") or ""
-        if _last_sup_id == "bosunoshirei" and state.turn_count == 0:
+        if _last_sup_id == BOSS_NO_SHIREI and state.turn_count == 0:
             _protect_last_support = False
     if _protect_last_support:
         replacement = next(
@@ -1278,13 +1302,13 @@ def use_trainer_goods(
         return False
     cid = getattr(card, "id", "")
     if (getattr(card, "effect", None) in ("heal", "swap_active") or getattr(card, "is_tool", False)) and cid not in (
-        "supaboru", "haipaboru", "fushiginaame",
-        "anfeasutanpu", "pawaapurotein", "faitogongu", "pokepaddo", "yorunotanka",
+        SUPER_BALL, HYPER_BALL, FUSHIGI_NA_AME,
+        UNFAIR_STAMP, "pawaapurotein", FIGHT_GONG, POKEPAD, YORU_NO_TANKA,
     ):
         return False
     name_ja = getattr(card, "name", "")
 
-    if cid == "fushiginaame":
+    if cid == FUSHIGI_NA_AME:
         if state.turn_count < 2:
             return False
         stage1_id = None
@@ -1435,7 +1459,7 @@ def use_trainer_goods(
             state.log(f"{state.player_name(state.current_player)}: エレキジェネレーターを使用（山札上 5 枚に基本雷エネルギーなし）")
         return True
 
-    if cid == "supaboru" and p.deck:
+    if cid == SUPER_BALL and p.deck:
         look = min(7, len(p.deck))
         top = [p.deck.pop(0) for _ in range(look)]
         pokemon = next((c for c in top if is_pokemon(c)), None)
@@ -1457,11 +1481,11 @@ def use_trainer_goods(
         )
         return True
 
-    if cid == "haipaboru" and len(p.hand) >= 3 and p.deck:
+    if cid == HYPER_BALL and len(p.hand) >= 3 and p.deck:
         return _use_hyper_ball(state, hand_index)
 
 
-    if cid == "anfeasutanpu":
+    if cid == UNFAIR_STAMP:
         # 前の相手の番に自分のポケモンがきぜつしていたら使える（タイプ不問）
         _any_ko = getattr(state, "any_ko_by_opponent_last_turn", [False, False])
         _ko_happened = _any_ko[state.current_player] or state.our_ko_by_damage_last_turn[state.current_player]
@@ -1484,7 +1508,7 @@ def use_trainer_goods(
         p.discard.append(used_card)
         state.log(f"{state.player_name(state.current_player)}: アンフェアスタンプを使用 → おたがい手札を山札にもどして切り、自分 5 枚・相手 2 枚ドロー")
         return True
-    if cid == "supeshiyarureddokado":
+    if cid == SPECIAL_RED_CARD:
         opp = state.defending_player_state()
         # カード効果: 相手のサイドの残り枚数が3枚以下のときにしか使えない
         if len(opp.prize_pile) > 3:
@@ -1513,7 +1537,7 @@ def use_trainer_goods(
             return False
         opp = state.defending_player_state()
         # 手札全捨てサポートの有無を先にチェック
-        _TRASH_HAND_SUPPORT_IDS = ("zeiyu", "hakasenokenkyuu", "hakasenokenkyuufutouhakase")
+        _TRASH_HAND_SUPPORT_IDS = (ZEIYU, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase")
         will_trash_hand = not state.support_used_this_turn and any(
             is_support(c) and (getattr(c, "id", "") or "") in _TRASH_HAND_SUPPORT_IDS
             for c in p.hand
@@ -1579,13 +1603,13 @@ def use_trainer_goods(
         n = state.fighting_damage_plus_30_count_this_turn
         state.log(f"{state.player_name(state.current_player)}: パワープロテインを使用 → この番、自分の闘ポケモンのワザダメージ+{30 * n}（{n} 枚目）")
         return True
-    if cid == "faitogongu" and p.deck:
+    if cid == FIGHT_GONG and p.deck:
         return _use_fight_gong(state, hand_index)
 
-    if cid == "pokepaddo" and p.deck:
+    if cid == POKEPAD and p.deck:
         return _use_pokepad(state, hand_index)
 
-    if cid == "yorunotanka":
+    if cid == YORU_NO_TANKA:
         pokemon_or_basic = [c for c in p.discard if is_pokemon(c) or (is_energy(c) and getattr(c, "energy_type", None) in _BASIC_ENERGY_TYPES)]
         if pokemon_or_basic:
             # 状況に応じて最適な回収先を選ぶ（将来は学習で最適化）
@@ -1679,7 +1703,7 @@ def use_trainer_goods(
         return True
 
     # なかよしポフィン: 山札から HP70 以下のたねポケモンを 2 枚までベンチに出す
-    _is_nakayoshipofuin = cid == "nakayoshipofuin" or name_ja == "なかよしポフィン"
+    _is_nakayoshipofuin = cid == NAKAYOSHI_POFIN or name_ja == "なかよしポフィン"
     if _is_nakayoshipofuin:
         from .state import BENCH_SIZE, BattlePokemon
         if len(p.bench) >= BENCH_SIZE:
@@ -1803,7 +1827,7 @@ def use_pokemon_swap(state: GameState, hand_index: int, bench_index: int) -> boo
     card = p.hand[hand_index]
     if not is_goods(card):
         return False
-    if getattr(card, "effect", None) != "swap_active" and getattr(card, "id", "") not in ("pokemon_irekae", "pokemonirekae"):
+    if getattr(card, "effect", None) != "swap_active" and getattr(card, "id", "") not in ("pokemon_irekae", POKEMON_IREKAE):
         return False
     old_active = p.active
     p.active = p.bench[bench_index]
@@ -2145,7 +2169,7 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
 
         # --- ブライア解放: 相手サイド3 + ブライア手札 + FD準備完了 → ボムで相手サイドを2にしてブライア有効化 ---
         if not can_win_with_bomb and opp_prizes_remaining == 3 and _is_drapa:
-            _has_briar = any((getattr(c, "id", "") or "") == "buraia" for c in p.hand)
+            _has_briar = any((getattr(c, "id", "") or "") == BURAIA for c in p.hand)
             if _has_briar:
                 _can_fd_briar = False
                 # ドラパルトexがバトル場 or バトル場に出せる状態か
@@ -2159,7 +2183,7 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
                     if not _is_active:
                         _active_rc = getattr(p.active.card, "retreat_cost", 1) if p.active else 99
                         _tool_a = getattr(p.active, "attached_tool", None) if p.active else None
-                        _eff_rc = max(0, _active_rc - (2 if _tool_a and (getattr(_tool_a, "id", "") or "") == "fuusen" else 0))
+                        _eff_rc = max(0, _active_rc - (2 if _tool_a and (getattr(_tool_a, "id", "") or "") == FUUSEN else 0))
                         _can_retreat = (
                             not getattr(state, "retreat_used_this_turn", False)
                             and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
@@ -2224,7 +2248,7 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
             continue
         # 相手サイド2枚でブライア手札の時も自爆禁止（ブライア条件が崩れる）
         if opp_prizes_remaining == 2 and not can_win_with_bomb:
-            if any((getattr(c, "id", "") or "") == "buraia" for c in p.hand):
+            if any((getattr(c, "id", "") or "") == BURAIA for c in p.hand):
                 continue
 
         if can_win_with_bomb and win_target is not None:
@@ -2369,7 +2393,7 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
         # サポートの優先度スコアリング
         _is_drapa_oku = is_dragapult_deck_for_player(state, state.current_player)
         # ドロー系サポートが手札にあるかだけをチェック（ブライア・ボスの指令はドローではない）
-        _draw_support_ids = {"riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari", "nemo", "akamatsu"}
+        _draw_support_ids = {RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU, HIKARI, "nemo", AKAMATSU}
         _has_support_in_hand = state.support_used_this_turn or any(
             is_support(hc) and (getattr(hc, "id", "") or "").strip() in _draw_support_ids
             for hc in p.hand
@@ -2399,7 +2423,7 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
             sid = (getattr(sc, "id", "") or "").strip()
             # アカマツ: ドラパルトexが場にいてエネ不足なら最優先（FD直結）
             # リーリエでドローしてもエネが来る保証はないが、アカマツなら確実にエネ2枚
-            if _is_drapa_oku and sid == "akamatsu":
+            if _is_drapa_oku and sid == AKAMATSU:
                 if _drapa_has_ex_on_field_oku and _drapa_needs_energy_oku:
                     return 7000  # FD直結 → 最優先
                 elif _drapa_line_on_field_oku and _drapa_needs_energy_oku:
@@ -2409,7 +2433,7 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
                 else:
                     return 500  # ラインが場にいない → 低優先
             # 手札が少ない場合はリーリエの決心が最優先（ドローで立て直す）
-            if sid == "riirienokesshin":
+            if sid == RIRIE_NO_KESSHIN:
                 if _hand_size_oku <= 4:
                     return 5000  # 手札少ない → リーリエ最優先
                 elif not _has_support_in_hand:
@@ -2417,11 +2441,11 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
                 else:
                     return 800
             # ボスの指令: ベンチ狙いに必要
-            if sid == "bosunoshirei":
+            if sid == BOSS_NO_SHIREI:
                 return 1500
             # メイのはげまし: きぜつ後のエネ加速（Stage2対象）
             # ドラパルトexがエネ不足でファントムダイブに繋がるなら最優先
-            if _is_drapa_oku and sid == "meinohagemashi":
+            if _is_drapa_oku and sid == MEI_NO_HAGEMASHI:
                 if _drapa_needs_energy_oku:
                     # ドラパルトexが場にいてエネ不足 → メイのはげましが最優先
                     _has_drapa_ex_oku = any(
@@ -2433,7 +2457,7 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
                     return 4000
                 return 1200
             # ブライア: フィニッシュ用
-            if sid == "buraia":
+            if sid == BURAIA:
                 return 800
             # それ以外のドロー系
             if sid in ("nemo", "nemokako", "nemomirai"):
@@ -2529,7 +2553,7 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
     _has_hand_refresh = (
         not state.support_used_this_turn
         and any(
-            (getattr(hc, "id", "") or "").strip() in ("riirienokesshin", "hakasenokenkyuu")
+            (getattr(hc, "id", "") or "").strip() in (RIRIE_NO_KESSHIN, HAKASE_NO_KENKYU)
             for hc in p.hand
         )
     )
@@ -2540,7 +2564,7 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
     def _card_value(c):
         if is_support(c):
             cid_v = (getattr(c, "id", "") or "").strip()
-            if cid_v == "akamatsu":
+            if cid_v == AKAMATSU:
                 if _akamatsu_over_ririe:
                     # アカマツを使う方が優先 → 取る
                     return 1800
@@ -2576,9 +2600,9 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
             return 500
         if is_goods(c):
             cid_v = (getattr(c, "id", "") or "").strip()
-            if cid_v in ("fushiginaame", "nakayoshipofuin"):
+            if cid_v in (FUSHIGI_NA_AME, NAKAYOSHI_POFIN):
                 return 600
-            if cid_v == "haipaboru":
+            if cid_v == HYPER_BALL:
                 return 550
             return 400
         return 100
@@ -3017,7 +3041,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
     if state.support_used_this_turn:
         return False
     cid = getattr(card, "id", "")
-    if _is_first_player_first_turn(state) and cid != "zeiyu":
+    if _is_first_player_first_turn(state) and cid != ZEIYU:
         return False
 
     # デッキ切れ防止: 山札が少ないときにドロー系サポートを使わない。
@@ -3027,17 +3051,17 @@ def use_support(state: GameState, hand_index: int) -> bool:
     # リーリエの決心は手札を山札に戻すので実質デッキ減少は少ない。
     # ゼイユ/博士は手札をトラッシュして山札から引くのでデッキが大きく減る。
     _NET_DRAW_COSTS = {
-        "riirienokesshin": 0,  # 手札→山に戻してから引く: net ≈ 0
-        "zeiyu": 5,             # 手札トラッシュ＋山から5枚引く
-        "hakasenokenkyuu": 7,
+        RIRIE_NO_KESSHIN: 0,  # 手札→山に戻してから引く: net ≈ 0
+        ZEIYU: 5,             # 手札トラッシュ＋山から5枚引く
+        HAKASE_NO_KENKYU: 7,
         "hakasenokenkyuufutouhakase": 7,
-        "tanpankozou": 0,       # 手札→山に戻して5枚引く: net ≈ 0 (手札5枚程度)
+        TANPAN_KOZOU: 0,       # 手札→山に戻して5枚引く: net ≈ 0 (手札5枚程度)
         "nemo": 3, "nemokako": 3, "nemomirai": 3,
-        "kihada": 2,
-        "jixyajjiman": 0,       # ジャッジマンは手札→山に戻して4枚引く
-        "hikari": 4,            # 最大 4 枚ドロー
-        "meinohagemashi": 0,    # トラッシュからエネを付ける（デッキからドローしない）
-        "akamatsu": 0,          # エネを取るだけ（デッキ切れリスクは低い、エネ加速の生命線）
+        KIHADA: 2,
+        JUDGE: 0,       # ジャッジマンは手札→山に戻して4枚引く
+        HIKARI: 4,            # 最大 4 枚ドロー
+        MEI_NO_HAGEMASHI: 0,    # トラッシュからエネを付ける（デッキからドローしない）
+        AKAMATSU: 0,          # エネを取るだけ（デッキ切れリスクは低い、エネ加速の生命線）
     }
     net_draw = _NET_DRAW_COSTS.get(cid, 0)
     # 固定ガード: draw直後のデッキが残りサイド×4+余裕分を下回るなら使わない
@@ -3046,23 +3070,23 @@ def use_support(state: GameState, hand_index: int) -> bool:
         return False
     # リーリエ等のシャッフルドロー系でも、デッキ自体が極端に少ないなら控える
     _DRAW_COUNTS = {
-        "riirienokesshin": 8,
-        "zeiyu": 5,
-        "hakasenokenkyuu": 7,
+        RIRIE_NO_KESSHIN: 8,
+        ZEIYU: 5,
+        HAKASE_NO_KENKYU: 7,
         "hakasenokenkyuufutouhakase": 7,
-        "tanpankozou": 5,
+        TANPAN_KOZOU: 5,
         "nemo": 3, "nemokako": 3, "nemomirai": 3,
-        "kihada": 2,
-        "jixyajjiman": 4,
-        "hikari": 4,
-        "meinohagemashi": 0,    # トラッシュからエネ付与（ドローなし）
-        "akamatsu": 2,
+        KIHADA: 2,
+        JUDGE: 4,
+        HIKARI: 4,
+        MEI_NO_HAGEMASHI: 0,    # トラッシュからエネ付与（ドローなし）
+        AKAMATSU: 2,
     }
     draw_count = _DRAW_COUNTS.get(cid, 0)
     if draw_count > 0 and deck_size <= draw_count + 3:
         return False
     effect = getattr(card, "effect", "")
-    if cid == "zeiyu":
+    if cid == ZEIYU:
         used = p.hand.pop(hand_index)
         p.discard.extend(p.hand)
         p.hand.clear()
@@ -3074,7 +3098,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         drawn_names = ", ".join(_card_label(c) for c in drawn)
         state.log(f"{state.player_name(state.current_player)}: ゼイユを使用 → 手札をすべてトラッシュし、山札から 5 枚ドロー → [{drawn_names}]")
         return True
-    if cid == "bosunoshirei":
+    if cid == BOSS_NO_SHIREI:
         opp = state.defending_player_state()
         if not opp.bench or not opp.active:
             return False
@@ -3216,7 +3240,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         state.support_used_this_turn = True
         state.log(f"{state.player_name(state.current_player)}: ボスの指令を使用 → 相手のベンチとバトルポケモンを入れ替えた（{opp.active.card.name} がバトル場に）")
         return True
-    if cid == "riirienokesshin":
+    if cid == RIRIE_NO_KESSHIN:
         used_card = p.hand[hand_index]
         rest = [p.hand[j] for j in range(len(p.hand)) if j != hand_index]
         p.deck.extend(rest)
@@ -3243,7 +3267,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         new_second = _card_label(top2[0])
         state.log(f"{state.player_name(state.current_player)}: 暗号マニアの解読を使用 → 山札の上 2 枚の順序を入れ替えた（一番上: {new_top}、2 枚目: {new_second}）")
         return True
-    if cid == "tanpankozou":
+    if cid == TANPAN_KOZOU:
         n_hand = len(p.hand)
         used_card = p.hand[hand_index]
         rest = [p.hand[j] for j in range(len(p.hand)) if j != hand_index]
@@ -3259,7 +3283,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         drawn_names = ", ".join(_card_label(c) for c in drawn)
         state.log(f"{state.player_name(state.current_player)}: たんぱんこぞうを使用 → 手札 {n_hand} 枚を山札にもどして切り、山札から 5 枚ドロー → [{drawn_names}]（手札 {len(p.hand)} 枚）")
         return True
-    if cid in ("hakasenokenkyuu", "hakasenokenkyuufutouhakase"):
+    if cid in (HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase"):
         p.discard.extend(p.hand)
         p.hand.clear()
         drawn = p.draw(7)
@@ -3269,7 +3293,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         drawn_names = ", ".join(_card_label(c) for c in drawn)
         state.log(f"{state.player_name(state.current_player)}: 博士の研究を使用 → 手札をすべてトラッシュし、山札から 7 枚ドロー → [{drawn_names}]（手札 {len(p.hand)} 枚）")
         return True
-    if cid == "jixyajjiman":
+    if cid == JUDGE:
         opp = state.defending_player_state()
         # デッキ切れ防止: 山札が少ないとき、ジャッジマンで手札を山に戻して山札を回復
         deck_low = len(p.deck) <= 10
@@ -3297,7 +3321,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         state.log(f"{state.player_name(state.current_player)}: ジャッジマンを使用 → おたがい手札を山札にもどして 4 枚ドロー → [{p_drawn_names}]")
         state.support_used_this_turn = True
         return True
-    if cid == "kihada":
+    if cid == KIHADA:
         if len(p.hand) <= 1:
             return False
         if len(p.hand) >= 5:
@@ -3358,7 +3382,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         state.log(f"{state.player_name(state.current_player)}: ミツルの思いやりを使用 → {ex_target.card.name} のHPを全回復（{before_hp} → {cap}）、ついているエネルギー {nrg_count} 個を手札にもどした")
         return True
     # ヒカリ: 山札から「たねポケモン」「1進化ポケモン」「2進化ポケモン」を1枚ずつ手札に加える
-    if cid == "hikari":
+    if cid == HIKARI:
         fetched = []
         # 各進化段階の候補を収集
         basic_candidates = []
@@ -3406,10 +3430,10 @@ def use_support(state: GameState, hand_index: int) -> bool:
         return True
 
     # アカマツ: 山札からタイプの違う基本エネルギーを2枚まで選び、1枚を手札に加え、残りを自分のポケモンにつける
-    if cid == "akamatsu":
+    if cid == AKAMATSU:
         return _use_support_akamatsu(state, hand_index)
 
-    if cid == "buraia":
+    if cid == BURAIA:
         opp = state.defending_player_state()
         if len(opp.prize_pile) != 2:
             return False
@@ -3424,7 +3448,7 @@ def use_support(state: GameState, hand_index: int) -> bool:
         return True
 
     # メイのはげまし: 自分のサイドが相手より多いときのみ使用可。トラッシュから基本エネルギーを2枚まで、自分の2進化ポケモン1匹につける。
-    if cid == "meinohagemashi":
+    if cid == MEI_NO_HAGEMASHI:
         return _use_support_mei(state, hand_index)
 
     if effect == "draw_3" or cid in ("nemo", "nemokako", "nemomirai"):

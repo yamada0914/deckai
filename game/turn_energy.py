@@ -24,6 +24,12 @@ from .turn_trainers import _SUPPORT_IDS_TRASH_WHOLE_HAND
 from .weights import get_evolve_onto_weight
 from .policy_rules_only import pick_energy_attach_candidate
 from .energy_policy import pick_energy_attach_by_policy
+from .card_ids import (
+    FIGHT_GONG,
+    FUSHIGI_NA_AME,
+    FUUSEN,
+    POKEPAD,
+)
 
 
 def _should_attach_for_evolution(p: PlayerState) -> bool:
@@ -200,7 +206,7 @@ def _try_evolve_once(state: GameState) -> bool:
                 # ふしぎなアメが手札にある+ターゲットがドロンチ+ドラメシヤが場にいる
                 # → アメでドラメシヤに乗せる方が得（ドロンチをていさつしれい用に残せる）
                 _has_ame_evo = any(
-                    (getattr(hc, "id", "") or "") == "fushiginaame"
+                    (getattr(hc, "id", "") or "") == FUSHIGI_NA_AME
                     for hc in p.hand
                 )
                 _target_bp_evo = p.active if bench_idx_ is None else p.bench[bench_idx_]
@@ -403,7 +409,7 @@ def _build_energy_attach_input(
 
     ability_already_used = getattr(state, "ability_declared_this_turn", None) == "ルナサイクル"
     has_lunatone_fetch_in_hand = any(
-        (getattr(c, "id", "") in ("faitogongu", "pokepaddo"))
+        (getattr(c, "id", "") in (FIGHT_GONG, POKEPAD))
         or (getattr(c, "name", "") in ("ファイトゴング", "ポケパッド"))
         for c in (p.hand or [])
     )
@@ -427,7 +433,7 @@ def _build_energy_attach_input(
             # ただし逃げるためにエネが必要（ベンチにアタッカーがいる場合）
             _luna_retreat_cost = getattr(p.active.card, "retreat_cost", 1)
             _luna_tool = getattr(p.active, "attached_tool", None)
-            _luna_eff_rc = max(0, _luna_retreat_cost - (2 if _luna_tool and (getattr(_luna_tool, "id", "") or "") == "fuusen" else 0))
+            _luna_eff_rc = max(0, _luna_retreat_cost - (2 if _luna_tool and (getattr(_luna_tool, "id", "") or "") == FUUSEN else 0))
             _luna_needs_retreat_energy = p.active.attached_energy < _luna_eff_rc and p.bench
             if not _luna_needs_retreat_energy:
                 pass  # 逃げ不要 or ベンチなし → エネ付けない
@@ -713,7 +719,7 @@ def _try_attach_energy_auto(state: GameState) -> bool:
         opp = state.defending_player_state()
         raw_rc = getattr(p.active.card, "retreat_cost", 1)
         tool = getattr(p.active, "attached_tool", None)
-        eff_rc = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == "fuusen" else 0))
+        eff_rc = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == FUUSEN else 0))
         # にげコスト1でエネ0（エネ付ければにげられる）
         if eff_rc >= 1 and p.active.attached_energy < eff_rc and p.active.attached_energy + 1 >= eff_rc:
             if opp.active and opp.active.hp is not None and opp.active.hp > 0:

@@ -19,6 +19,19 @@ from __future__ import annotations
 
 import math
 import random
+from .card_ids import (
+    AKAMATSU,
+    BOSS_NO_SHIREI,
+    BURAIA,
+    HAKASE_NO_KENKYU,
+    HIKARI,
+    JUDGE,
+    KIHADA,
+    MEI_NO_HAGEMASHI,
+    RIRIE_NO_KESSHIN,
+    TANPAN_KOZOU,
+    ZEIYU,
+)
 from typing import Any
 
 from card import is_energy, is_support
@@ -36,24 +49,24 @@ from .weights import get_support_use_weight
 # 既知のサポート card_id 固定リスト（順序変更禁止 — モデルの action dim に対応）
 # 新カード追加時はリスト末尾に追加し、既存モデルを再学習すること。
 KNOWN_SUPPORT_IDS: tuple[str, ...] = (
-    "tanpankozou",
-    "hakasenokenkyuu",
+    TANPAN_KOZOU,
+    HAKASE_NO_KENKYU,
     "hakasenokenkyuufutouhakase",   # turn_trainers.py で使われている表記
     "hakasenokenkixyuufutouhakase", # card/data.py の定義上の表記
-    "jixyajjiman",
-    "kihada",
+    JUDGE,
+    KIHADA,
     "nemo",
     "nemokako",
     "nemomirai",
-    "riirienokesshin",
-    "zeiyu",
+    RIRIE_NO_KESSHIN,
+    ZEIYU,
     "angoumanianokaidoku",
-    "bosunoshirei",
+    BOSS_NO_SHIREI,
     "mitsurunoomoiyari",
-    "hikari",
-    "akamatsu",
-    "buraia",
-    "meinohagemashi",
+    HIKARI,
+    AKAMATSU,
+    BURAIA,
+    MEI_NO_HAGEMASHI,
 )
 
 # action id: 0=NOOP, 1..N=KNOWN_SUPPORT_IDS[i-1]
@@ -155,7 +168,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
         score = 0.0
 
         # ---- リーリエの決心（ドロー系） ----
-        if sid == "riirienokesshin":
+        if sid == RIRIE_NO_KESSHIN:
             # 手札3枚以下で最強、5枚以上では弱い
             if hand_size <= 2:
                 score += 5.0
@@ -165,7 +178,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 0.5
 
         # ---- 博士の研究系（ドロー系） ----
-        elif sid in ("hakasenokenkyuu", "hakasenokenkyuufutouhakase", "hakasenokenkixyuufutouhakase"):
+        elif sid in (HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase", "hakasenokenkixyuufutouhakase"):
             if hand_size <= 3:
                 score += 4.0
             elif hand_size <= 5:
@@ -174,7 +187,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 0.3
 
         # ---- ジャッジマン（妨害＋自分リセット） ----
-        elif sid == "jixyajjiman":
+        elif sid == JUDGE:
             # 相手の手札が多いとき妨害効果大
             if opp_hand_size >= 6:
                 score += 3.0
@@ -187,7 +200,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 0.5
 
         # ---- ボスの指令（相手ベンチを引っ張る） ----
-        elif sid == "bosunoshirei":
+        elif sid == BOSS_NO_SHIREI:
             # 相手バトル場を既に倒せるなら、ボスを温存（そのまま殴ればよい）
             from .damage import _max_effective_damage_for_attacker
             can_ko_active = False
@@ -247,7 +260,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                             score += -1.0
 
         # ---- ゼイユ（5枚になるまでドロー） ----
-        elif sid == "zeiyu":
+        elif sid == ZEIYU:
             draw_count = max(0, 5 - hand_size)
             if draw_count >= 3:
                 score += 3.5
@@ -259,7 +272,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += -5.0  # 手札5枚以上 → 引く枚数なし、デッキを減らすだけ
             # Fix K: ボスの指令が手札にあり、サイド残り少ない → ゼイユで捨てると勝ちを逃す
             _hand_has_boss = any(
-                (getattr(c, "id", "") or "") == "bosunoshirei"
+                (getattr(c, "id", "") or "") == BOSS_NO_SHIREI
                 for c in (p.hand or []) if c is not card
             )
             if _hand_has_boss:
@@ -302,7 +315,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 0.2
 
         # ---- キハダ / ネモ系（汎用ドロー） ----
-        elif sid in ("kihada", "nemo", "nemokako", "nemomirai"):
+        elif sid in (KIHADA, "nemo", "nemokako", "nemomirai"):
             if hand_size <= 3:
                 score += 2.5
             elif hand_size <= 5:
@@ -311,7 +324,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 0.2
 
         # ---- タンパン小僧 ----
-        elif sid == "tanpankozou":
+        elif sid == TANPAN_KOZOU:
             if ko_active is None:
                 ko_active = _can_ko_opponent_active(state)
             if not ko_active:
@@ -320,7 +333,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += -0.5  # そのまま倒せるなら不要
 
         # ---- ヒカリ（汎用ドロー） ----
-        elif sid == "hikari":
+        elif sid == HIKARI:
             if hand_size <= 3:
                 score += 2.0
             elif hand_size <= 5:
@@ -329,7 +342,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 0.2
 
         # ---- アカマツ（山札から2タイプのエネルギー取得） ----
-        elif sid == "akamatsu":
+        elif sid == AKAMATSU:
             if is_dragapult_deck_for_player(state, state.current_player):
                 # ドラパルトexデッキ: アカマツは炎+超の確保→ファントムダイブ発動に直結
                 # 場にドラパルトex/ドロンチ/ドラメシヤがいて、エネルギーが足りないなら超高スコア
@@ -354,7 +367,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 1.5  # 非ドラパルトデッキでも最低限有用
 
         # ---- メイのはげまし（トラッシュからStage2にエネ2枚） ----
-        elif sid == "meinohagemashi":
+        elif sid == MEI_NO_HAGEMASHI:
             if is_dragapult_deck_for_player(state, state.current_player):
                 # 条件チェック: サイドが相手より多い（遅れている）
                 _behind_on_prizes = len(p.prize_pile) > len(opp.prize_pile)
@@ -378,7 +391,7 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                 score += 1.0
 
         # ---- ブライア（テラスタルKOでサイド+1） ----
-        elif sid == "buraia":
+        elif sid == BURAIA:
             if len(opp.prize_pile) == 2:
                 score += 3.0  # 条件一致
             else:

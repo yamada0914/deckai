@@ -6,27 +6,44 @@ from .deck_strategies import is_dragapult_deck_for_player, DRAPA_LINE_NAMES, DRA
 from .state import BattlePokemon, GameState, PlayerState, _is_first_player_first_turn, _log_choice
 from .trainers import attach_tool, use_potion, use_support, use_trainer_goods
 from .weights import get_goods_use_weight, get_support_use_weight, get_tool_attach_weight
+from .card_ids import (
+    AKAMATSU,
+    FIGHT_GONG,
+    FUUSEN,
+    HAKASE_NO_KENKYU,
+    HIKARI,
+    HYPER_BALL,
+    JUDGE,
+    KIHADA,
+    MEI_NO_HAGEMASHI,
+    POKEPAD,
+    RIRIE_NO_KESSHIN,
+    SUPER_BALL,
+    TANPAN_KOZOU,
+    UNFAIR_STAMP,
+    ZEIYU,
+)
 
-_HAND_REFRESH_SUPPORT_IDS = ("tanpankozou", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "kihada")
+_HAND_REFRESH_SUPPORT_IDS = (TANPAN_KOZOU, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase", JUDGE, KIHADA)
 # 暗号マニアの解読（ルナサイクルより前に使う想定だが、一般サポート枠では山を切った後に回す）
 _SUPPORT_ID_ANGOUMANIANOKAIDOKU = "angoumanianokaidoku"
 # use_support で自分の山札を shuffle するサポート（暗号より先に使う／1 ターン 1 枚のため使用後は手札にあっても無視）
 _SUPPORT_IDS_SHUFFLE_OWN_DECK = frozenset(
     {
-        "riirienokesshin",
-        "tanpankozou",
-        "jixyajjiman",
+        RIRIE_NO_KESSHIN,
+        TANPAN_KOZOU,
+        JUDGE,
     }
 )
-_SUPPORT_IDS_NO_DISCARD = ("nemo", "nemokako", "nemomirai", "kihada", "hikari", "meinohagemashi", "akamatsu")
-_SUPPORT_IDS_DISCARD_ALL = ("hakasenokenkyuu", "hakasenokenkyuufutouhakase")
+_SUPPORT_IDS_NO_DISCARD = ("nemo", "nemokako", "nemomirai", KIHADA, HIKARI, MEI_NO_HAGEMASHI, AKAMATSU)
+_SUPPORT_IDS_DISCARD_ALL = (HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase")
 # 手札をすべてトラッシュするサポート（エネを貼らず手札に残してトラッシュへ送り、夜のタンカ等のターゲットにする）
-_SUPPORT_IDS_TRASH_WHOLE_HAND = ("zeiyu",) + _SUPPORT_IDS_DISCARD_ALL
-_SUPPORT_IDS_HAND_REFRESH_FIRST = ("riirienokesshin", "zeiyu") + _HAND_REFRESH_SUPPORT_IDS
+_SUPPORT_IDS_TRASH_WHOLE_HAND = (ZEIYU,) + _SUPPORT_IDS_DISCARD_ALL
+_SUPPORT_IDS_HAND_REFRESH_FIRST = (RIRIE_NO_KESSHIN, ZEIYU) + _HAND_REFRESH_SUPPORT_IDS
 
 # 手札を「トラッシュする」刷新の直前にハイパーボールを優先。
 # リーリエの決心のように山札に戻す系では、マキシマムベルト等「捨てたくない」カードを残したいので対象外。
-_HAIPABORU_BEFORE_HAND_REFRESH_SUPPORT_IDS = ("zeiyu",) + _SUPPORT_IDS_DISCARD_ALL
+_HAIPABORU_BEFORE_HAND_REFRESH_SUPPORT_IDS = (ZEIYU,) + _SUPPORT_IDS_DISCARD_ALL
 
 
 def hand_has_remaining_shuffle_effect_for_angou(state: GameState, p: PlayerState) -> bool:
@@ -54,19 +71,19 @@ def hand_has_remaining_shuffle_effect_for_angou(state: GameState, p: PlayerState
 
         if cid == "otodokedoron" or nm == "おとどけドローン":
             return True
-        if cid == "supaboru" or nm == "スーパーボール":
+        if cid == SUPER_BALL or nm == "スーパーボール":
             if p.deck:
                 return True
             continue
-        if cid == "haipaboru" or nm == "ハイパーボール":
+        if cid == HYPER_BALL or nm == "ハイパーボール":
             if len(p.hand) >= 3 and p.deck:
                 return True
             continue
-        if cid == "faitogongu" or nm == "ファイトゴング":
+        if cid == FIGHT_GONG or nm == "ファイトゴング":
             if p.deck:
                 return True
             continue
-        if cid == "pokepaddo" or nm == "ポケパッド":
+        if cid == POKEPAD or nm == "ポケパッド":
             if p.deck:
                 return True
             continue
@@ -74,7 +91,7 @@ def hand_has_remaining_shuffle_effect_for_angou(state: GameState, p: PlayerState
             if p.bench and p.deck:
                 return True
             continue
-        if cid == "anfeasutanpu" or nm == "アンフェアスタンプ":
+        if cid == UNFAIR_STAMP or nm == "アンフェアスタンプ":
             _any_ko_as = getattr(state, "any_ko_by_opponent_last_turn", [False, False])
             if _any_ko_as[state.current_player] or state.our_ko_by_damage_last_turn[state.current_player]:
                 return True
@@ -167,7 +184,7 @@ def _try_attach_one_tool(state: GameState) -> bool:
                 tier = 2_000_000
             else:
                 tier = 1_000_000
-        elif tool_id == "fuusen":
+        elif tool_id == FUUSEN:
             bp_name = (getattr(bp.card, "name", "") or "").strip()
             # バトル場が攻撃できない＋にげコスト≥1 → バトル場に付けてにげる（縛られ防止）
             opp = state.defending_player_state()
@@ -240,7 +257,7 @@ def _support_try_order(p: PlayerState, state: GameState) -> list[int]:
         cid = getattr(c, "id", "") or ""
         # ドラパルトexデッキ: アカマツ/メイはファントムダイブに届く時のみ最優先
         energy_supp_priority = 1
-        if _drapa_akamatsu_enables_phantom and cid in ("akamatsu", "meinohagemashi"):
+        if _drapa_akamatsu_enables_phantom and cid in (AKAMATSU, MEI_NO_HAGEMASHI):
             energy_supp_priority = -1  # 最優先
         hand_refresh_first = 0 if cid in _SUPPORT_IDS_HAND_REFRESH_FIRST else 1
         # 山札を切るグッズ／サポートを手札に残したまま暗号を切らない
@@ -250,7 +267,7 @@ def _support_try_order(p: PlayerState, state: GameState) -> list[int]:
         w = get_support_use_weight(weights, c)
         # ジャッジマン: 相手の手札が多い（6枚以上）時に優先度大幅UP
         # おたがい4枚にリセットするので、相手の手札が多いほど妨害効果が高い
-        if cid == "jixyajjiman":
+        if cid == JUDGE:
             opp_hand = len(state.defending_player_state().hand)
             if opp_hand >= 6:
                 w += 300.0  # 相手の手札を大幅に減らせる → 高優先
@@ -310,11 +327,11 @@ def _try_support_no_discard_only(state: GameState) -> bool:
     # リーリエの決心が手札にあるならリーリエで引き直す方が良い
     if _is_drapa_nds and state.turn_count <= 1:
         _has_lillie_nds = any(
-            is_support(c) and (getattr(c, "id", "") or "") == "riirienokesshin"
+            is_support(c) and (getattr(c, "id", "") or "") == RIRIE_NO_KESSHIN
             for c in p.hand
         )
         if _has_lillie_nds:
-            no_discard = [(i, c) for i, c in no_discard if (getattr(c, "id", "") or "") != "hikari"]
+            no_discard = [(i, c) for i, c in no_discard if (getattr(c, "id", "") or "") != HIKARI]
             if not no_discard:
                 return False
 
@@ -323,11 +340,11 @@ def _try_support_no_discard_only(state: GameState) -> bool:
         cid = getattr(c, "id", "") or ""
         w = get_support_use_weight(weights, c)
         if _is_drapa_nds:
-            if cid == "meinohagemashi":
+            if cid == MEI_NO_HAGEMASHI:
                 w += 200.0
-            elif cid == "akamatsu" and _nds_phantom_reachable:
+            elif cid == AKAMATSU and _nds_phantom_reachable:
                 w += 150.0
-            elif cid == "akamatsu":
+            elif cid == AKAMATSU:
                 w -= 100.0
         return -w
 
@@ -383,7 +400,7 @@ def _try_goods_before_hand_refresh(state: GameState) -> bool:
     if is_dragapult_deck_for_player(state, state.current_player):
         _has_draw_supp_gbhr = any(
             is_support(c) and (getattr(c, "id", "") or "") in (
-                "riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari",
+                RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU, HIKARI,
             )
             for c in p.hand
         )
@@ -409,15 +426,15 @@ def _try_goods_before_hand_refresh(state: GameState) -> bool:
             if is_goods(c)
             and getattr(c, "effect", None) != "swap_active"
             and not getattr(c, "is_tool", False)
-            and not (getattr(c, "id", None) == "haipaboru" and _is_first_player_first_turn(state) and len(p.bench) > 0)
-            and not (getattr(c, "id", None) == "haipaboru" and _drapa_skip_hb_gbhr)
+            and not (getattr(c, "id", None) == HYPER_BALL and _is_first_player_first_turn(state) and len(p.bench) > 0)
+            and not (getattr(c, "id", None) == HYPER_BALL and _drapa_skip_hb_gbhr)
         ]
 
     def _goods_sort_before_refresh(x):
         i, c = x
         w = get_goods_use_weight(weights, c)
         cid = getattr(c, "id", "") or ""
-        if wants_haipaboru_first and cid == "haipaboru":
+        if wants_haipaboru_first and cid == HYPER_BALL:
             return (0, -w, i)
         if wants_haipaboru_first:
             return (1, -w, i)

@@ -1,6 +1,27 @@
 """ターン実行（にげる・エネルギー付与・ポケモンチェック・run_turn_auto・run_game_auto）。"""
 import math
 import random
+from .card_ids import (
+    BOSS_NO_SHIREI,
+    BURAIA,
+    FIGHT_GONG,
+    FUUSEN,
+    HAKASE_NO_KENKYU,
+    HIKARI,
+    HYPER_BALL,
+    JUDGE,
+    KIHADA,
+    NAKAYOSHI_POFIN,
+    POKEMON_IREKAE,
+    POKEPAD,
+    RIRIE_NO_KESSHIN,
+    SPECIAL_RED_CARD,
+    SUPER_BALL,
+    TANPAN_KOZOU,
+    UNFAIR_STAMP,
+    YORU_NO_TANKA,
+    ZEIYU,
+)
 
 from card import is_energy, is_goods, is_pokemon, is_stadium, is_support
 
@@ -89,7 +110,7 @@ from .value_models import load_value_model_pt, load_state_value_model_pt
 
 from .state import _prizes_for_ko, PRIZE_COUNT
 
-_BALL_GOODS_IDS = ("faitogongu", "pokepaddo", "supaboru", "haipaboru", "otodokedoron", "pokemonkixyatchixya", "nakayoshipofuin")
+_BALL_GOODS_IDS = (FIGHT_GONG, POKEPAD, SUPER_BALL, HYPER_BALL, "otodokedoron", "pokemonkixyatchixya", NAKAYOSHI_POFIN)
 
 # ソルロック攻撃セットアップ（ルナトーン必須）:
 # 「次ターンのドローが確約されている」扱いのため、手札に手札補充サポートがある場合のみ
@@ -98,13 +119,13 @@ _SOLROCK_NEXT_TURN_DRAW_SUPPORT_IDS = (
     "nemo",
     "nemokako",
     "nemomirai",
-    "kihada",
-    "tanpankozou",
-    "hakasenokenkyuu",
+    KIHADA,
+    TANPAN_KOZOU,
+    HAKASE_NO_KENKYU,
     "hakasenokenkyuufutouhakase",
-    "jixyajjiman",
-    "riirienokesshin",
-    "zeiyu",
+    JUDGE,
+    RIRIE_NO_KESSHIN,
+    ZEIYU,
 )
 
 
@@ -161,7 +182,7 @@ def _try_faitogongu_engine_opener(state: GameState) -> bool:
     gong_ix = [
         i
         for i, c in enumerate(p.hand)
-        if is_goods(c) and (getattr(c, "id", "") == "faitogongu" or getattr(c, "name", "") == "ファイトゴング")
+        if is_goods(c) and (getattr(c, "id", "") == FIGHT_GONG or getattr(c, "name", "") == "ファイトゴング")
     ]
     if len(gong_ix) < 2:
         return False
@@ -187,14 +208,14 @@ def _try_faitogongu_engine_opener(state: GameState) -> bool:
         indices = [
             i
             for i, c in enumerate(p.hand)
-            if is_goods(c) and (getattr(c, "id", "") == "faitogongu" or getattr(c, "name", "") == "ファイトゴング")
+            if is_goods(c) and (getattr(c, "id", "") == FIGHT_GONG or getattr(c, "name", "") == "ファイトゴング")
         ]
         if not indices:
             break
         idx = indices[0]
         if use_trainer_goods(state, idx):
             used_any = True
-            _log_choice(state, "goods", card_id="faitogongu")
+            _log_choice(state, "goods", card_id=FIGHT_GONG)
         else:
             break
     return used_any
@@ -220,7 +241,7 @@ def retreat(state: GameState, bench_index: int) -> bool:
     old_active = p.active
     cost = getattr(old_active.card, "retreat_cost", 1)
     tool = getattr(old_active, "attached_tool", None)
-    if tool and (getattr(tool, "id", "") or "") == "fuusen":
+    if tool and (getattr(tool, "id", "") or "") == FUUSEN:
         cost = max(0, cost - 2)
     if old_active.attached_energy < cost:
         return False
@@ -462,7 +483,7 @@ def _try_swap_for_survival(state: GameState) -> bool:
     _SWAP_SURVIVE_SCALE = 10000
     opp_remaining_prizes = len(opp.prize_pile) if hasattr(opp, "prize_pile") else PRIZE_COUNT
     for i, c in enumerate(p.hand):
-        if not is_goods(c) or (getattr(c, "effect", None) != "swap_active" and getattr(c, "id", "") not in ("pokemon_irekae", "pokemonirekae")):
+        if not is_goods(c) or (getattr(c, "effect", None) != "swap_active" and getattr(c, "id", "") not in ("pokemon_irekae", POKEMON_IREKAE)):
             continue
         weights = state.get_weights_for_player(state.current_player)
 
@@ -516,7 +537,7 @@ def _try_swap_for_survival(state: GameState) -> bool:
         if getattr(p.active, "special_state", None) not in ("sleep", "paralysis"):
             raw_rc = getattr(p.active.card, "retreat_cost", 1)
             tool = getattr(p.active, "attached_tool", None)
-            eff_retreat = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == "fuusen" else 0))
+            eff_retreat = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == FUUSEN else 0))
             if eff_retreat == 0 and not getattr(state, "retreat_used_this_turn", False):
                 continue
 
@@ -592,7 +613,7 @@ def _try_retreat_when_koed(state: GameState) -> bool:
             if not _fd_ready_on_bench:
                 return False  # FD未準備 → スボミーで壁+グッズロックで時間稼ぎ
     _raw_retreat = getattr(p.active.card, "retreat_cost", 1) if p.active else 0
-    retreat_cost = max(0, _raw_retreat - (2 if p.active and (getattr(p.active, "attached_tool", None) and (getattr(p.active.attached_tool, "id", "") or "") == "fuusen") else 0))
+    retreat_cost = max(0, _raw_retreat - (2 if p.active and (getattr(p.active, "attached_tool", None) and (getattr(p.active.attached_tool, "id", "") or "") == FUUSEN) else 0))
     can_retreat = p.active and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
     has_bench_survivor = p.bench and any(bp.hp > opp_max_effective for bp in p.bench)
     can_ko_from_bench = opp.active and any(
@@ -692,7 +713,7 @@ def _try_retreat_voluntary(state: GameState) -> bool:
         return False
     raw_rc = getattr(p.active.card, "retreat_cost", 1)
     tool = getattr(p.active, "attached_tool", None)
-    eff_retreat = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == "fuusen" else 0))
+    eff_retreat = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == FUUSEN else 0))
     # にげるコストが払えないなら不可
     if p.active.attached_energy < eff_retreat:
         return False
@@ -764,7 +785,7 @@ def _try_swap_to_attacker(state: GameState) -> bool:
     swap_indices = [
         i for i, c in enumerate(p.hand)
         if is_goods(c) and (getattr(c, "effect", None) == "swap_active"
-                           or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae"))
+                           or getattr(c, "id", "") in ("pokemon_irekae", POKEMON_IREKAE))
     ]
     if not swap_indices:
         return False
@@ -824,7 +845,7 @@ def _do_attack_phase(state: GameState, p: PlayerState, opp: PlayerState) -> bool
         # 1. ボスの指令が手札にあり未使用なら使う
         if not state.support_used_this_turn:
             for _hi, _hc in enumerate(p.hand):
-                if (getattr(_hc, "id", "") or "") == "bosunoshirei":
+                if (getattr(_hc, "id", "") or "") == BOSS_NO_SHIREI:
                     if use_support(state, _hi):
                         p = state.active_player_state()
                         opp = state.defending_player_state()
@@ -884,7 +905,7 @@ def _do_attack_phase(state: GameState, p: PlayerState, opp: PlayerState) -> bool
                 if not getattr(state, "retreat_used_this_turn", False):
                     _rrc = getattr(p.active.card, "retreat_cost", 1)
                     _rtool = getattr(p.active, "attached_tool", None)
-                    _reff_rc = max(0, _rrc - (2 if _rtool and (getattr(_rtool, "id", "") or "") == "fuusen" else 0))
+                    _reff_rc = max(0, _rrc - (2 if _rtool and (getattr(_rtool, "id", "") or "") == FUUSEN else 0))
                     if p.active.attached_energy >= _reff_rc:
                         if retreat(state, _riolu_best_bi):
                             _riolu_retreated = True
@@ -899,7 +920,7 @@ def _do_attack_phase(state: GameState, p: PlayerState, opp: PlayerState) -> bool
                     _rswap_indices = [
                         _ri for _ri, _rc in enumerate(p.hand)
                         if is_goods(_rc) and (getattr(_rc, "effect", None) == "swap_active"
-                                              or getattr(_rc, "id", "") in ("pokemon_irekae", "pokemonirekae"))
+                                              or getattr(_rc, "id", "") in ("pokemon_irekae", POKEMON_IREKAE))
                     ]
                     if _rswap_indices:
                         if use_pokemon_swap(state, _rswap_indices[0], _riolu_best_bi):
@@ -921,7 +942,7 @@ def _do_attack_phase(state: GameState, p: PlayerState, opp: PlayerState) -> bool
         if our_dmg_now < opp.active.hp:
             raw_rc = getattr(p.active.card, "retreat_cost", 1)
             tool = getattr(p.active, "attached_tool", None)
-            eff_rc = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == "fuusen" else 0))
+            eff_rc = max(0, raw_rc - (2 if tool and (getattr(tool, "id", "") or "") == FUUSEN else 0))
             if p.active.attached_energy >= eff_rc:
                 for bi, bp in enumerate(p.bench):
                     bench_dmg = _max_effective_damage_for_attacker(state, bp, opp.active, state.current_player)
@@ -1106,7 +1127,7 @@ def _do_attack_phase(state: GameState, p: PlayerState, opp: PlayerState) -> bool
         else base_dmg
     )
     _raw_rc = getattr(p.active.card, "retreat_cost", 1)
-    retreat_cost = max(0, _raw_rc - (2 if getattr(p.active, "attached_tool", None) and (getattr(p.active.attached_tool, "id", "") or "") == "fuusen" else 0))
+    retreat_cost = max(0, _raw_rc - (2 if getattr(p.active, "attached_tool", None) and (getattr(p.active.attached_tool, "id", "") or "") == FUUSEN else 0))
     can_retreat_here = (
         bool(p.bench)
         and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
@@ -1418,7 +1439,7 @@ def run_turn_auto(state: GameState) -> bool:
             while len(p.bench) < 5:
                 _pf_idx = None
                 for _pi, _pc in enumerate(p.hand):
-                    if (getattr(_pc, "id", "") or "") == "nakayoshipofuin":
+                    if (getattr(_pc, "id", "") or "") == NAKAYOSHI_POFIN:
                         _pf_idx = _pi
                         break
                 if _pf_idx is None:
@@ -1458,7 +1479,7 @@ def run_turn_auto(state: GameState) -> bool:
             # ファイトゴングでエネ取得→付与→KO��きるか
             _p_sw = state.active_player_state()
             if not state.energy_attached_this_turn and any(is_energy(c) for c in _p_sw.hand) is False:
-                _fg_idx = next((i for i, c in enumerate(_p_sw.hand) if getattr(c, "id", "") == "faitogongu"), None)
+                _fg_idx = next((i for i, c in enumerate(_p_sw.hand) if getattr(c, "id", "") == FIGHT_GONG), None)
                 if _fg_idx is not None:
                     # ファイトゴングで闘エネまたは基本闘エネを取れるか
                     _has_energy_in_deck = any(
@@ -1526,10 +1547,10 @@ def run_turn_auto(state: GameState) -> bool:
                 _ko_luna_via_gong = (
                     not _ko_luna_on_field
                     and _field_has_pokemon(_p_ko, _is_solrock)
-                    and any(getattr(c, "id", "") == "faitogongu" for c in _p_ko.hand)
+                    and any(getattr(c, "id", "") == FIGHT_GONG for c in _p_ko.hand)
                     and any(_is_lunatone(dc) for dc in _p_ko.deck if is_pokemon(dc))
                 )
-                _ko_has_tanka = any(getattr(c, "id", "") == "yorunotanka" for c in _p_ko.hand)
+                _ko_has_tanka = any(getattr(c, "id", "") == YORU_NO_TANKA for c in _p_ko.hand)
                 _ko_should_luna_first = (
                     (_ko_luna_on_field or _ko_luna_via_gong)
                     and getattr(state, "ability_declared_this_turn", None) != "ルナサイクル"
@@ -1585,7 +1606,7 @@ def run_turn_auto(state: GameState) -> bool:
                     if bi is not None:
                         retreat(state, bi)
                 elif step.action == "fight_gong":
-                    fg_idx = next((i for i, c in enumerate(p_plan.hand) if getattr(c, "id", "") == "faitogongu"), None)
+                    fg_idx = next((i for i, c in enumerate(p_plan.hand) if getattr(c, "id", "") == FIGHT_GONG), None)
                     if fg_idx is not None:
                         use_trainer_goods(state, fg_idx)
                 elif step.action == "bench":
@@ -1620,7 +1641,7 @@ def run_turn_auto(state: GameState) -> bool:
                         return _orig_find(p)
                     _gt._find_pokemon_for_haipaboru = _plan_find
                     try:
-                        hb_idx = next((i for i, c in enumerate(p_plan.hand) if getattr(c, "id", "") == "haipaboru"), None)
+                        hb_idx = next((i for i, c in enumerate(p_plan.hand) if getattr(c, "id", "") == HYPER_BALL), None)
                         if hb_idx is not None:
                             use_trainer_goods(state, hb_idx)
                     finally:
@@ -1714,7 +1735,7 @@ def run_turn_auto(state: GameState) -> bool:
                 _drapa_evo_pending = _has_drapa_hand and _has_doronchi_field
             _has_hr_pre_evo = any(
                 is_support(c) and (getattr(c, "id", "") or "") in (
-                    "riirienokesshin", "zeiyu", "hakasenokenkyuu",
+                    RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU,
                 )
                 for c in p.hand
             ) and not state.support_used_this_turn
@@ -1735,7 +1756,7 @@ def run_turn_auto(state: GameState) -> bool:
                 # ただしリーリエの決心等が手札にある場合はリーリエを先に使う
                 _has_hand_refresh_for_teisatsu = any(
                     is_support(c) and (getattr(c, "id", "") or "") in (
-                        "riirienokesshin", "zeiyu", "hakasenokenkyuu",
+                        RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU,
                     )
                     for c in p.hand
                 ) and not state.support_used_this_turn
@@ -1815,7 +1836,7 @@ def run_turn_auto(state: GameState) -> bool:
             if _is_drapa_deck:
                 _has_draw_support_for_hb = any(
                     is_support(c) and (getattr(c, "id", "") or "") in (
-                        "riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari",
+                        RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU, HIKARI,
                     )
                     for c in p.hand
                 )
@@ -1846,7 +1867,7 @@ def run_turn_auto(state: GameState) -> bool:
                 if _skip_hb:
                     ball_candidates = [
                         (i, c) for i, c in ball_candidates
-                        if getattr(c, "id", "") != "haipaboru"
+                        if getattr(c, "id", "") != HYPER_BALL
                     ]
 
             # ドラパルトexデッキ: ベンチ満員時はHBをスキップ（ニャースex等を取っても出せない）
@@ -1859,7 +1880,7 @@ def run_turn_auto(state: GameState) -> bool:
                 if _has_hand_refresh and not state.support_used_this_turn:
                     ball_candidates = [
                         (i, c) for i, c in ball_candidates
-                        if getattr(c, "id", "") != "haipaboru"
+                        if getattr(c, "id", "") != HYPER_BALL
                     ]
 
             def _ball_goods_sort_key(x):
@@ -1868,16 +1889,16 @@ def run_turn_auto(state: GameState) -> bool:
                 # ドラパルトexデッキ: なかよしポフィン→ポケパッド→HBの順
                 # HBは温存してニャースex(→サポートサーチ)に使いたい
                 if _is_drapa_deck:
-                    if cid == "nakayoshipofuin":
+                    if cid == NAKAYOSHI_POFIN:
                         return (-2, 0, i)
-                    if cid == "pokepaddo":
+                    if cid == POKEPAD:
                         return (-1, 0, i)
                     if cid == "pokemonkixyatchixya":
                         return (0, 0, i)
-                    if cid == "haipaboru":
+                    if cid == HYPER_BALL:
                         # 序盤はHBを温存（ポケパッド/ポフィンで展開できる間は使わない）
                         _has_poffin_or_pad = any(
-                            getattr(hc, "id", "") in ("nakayoshipofuin", "pokepaddo")
+                            getattr(hc, "id", "") in (NAKAYOSHI_POFIN, POKEPAD)
                             for hc in p.hand
                         )
                         if _has_poffin_or_pad and state.turn_count <= 3:
@@ -1887,9 +1908,9 @@ def run_turn_auto(state: GameState) -> bool:
                 # 非ドラパルト: 既存ロジック
                 if cid == "pokemonkixyatchixya":
                     return (0, 0, i)
-                if cid in ("faitogongu", "pokepaddo"):
+                if cid in (FIGHT_GONG, POKEPAD):
                     return (0, 1, i)
-                if wants_haipaboru_first and cid == "haipaboru":
+                if wants_haipaboru_first and cid == HYPER_BALL:
                     return (1, 0, i)
                 if wants_haipaboru_first:
                     return (1, 1, i)
@@ -1923,7 +1944,7 @@ def run_turn_auto(state: GameState) -> bool:
                     _try_put_bench_until_full()
                     p = state.active_player_state()
                     _engine_break = False
-                    if used_cid in ("faitogongu", "pokepaddo"):
+                    if used_cid in (FIGHT_GONG, POKEPAD):
                         # エンジンチェック
                         if (
                             _field_has_pokemon(p, _is_lunatone)
@@ -1951,7 +1972,7 @@ def run_turn_auto(state: GameState) -> bool:
                     # ただしリーリエの決心等が手札にある場合はリーリエを先に使う
                     _has_hr_teisatsu2 = any(
                         is_support(c) and (getattr(c, "id", "") or "") in (
-                            "riirienokesshin", "zeiyu", "hakasenokenkyuu",
+                            RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU,
                         )
                         for c in p.hand
                     ) and not state.support_used_this_turn
@@ -2024,7 +2045,7 @@ def run_turn_auto(state: GameState) -> bool:
                     if not can_ko_after_attach:
                         _raw_rc = getattr(p.active.card, "retreat_cost", 1) if p.active else 99
                         _tool = getattr(p.active, "attached_tool", None) if p.active else None
-                        _eff_rc = max(0, _raw_rc - (2 if _tool and (getattr(_tool, "id", "") or "") == "fuusen" else 0))
+                        _eff_rc = max(0, _raw_rc - (2 if _tool and (getattr(_tool, "id", "") or "") == FUUSEN else 0))
                         _can_retreat_now = (
                             p.active
                             and not getattr(state, "retreat_used_this_turn", False)
@@ -2037,7 +2058,7 @@ def run_turn_auto(state: GameState) -> bool:
                             or (_can_retreat_now and _eff_rc == 1 and p.active.attached_energy == 0)
                             # いれかえグッズ
                             or any(is_goods(c) and (getattr(c, "effect", None) == "swap_active"
-                                   or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae"))
+                                   or getattr(c, "id", "") in ("pokemon_irekae", POKEMON_IREKAE))
                                    for c in p.hand)
                         )
                         if can_switch:
@@ -2064,8 +2085,8 @@ def run_turn_auto(state: GameState) -> bool:
         # ジャッジマン/リーリエ: 山に戻る → 引き直しで戻る保証なし。先に付けた方が得。
         # 将来的にはここの判断も学習で最適化する想定。
         _HAND_REFRESH_SUPPORT_IDS_FOR_ENERGY = (
-            "zeiyu", "hakasenokenkyuu", "hakasenokenkyuufutouhakase",
-            "jixyajjiman", "riirienokesshin",
+            ZEIYU, HAKASE_NO_KENKYU, "hakasenokenkyuufutouhakase",
+            JUDGE, RIRIE_NO_KESSHIN,
         )
         if (
             not state.energy_attached_this_turn
@@ -2095,10 +2116,10 @@ def run_turn_auto(state: GameState) -> bool:
             # エネルギーを確保してからアンスタを使う（運任せにしない）
             if is_dragapult_deck_for_player(state, state.current_player):
                 _has_ansta = any(
-                    (getattr(c, "id", "") or "") == "anfeasutanpu" for c in p.hand
+                    (getattr(c, "id", "") or "") == UNFAIR_STAMP for c in p.hand
                 )
                 _has_hb = any(
-                    (getattr(c, "id", "") or "") == "haipaboru" for c in p.hand
+                    (getattr(c, "id", "") or "") == HYPER_BALL for c in p.hand
                 )
                 _has_nyarth_hand = any(
                     is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "ニャースex"
@@ -2113,7 +2134,7 @@ def run_turn_auto(state: GameState) -> bool:
                 if _has_ansta and _has_hb and not _has_nyarth_hand and _nyarth_in_deck and len(p.bench) < 5:
                     from .trainers import use_trainer_goods as _use_hb_before_ansta
                     for _hi, _hc in enumerate(p.hand):
-                        if (getattr(_hc, "id", "") or "") == "haipaboru":
+                        if (getattr(_hc, "id", "") or "") == HYPER_BALL:
                             if _use_hb_before_ansta(state, _hi):
                                 acted = True
                                 p = state.active_player_state()
@@ -2195,7 +2216,7 @@ def run_turn_auto(state: GameState) -> bool:
             if not state.support_used_this_turn:
                 _has_draw_support_goods = any(
                     is_support(c) and (getattr(c, "id", "") or "") in (
-                        "riirienokesshin", "zeiyu", "hakasenokenkyuu", "hikari",
+                        RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU, HIKARI,
                     )
                     for c in p.hand
                 )
@@ -2217,7 +2238,7 @@ def run_turn_auto(state: GameState) -> bool:
             if _skip_hb_goods:
                 goods_order = [
                     (i, c) for i, c in goods_order
-                    if (getattr(c, "id", "") or "") != "haipaboru"
+                    if (getattr(c, "id", "") or "") != HYPER_BALL
                 ]
 
         def _goods_sort_key(x):
@@ -2285,7 +2306,7 @@ def run_turn_auto(state: GameState) -> bool:
         # 手札にポケモンいれかえがあるか
         _swap_hi = None
         for _i, _c in enumerate(p.hand):
-            if is_goods(_c) and (getattr(_c, "effect", None) == "swap_active" or getattr(_c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
+            if is_goods(_c) and (getattr(_c, "effect", None) == "swap_active" or getattr(_c, "id", "") in ("pokemon_irekae", POKEMON_IREKAE)):
                 _swap_hi = _i
                 break
         # ベンチにふうせん付き（にげるコスト0）のポケモンがいるか
@@ -2293,7 +2314,7 @@ def run_turn_auto(state: GameState) -> bool:
         if _swap_hi is not None:
             for _bi, _bp in enumerate(p.bench):
                 _tool = getattr(_bp, "attached_tool", None)
-                if _tool and (getattr(_tool, "id", "") or "") == "fuusen":
+                if _tool and (getattr(_tool, "id", "") or "") == FUUSEN:
                     _raw_rc = getattr(_bp.card, "retreat_cost", 1)
                     if max(0, _raw_rc - 2) == 0:
                         _balloon_bi = _bi
@@ -2365,7 +2386,7 @@ def run_turn_auto(state: GameState) -> bool:
         if _is_ex_support and not getattr(state, "retreat_used_this_turn", False):
             _raw_rc = getattr(p.active.card, "retreat_cost", 1)
             _tool = getattr(p.active, "attached_tool", None)
-            _eff_rc = max(0, _raw_rc - (2 if _tool and (getattr(_tool, "id", "") or "") == "fuusen" else 0))
+            _eff_rc = max(0, _raw_rc - (2 if _tool and (getattr(_tool, "id", "") or "") == FUUSEN else 0))
             if p.active.attached_energy >= _eff_rc:
                 # 逃げ先: ドラメシヤ/ヨマワル/スボミー等の非exを優先
                 _best_retreat_idx = None
@@ -2413,7 +2434,7 @@ def run_turn_auto(state: GameState) -> bool:
             # カースドボム後にブライア条件が満たされた場合（相手サイド2枚）
             if not state.support_used_this_turn and len(opp.prize_pile) == 2:
                 for _bi, _bc in enumerate(p.hand):
-                    if (getattr(_bc, "id", "") or "") == "buraia":
+                    if (getattr(_bc, "id", "") or "") == BURAIA:
                         from .trainers import use_trainer_support
                         if use_trainer_support(state, _bi):
                             p = state.active_player_state()
@@ -2426,7 +2447,7 @@ def run_turn_auto(state: GameState) -> bool:
         for _gi, _gc in enumerate(p.hand):
             if is_goods(_gc) and not getattr(_gc, "is_tool", False):
                 _gid = getattr(_gc, "id", "") or ""
-                if _gid in ("supeshiyarureddokado", "anfeasutanpu"):
+                if _gid in (SPECIAL_RED_CARD, UNFAIR_STAMP):
                     if use_trainer_goods(state, _gi):
                         acted = True
                         p = state.active_player_state()
