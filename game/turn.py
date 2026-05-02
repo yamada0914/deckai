@@ -1222,6 +1222,7 @@ def _try_joint_q_decision(state: GameState) -> bool:
         energy_hand_idx = _pick_energy_hand_idx(p, state)
         if energy_hand_idx is not None:
             bidx = ene_id  # 0=active, 1..=bench
+            # ※スボミーへのエネ付与禁止はattach_energy関数内で統一ガード済み
             if bidx == 0 and p.active:
                 attach_energy(state, energy_hand_idx)  # bench_index=None → active
                 acted = True
@@ -1256,6 +1257,7 @@ def _try_attach_energy_with_attack_lookahead(state: GameState) -> bool:
     from .trainers import attach_energy as _attach_en
 
     # ドラパルトexデッキ: ファントムダイブ完成即時パス（最優先）
+    # ※スボミーへのエネ付与禁止はattach_energy関数内で統一ガード済み
     from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_la
     if _is_drapa_la(state, state.current_player) and not state.energy_attached_this_turn:
         p_la = state.active_player_state()
@@ -1411,6 +1413,25 @@ def run_turn_auto(state: GameState) -> bool:
 
     def _try_put_bench_until_full():
         nonlocal p, acted
+        # ドラパルトデッキ: ベンチ3体以上でポフィンが手札にあれば先に空打ちして使い切る
+        # ポフィンを先に使わないとベンチが埋まって使えなくなり、デッキ圧縮もできない
+        from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_pf
+        if _is_drapa_pf(state, state.current_player) and len(p.bench) >= 3:
+            while len(p.bench) < 5:
+                _pf_idx = None
+                for _pi, _pc in enumerate(p.hand):
+                    if (getattr(_pc, "id", "") or "") == "nakayoshipofuin":
+                        _pf_idx = _pi
+                        break
+                if _pf_idx is None:
+                    break
+                from .trainers import use_trainer_goods as _use_pf
+                if _use_pf(state, _pf_idx):
+                    acted = True
+                    p = state.active_player_state()
+                    state._record_frame()
+                else:
+                    break
         put_count = 0
         while put_count < BENCH_SIZE and _put_one_pokemon_on_bench(p, state, state.current_player):
             put_count += 1
@@ -2396,6 +2417,15 @@ def run_turn_auto(state: GameState) -> bool:
             opp = state.defending_player_state()
             state._record_frame()
             _try_put_bench_until_full()
+            # カースドボム後にブライア条件が満たされた場合（相手サイド2枚）
+            if not state.support_used_this_turn and len(opp.prize_pile) == 2:
+                for _bi, _bc in enumerate(p.hand):
+                    if (getattr(_bc, "id", "") or "") == "buraia":
+                        from .trainers import use_trainer_support
+                        if use_trainer_support(state, _bi):
+                            p = state.active_player_state()
+                            state._record_frame()
+                        break
 
     # 攻撃前: 残りのグッズを使う（スペシャルレッドカード等）
     # カースドボム後に相手サイドが減るのでスペシャルレッドカードの条件を満たす場合がある

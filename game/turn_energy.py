@@ -490,7 +490,7 @@ def _build_energy_attach_input(
     if _is_drapa_deck and candidates:
         active_name = (getattr(p.active.card, "name", "") or "").strip() if p.active else ""
         if active_name == "ヨマワル" and new_type == "darkness" and (getattr(p.active, "attached_energy", 0) or 0) == 0:
-            pass  # 悪エネ+ヨマワルエネ0 → 逃げ用OK
+            pass  # 悪エネ+ヨマワルエネ0 → 逃げ用OK（悪エネはドラパルトラインに付けられないため）
         elif active_name in _drapa_support_names or active_name == "マシマシラ":
             candidates.clear()  # サポートがバトル場→候補から除外
 
@@ -511,7 +511,7 @@ def _build_energy_attach_input(
         if _is_drapa_deck:
             bench_name = (getattr(b.card, "name", "") or "").strip()
             if bench_name == "ヨマワル" and new_type == "darkness" and b.attached_energy == 0:
-                pass  # 悪エネ+ヨマワルエネ0 → 逃げ用に付けてOK（最低優先度）
+                pass  # 悪エネ+ヨマワルエネ0 → 逃げ用に付けてOK（悪エネはドラパルトラインに付けられないため）
             elif bench_name in _drapa_support_names or bench_name == "マシマシラ":
                 continue
         # ドラパルトexデッキ: 悪エネはファントムダイブに不要（炎+超の2エネのみ必要）
@@ -688,6 +688,21 @@ def _try_attach_energy_auto(state: GameState) -> bool:
             )
             if not _has_better_bench:
                 _skip_retreat_attach = True
+            elif active_name == "ヨマワル":
+                # ヨマワル逃げ: 悪エネのみ使う。炎/超はドラパルトexに回す。
+                # ただしドラパルトラインにエネ不要 or 悪エネしかない場合は許可。
+                _eidx_chk = _pick_energy_hand_idx(p, state)
+                if _eidx_chk is not None:
+                    _etype_chk = getattr(p.hand[_eidx_chk], "energy_type", None) or "colorless"
+                    if _etype_chk in ("fire", "psychic"):
+                        # ドラパルトラインにエネが必要か
+                        _drapa_line_need = any(
+                            (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")
+                            and (getattr(bp, "attached_energy", 0) or 0) < 2
+                            for bp in (([p.active] if p.active else []) + list(p.bench or []))
+                        )
+                        if _drapa_line_need:
+                            _skip_retreat_attach = True  # 炎/超をヨマワル逃げに使わない
     if not _skip_retreat_attach and (
         p.active
         and not state.energy_attached_this_turn

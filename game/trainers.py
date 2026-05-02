@@ -423,9 +423,15 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
         if state.energy_attached_this_turn:
             return False
         target = p.bench[bench_index]
-        _is_luna_bench = (getattr(target.card, "name", "") or "").strip() == "ルナトーン"
+        _target_name_bench = (getattr(target.card, "name", "") or "").strip()
+        _is_luna_bench = _target_name_bench == "ルナトーン"
         if _is_luna_bench and not getattr(state, "_ko_plan_executing", False):
             return False
+        # ドラパルトデッキ: スボミーにエネルギーは絶対に付けない
+        if _target_name_bench == "スボミー":
+            from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_sb
+            if _is_drapa_sb(state, state.current_player):
+                return False
         target.attached_energy += 1
         target.attached_energy_types.append(slot_type)
         p.hand.pop(hand_index)
@@ -438,10 +444,15 @@ def attach_energy(state: GameState, hand_index: int, bench_index: int | None = N
         return False
     if state.energy_attached_this_turn:
         return False
+    _active_name_ae = (getattr(p.active.card, "name", "") or "").strip()
     # ルナトーンにはKOプランナー経由以外でエネを付けない
-    _is_luna = (getattr(p.active.card, "name", "") or "").strip() == "ルナトーン"
-    if _is_luna and not getattr(state, "_ko_plan_executing", False):
+    if _active_name_ae == "ルナトーン" and not getattr(state, "_ko_plan_executing", False):
         return False
+    # ドラパルトデッキ: スボミーにエネルギーは絶対に付けない
+    if _active_name_ae == "スボミー":
+        from .deck_strategies import is_dragapult_deck_for_player as _is_drapa_sb2
+        if _is_drapa_sb2(state, state.current_player):
+            return False
     p.active.attached_energy += 1
     p.active.attached_energy_types.append(slot_type)
     p.hand.pop(hand_index)
@@ -773,16 +784,26 @@ def use_trainer_goods(
                         1 for _, hc in hand_without_haipaboru
                         if is_energy(hc) and getattr(hc, "energy_type", None) == etype_hb
                     )
-                    # 場のドラパルトexでこのタイプのエネがまだ付いていない体数
+                    # 場のドラパルトexラインでこのタイプのエネがまだ付いていないポケモン
                     _drapa_needing = 0
+                    _drapa_line_names_hb = {"ドラパルトex", "ドロンチ", "ドラメシヤ"}
                     for _bp in ([p.active] if p.active else []) + list(p.bench):
-                        if (getattr(_bp.card, "name", "") or "").strip() == "ドラパルトex":
-                            _has_this_type = any(
-                                getattr(ec, "energy_type", None) == etype_hb
-                                for ec in getattr(_bp, "energy", [])
-                            )
-                            if not _has_this_type:
+                        _bp_name_hb = (getattr(_bp.card, "name", "") or "").strip()
+                        if _bp_name_hb in _drapa_line_names_hb:
+                            _bp_types_hb = list(getattr(_bp, "attached_energy_types", []) or [])
+                            if etype_hb not in _bp_types_hb:
                                 _drapa_needing += 1
+                    # このエネを付ければ次ターンFD完成するか
+                    _completes_fd = False
+                    for _bp in ([p.active] if p.active else []) + list(p.bench):
+                        _bp_name_hb2 = (getattr(_bp.card, "name", "") or "").strip()
+                        if _bp_name_hb2 in ("ドラパルトex", "ドロンチ", "ドラメシヤ"):
+                            _bp_types_hb2 = list(getattr(_bp, "attached_energy_types", []) or [])
+                            _bp_en_hb2 = getattr(_bp, "attached_energy", 0) or 0
+                            _other_type = "psychic" if etype_hb == "fire" else "fire"
+                            if _bp_en_hb2 >= 1 and _other_type in _bp_types_hb2 and etype_hb not in _bp_types_hb2:
+                                _completes_fd = True
+                                break
                     # 夜のタンカがデッキ+手札にあるか（エネルギーをトラッシュから回収可能）
                     _has_tanka = any(
                         (getattr(hc, "id", "") or "") == "yorunotanka"
@@ -791,14 +812,18 @@ def use_trainer_goods(
                         (getattr(dc, "id", "") or "") == "yorunotanka"
                         for dc in p.deck
                     )
-                    if _same_type_count <= _drapa_needing:
+                    if _completes_fd:
+                        discard_score -= 9000.0  # このエネでFD完成 → 絶対捨てない
+                    elif _same_type_count <= _drapa_needing:
                         discard_score -= 9000.0  # 必要数以下 → 捨てると攻撃不能
-                    elif _same_type_count <= 1:
-                        discard_score -= 9000.0  # 最後の1枚 → ファントムダイブの生命線
-                    elif _same_type_count >= 2 and _has_tanka:
-                        discard_score += 500.0  # 2枚以上+タンカあり → 捨ててOK（回収可能）
+                    elif _same_type_count <= 1 and not _has_tanka:
+                        discard_score -= 9000.0  # 最後の1枚+タンカなし → 生命線
+                    elif _same_type_count <= 1 and _has_tanka:
+                        discard_score += 300.0  # 最後の1枚だがタンカあり → 捨ててOK（回収可能）
+                    elif _same_type_count >= 2:
+                        discard_score += 500.0  # 2枚以上 → 1枚は捨ててOK
                     else:
-                        discard_score -= 4000.0  # タンカなし → 慎重に
+                        discard_score -= 4000.0  # その他 → 慎重に
                 elif etype_hb == "darkness":
                     # ニャースexがバトル場で逃げ用に必要な場合は保護
                     _nyarth_active = (
@@ -1499,8 +1524,12 @@ def use_trainer_goods(
                     if _is_evo and state is not None and getattr(state, "turn_count", 99) <= 1:
                         w -= 3000.0
                     # 場に進化元がいない進化カードは低優先（すぐに使えない）
-                    if c_name == "ドロンチ" and not _has_drameshiya_field:
-                        w -= 3000.0
+                    # 進化元がいれば即進化→ていさつしれいで高優先
+                    if c_name == "ドロンチ":
+                        if _has_drameshiya_field:
+                            w += 5000.0  # ドラメシヤ→ドロンチ進化→ていさつしれい（最優先）
+                        else:
+                            w -= 3000.0
                     if c_name == "サマヨール" and not _has_yomawaru_field:
                         w -= 3000.0
                     if c_name == "ヨノワール" and not _has_samayoru_field:
@@ -2101,9 +2130,89 @@ def _try_use_ability_cursed_bomb(state: GameState) -> bool:
                                 can_win_with_bomb = True
                                 break
 
+        # --- ブライア解放: 相手サイド3 + ブライア手札 + FD準備完了 → ボムで相手サイドを2にしてブライア有効化 ---
+        if not can_win_with_bomb and opp_prizes_remaining == 3 and _is_drapa:
+            _has_briar = any((getattr(c, "id", "") or "") == "buraia" for c in p.hand)
+            if _has_briar:
+                _can_fd_briar = False
+                # ドラパルトexがバトル場 or バトル場に出せる状態か
+                _drapa_can_attack = False
+                _all_our_b = ([p.active] if p.active else []) + list(p.bench or [])
+                for _bp_b in _all_our_b:
+                    if (getattr(_bp_b.card, "name", "") or "").strip() != "ドラパルトex":
+                        continue
+                    _is_active = (p.active is _bp_b)
+                    # ベンチにいる場合、バトル場に出せるか（逃げコスト0 or いれかえ手札）
+                    if not _is_active:
+                        _active_rc = getattr(p.active.card, "retreat_cost", 1) if p.active else 99
+                        _tool_a = getattr(p.active, "attached_tool", None) if p.active else None
+                        _eff_rc = max(0, _active_rc - (2 if _tool_a and (getattr(_tool_a, "id", "") or "") == "fuusen" else 0))
+                        _can_retreat = (
+                            not getattr(state, "retreat_used_this_turn", False)
+                            and getattr(p.active, "special_state", None) not in ("sleep", "paralysis")
+                            and (_eff_rc == 0 or (getattr(p.active, "attached_energy", 0) or 0) >= _eff_rc)
+                        )
+                        _has_switch = any(
+                            (getattr(c, "id", "") or "") == "pokemonirekaee" for c in p.hand
+                        )
+                        if not _can_retreat and not _has_switch:
+                            continue
+                    # FD準備完了チェック
+                    _en_b = getattr(_bp_b, "attached_energy", 0) or 0
+                    _types_b = list(getattr(_bp_b, "attached_energy_types", []) or [])
+                    if _en_b >= 2 and "fire" in _types_b and "psychic" in _types_b:
+                        _can_fd_briar = True
+                        break
+                    # このターンのエネ付与でFD完成見込み
+                    if not getattr(state, "energy_attached_this_turn", False) and _en_b >= 1:
+                        _need_type = None
+                        if "fire" in _types_b and "psychic" not in _types_b:
+                            _need_type = "psychic"
+                        elif "psychic" in _types_b and "fire" not in _types_b:
+                            _need_type = "fire"
+                        if _need_type:
+                            from card import is_energy
+                            for _hc in p.hand:
+                                if is_energy(_hc) and getattr(_hc, "energy_type", None) == _need_type:
+                                    _can_fd_briar = True
+                                    break
+                    if _can_fd_briar:
+                        break
+                if _can_fd_briar:
+                    _briar_best = None
+                    _briar_key = None
+                    _briar_score = -1
+                    for tkey, tbp in targets:
+                        if tbp.hp is None or tbp.hp <= 0:
+                            continue
+                        from .state import _prizes_for_ko
+                        _pg = _prizes_for_ko(tbp)
+                        _sc = 0
+                        if tbp.hp <= bomb_damage:
+                            _sc = _pg * 10000  # ボムだけでKO
+                        elif tkey == "active" and tbp.hp - bomb_damage <= 200:
+                            _sc = _pg * 8000  # ボム+FD200でKO
+                        elif tkey != "active" and tbp.hp - bomb_damage <= _phantom_bench_dmg:
+                            _sc = _pg * 5000  # ボム+FDベンチ60でKO
+                        else:
+                            _sc = _pg * 1000 + bomb_damage  # ダメージだけ
+                        if _sc > _briar_score:
+                            _briar_best = tbp
+                            _briar_key = tkey
+                            _briar_score = _sc
+                    if _briar_best is not None:
+                        win_target = _briar_best
+                        win_target_key = _briar_key
+                        win_prize_gain = _briar_score
+                        can_win_with_bomb = True
+
         # 相手サイド1枚の時は自爆禁止（相手がサイド取って勝ってしまう）
         if opp_prizes_remaining <= 1 and not can_win_with_bomb:
             continue
+        # 相手サイド2枚でブライア手札の時も自爆禁止（ブライア条件が崩れる）
+        if opp_prizes_remaining == 2 and not can_win_with_bomb:
+            if any((getattr(c, "id", "") or "") == "buraia" for c in p.hand):
+                continue
 
         if can_win_with_bomb and win_target is not None:
             best_target = win_target
@@ -2401,12 +2510,35 @@ def _try_use_ability_teisatsushirei(state: GameState) -> bool:
     _bench_has_room_tei = len(p.bench) < 5  # ベンチ枠に空きがあるか（activeは別）
     _ko_last_turn_tei = any(getattr(state, "any_ko_by_opponent_last_turn", [False, False]))
     _kichikigisu_valuable_tei = _ko_last_turn_tei and _bench_has_room_tei
+    # 手札刷新サポート（リーリエの決心等）が手札にあり、このターン使う見込みがあるか
+    # → ていさつしれいで取ったカードも山札に戻されるので、即使えるカード優先
+    # ただしアカマツはFD完成に直結するので、ドラパルトexが場にいてエネ不足なら
+    # アカマツを使う方がリーリエより優先（アカマツを取るべき）
+    _has_hand_refresh = (
+        not state.support_used_this_turn
+        and any(
+            (getattr(hc, "id", "") or "").strip() in ("riirienokesshin", "hakasenokenkyuu")
+            for hc in p.hand
+        )
+    )
+    # アカマツの方がリーリエより優先されるケース:
+    # ドラパルトexが場にいてエネ不足 → アカマツでFD完成
+    _akamatsu_over_ririe = _drapa_ex_needs_energy_tei
+
     def _card_value(c):
         if is_support(c):
             cid_v = (getattr(c, "id", "") or "").strip()
             if cid_v == "akamatsu":
-                # ドラパルトexが場にいてエネ不足 → FD直結なので最優先
-                return 1800 if _drapa_ex_needs_energy_tei else 1100
+                if _akamatsu_over_ririe:
+                    # アカマツを使う方が優先 → 取る
+                    return 1800
+                if _has_hand_refresh:
+                    # リーリエを使う予定でアカマツ不要 → 山札に戻されるので低価値
+                    return 200
+                return 1100
+            # 手札刷新サポートを使う予定なら他のサポートも価値低
+            if _has_hand_refresh:
+                return 200
             return 1000
         if is_pokemon(c) and getattr(c, "evolves_from", None):
             cname_v = (getattr(c, "name", "") or "").strip()
@@ -2923,10 +3055,18 @@ def use_support(state: GameState, hand_index: int) -> bool:
             _drapa_attach_targets = [bp for bp in ([p.active] if p.active else []) + list(p.bench)
                                      if (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")]
             if _drapa_attach_targets:
-                _best_target = max(_drapa_attach_targets, key=lambda bp: (
-                    1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0,
-                    (getattr(bp, "attached_energy", 0) or 0),
-                ))
+                # HP低いバトル場ポケモンは避ける（KOされてエネ無駄になるリスク）
+                opp_bt = state.defending_player_state()
+                def _bt_score(bp):
+                    _is_ex = 1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0
+                    _en = getattr(bp, "attached_energy", 0) or 0
+                    _pen = 0
+                    if bp is p.active and opp_bt and opp_bt.active:
+                        from .damage import _max_effective_damage_for_attacker
+                        if _max_effective_damage_for_attacker(state, opp_bt.active, bp, 1 - state.current_player) >= (bp.hp or 0):
+                            _pen = -10
+                    return (_pen, _is_ex, _en)
+                _best_target = max(_drapa_attach_targets, key=_bt_score)
                 _on_types = list(getattr(_best_target, "attached_energy_types", []) or [])
                 # 不足タイプを先にする（例: 超が付いていれば炎を最優先）
                 _needed = [t for t in _preferred_types if t not in _on_types]
@@ -2982,10 +3122,22 @@ def use_support(state: GameState, hand_index: int) -> bool:
                 _drapa_targets = [bp for bp in all_pokemon
                                   if (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ", "ドラメシヤ")]
                 if _drapa_targets:
-                    _best_drapa = max(_drapa_targets, key=lambda bp: (
-                        1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0,
-                        (getattr(bp, "attached_energy", 0) or 0),  # エネが多い = ファントムダイブに近い → 優先
-                    ))
+                    # ターゲット選択: ドラパルトex優先、エネ多い方優先
+                    # ただし次ターンKOされそう（HPが低い）バトル場のポケモンは避ける
+                    opp_ak = state.defending_player_state()
+                    def _drapa_target_score(bp):
+                        _is_ex = 1 if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex" else 0
+                        _en = getattr(bp, "attached_energy", 0) or 0
+                        _is_active = (bp is p.active)
+                        # バトル場でHPが低い → 次ターンKOされてエネが無駄になるリスク
+                        _hp_penalty = 0
+                        if _is_active and opp_ak and opp_ak.active:
+                            from .damage import _max_effective_damage_for_attacker
+                            _opp_dmg = _max_effective_damage_for_attacker(state, opp_ak.active, bp, 1 - state.current_player)
+                            if _opp_dmg >= (bp.hp or 0):
+                                _hp_penalty = -10  # 次ターンKO確定 → 大幅減点
+                        return (_hp_penalty, _is_ex, _en)
+                    _best_drapa = max(_drapa_targets, key=_drapa_target_score)
                     _types_on = list(getattr(_best_drapa, "attached_energy_types", []) or [])
                     # 付いてないタイプのエネを優先的に付ける
                     for fc in fetched:
@@ -3062,6 +3214,14 @@ def use_support(state: GameState, hand_index: int) -> bool:
                             score += 200
                         elif etype == "psychic" and "psychic" not in types_on:
                             score += 200
+                        # バトル場で次ターンKOされそう → エネが無駄になる、ベンチ優先
+                        if bp is p.active:
+                            _opp_ak2 = state.defending_player_state()
+                            if _opp_ak2 and _opp_ak2.active:
+                                from .damage import _max_effective_damage_for_attacker as _med_aka
+                                _opp_dmg2 = _med_aka(state, _opp_ak2.active, bp, 1 - state.current_player)
+                                if _opp_dmg2 >= (bp.hp or 0):
+                                    score -= 2000  # 次ターンKO確定 → ベンチに回す
                     elif bp_name in ("ドロンチ", "ドラメシヤ"):
                         score += 300
                     elif bp_name in ("スボミー", "キチキギスex", "ニャースex", "ヨマワル", "サマヨール", "ヨノワール", "マシマシラ"):
