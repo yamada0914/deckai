@@ -509,6 +509,400 @@ def use_potion(state: GameState, hand_index: int) -> bool:
     return True
 
 
+
+def _use_hyper_ball(state: GameState, hand_index: int) -> bool:
+    """ハイパーボールのカード効果を実行する。use_trainer_goodsから呼び出される。"""
+    p = state.active_player_state()
+    card = p.hand[hand_index]
+    weights = state.get_weights_for_player(state.current_player)
+    # 手札が少ないのにハイパーボールを打つと（実質 -2 枚前後になりやすく）ゲームのリソースが枯れやすい。
+    # その場合、学習/重みが無いと「サポートを捨てる」確率が上がるため、サポートを強めに減点する。
+    small_hand = len(p.hand) <= 4
+    hand_without_haipaboru = [(i, p.hand[i]) for i in range(len(p.hand)) if i != hand_index]
+    name_counts = {}
+    for _i, c in hand_without_haipaboru:
+        n = getattr(c, "name", "") or getattr(c, "id", "") or ""
+        name_counts[n] = name_counts.get(n, 0) + 1
+    support_count = sum(1 for _i, c in hand_without_haipaboru if is_support(c))
+    support_indices = [i for i, c in hand_without_haipaboru if is_support(c)]
+    only_support_idx = support_indices[0] if len(support_indices) == 1 else None
+    # 「最後のサポートを捨てない」ための強めの禁止:
+    # ハイパーボールは 2 枚トラッシュが必須。
+    # 候補が「サポート1 + 非サポート1」だと、必ずサポートを捨てるため使わない。
+    non_support_count = len(hand_without_haipaboru) - support_count
+    if support_count == 1 and non_support_count == 1:
+        return False
+    # 持ってくるカードが手札に既にあるもの(同名)しかない場合、使う意味がない
+    found = _find_pokemon_for_haipaboru(p, state)
+    if found is None:
+        return False
+    _fetch_name = (getattr(found[1], "name", "") or "").strip()
+    # 取得先と同名カードが手札にある場合、同名カードをトラッシュに選ぶと無意味
+    # （捨てて同じものを持ってくるだけ）→ その場合はHBを使わない
+    _fetch_in_hand = any(
+        is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() == _fetch_name
+        for _, hc in hand_without_haipaboru
+    )
+    if _fetch_in_hand:
+        # 手札に同名がある → 2枚目が本当に必要か確認
+        # ドロンチは複数必要なので除外
+        if _fetch_name != "ドロンチ":
+            return False  # 同名を捨てて同名を取る意味なし
+    # 場のポケモンの進化先（メガルカリオex等）は捨てたくない
+    field_cards = ([p.active.card] if p.active else []) + [bp.card for bp in p.bench]
+
+    def _is_evolution_for_field(c) -> bool:
+        if not is_pokemon(c) or not getattr(c, "evolves_from", None):
+            return False
+        # 場のカード＋手札のたねポケモンも対象（今後ベンチに出して進化できる）
+        all_potential = list(field_cards) + [hc for hc in p.hand if is_pokemon(hc) and not getattr(hc, "evolves_from", None)]
+        return any(_can_evolve_onto(fc, c) for fc in all_potential)
+
+    # 手札に進化先（メガルカリオex等）があるなら、それを捨てるリスクがあるので
+    # 取りたいカードが進化先と同等以上に重要でなければハイパーボールを使わない
+    evo_in_hand = [c for _, c in hand_without_haipaboru if _is_evolution_for_field(c)]
+    if evo_in_hand:
+        found = _find_pokemon_for_haipaboru(p, state)
+        if found:
+            found_name = getattr(found[1], "name", "")
+            # 取ろうとしているのがリオル等のたね → メガルカリオexを捨てるリスクに見合わない
+            if not getattr(found[1], "evolves_from", None):
+                # 非進化カードが2枚未満なら進化先を捨てることになる → 使わない
+                safe = [c for _, c in hand_without_haipaboru if not _is_evolution_for_field(c) and not is_support(c)]
+                if len(safe) < 2:
+                    return False
+
+    # 進化先を2枚とも捨てなければいけない場合、ハイパーボールを使わない
+    non_evo_non_support = [
+        (i, c) for i, c in hand_without_haipaboru
+        if not _is_evolution_for_field(c) and not is_support(c)
+    ]
+    evo_cards_in_hand = [(i, c) for i, c in hand_without_haipaboru if _is_evolution_for_field(c)]
+    # 捨てられる非進化カードが1枚以下 かつ 進化先がある → 進化先を捨てることになるので使わない
+    if evo_cards_in_hand and len(non_evo_non_support) < 2:
+        # サポートも含めて2枚捨てられるか確認
+        safe_discards = len(non_evo_non_support) + max(0, support_count - 1)  # サポート1枚は残す
+        if safe_discards < 2:
+            return False
+
+    # 手札の闘エネ枚数をカウント（全部捨てない保護用）
+    energy_count_in_hand = sum(
+        1 for _, c in hand_without_haipaboru
+        if is_energy(c) and getattr(c, "energy_type", None) == "fighting"
+    )
+
+    scored = []
+    for i, c in hand_without_haipaboru:
+        discard_score = get_haipaboru_discard_weight(weights, c)
+        if small_hand and is_support(c):
+            # 「手札が少ない局面では、サポートを残した方が負けにくい」経験則をソフトに適用。
+            # ただし、候補がサポートしかない場合にゼロ除外で詰まないよう "絶対禁止" ではなく強めの減点に留める。
+            discard_score -= 2000.0
+        # ドラパルトexデッキ: 炎・超エネルギーは絶対に捨てない（ファントムダイブの必須コスト）
+        _drapa_deck_check_names = {"ドラメシヤ", "ドロンチ", "ドラパルトex"}
+        _is_drapa_hb_discard = any(
+            is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() in _drapa_deck_check_names
+            for _, hc in hand_without_haipaboru
+        ) or any(
+            is_pokemon(dc) and (getattr(dc, "name", "") or "").strip() in _drapa_deck_check_names
+            for dc in p.deck
+        )
+        if _is_drapa_hb_discard and is_energy(c):
+            etype_hb = getattr(c, "energy_type", None)
+            if etype_hb in ("fire", "psychic"):
+                # 手札にこのタイプのエネが何枚あるか
+                _same_type_count = sum(
+                    1 for _, hc in hand_without_haipaboru
+                    if is_energy(hc) and getattr(hc, "energy_type", None) == etype_hb
+                )
+                # 場のドラパルトexラインでこのタイプのエネがまだ付いていないポケモン
+                _drapa_needing = 0
+                _drapa_line_names_hb = DRAPA_LINE_NAMES
+                for _bp in ([p.active] if p.active else []) + list(p.bench):
+                    _bp_name_hb = (getattr(_bp.card, "name", "") or "").strip()
+                    if _bp_name_hb in _drapa_line_names_hb:
+                        _bp_types_hb = list(getattr(_bp, "attached_energy_types", []) or [])
+                        if etype_hb not in _bp_types_hb:
+                            _drapa_needing += 1
+                # このエネを付ければ次ターンFD完成するか
+                _completes_fd = False
+                for _bp in ([p.active] if p.active else []) + list(p.bench):
+                    _bp_name_hb2 = (getattr(_bp.card, "name", "") or "").strip()
+                    if _bp_name_hb2 in DRAPA_LINE_NAMES:
+                        _bp_types_hb2 = list(getattr(_bp, "attached_energy_types", []) or [])
+                        _bp_en_hb2 = getattr(_bp, "attached_energy", 0) or 0
+                        _other_type = "psychic" if etype_hb == "fire" else "fire"
+                        if _bp_en_hb2 >= 1 and _other_type in _bp_types_hb2 and etype_hb not in _bp_types_hb2:
+                            _completes_fd = True
+                            break
+                # 夜のタンカがデッキ+手札にあるか（エネルギーをトラッシュから回収可能）
+                _has_tanka = any(
+                    (getattr(hc, "id", "") or "") == "yorunotanka"
+                    for _, hc in hand_without_haipaboru
+                ) or any(
+                    (getattr(dc, "id", "") or "") == "yorunotanka"
+                    for dc in p.deck
+                )
+                if _completes_fd:
+                    discard_score -= 9000.0  # このエネでFD完成 → 絶対捨てない
+                elif _same_type_count <= _drapa_needing:
+                    discard_score -= 9000.0  # 必要数以下 → 捨てると攻撃不能
+                elif _same_type_count <= 1 and not _has_tanka:
+                    discard_score -= 9000.0  # 最後の1枚+タンカなし → 生命線
+                elif _same_type_count <= 1 and _has_tanka:
+                    discard_score += 300.0  # 最後の1枚だがタンカあり → 捨ててOK（回収可能）
+                elif _same_type_count >= 2:
+                    discard_score += 500.0  # 2枚以上 → 1枚は捨ててOK
+                else:
+                    discard_score -= 4000.0  # その他 → 慎重に
+            elif etype_hb == "darkness":
+                # ニャースexがバトル場で逃げ用に必要な場合は保護
+                _nyarth_active = (
+                    p.active and (getattr(p.active.card, "name", "") or "").strip() == "ニャースex"
+                    and (getattr(p.active, "attached_energy", 0) or 0) == 0
+                )
+                if _nyarth_active:
+                    discard_score -= 3000.0  # 逃げ用に温存
+                else:
+                    discard_score += 200.0  # 悪はファントムダイブに不要、むしろ捨てやすい
+        # ドラパルトexデッキ: ドラパルトex/ドロンチ/ふしぎなアメは捨てない
+        if _is_drapa_hb_discard and is_pokemon(c):
+            c_name_hb = (getattr(c, "name", "") or "").strip()
+            if c_name_hb == "ドラパルトex":
+                discard_score -= 8000.0  # メインアタッカー
+            elif c_name_hb == "ドロンチ":
+                discard_score -= 7000.0  # 進化の要（ていさつしれい）
+        if _is_drapa_hb_discard and is_goods(c) and (getattr(c, "id", "") or "") == "fushiginaame":
+            # ドラパルトexが手札にあり場にドラメシヤがいれば即進化可能 → 超重要
+            _has_drapa_in_hand = any(
+                (getattr(hc, "name", "") or "").strip() == "ドラパルトex"
+                for _, hc in hand_without_haipaboru
+            )
+            _has_drameshiya_field = any(
+                (getattr(bp.card, "name", "") or "").strip() == "ドラメシヤ"
+                for bp in ([p.active] if p.active else []) + list(p.bench or [])
+            )
+            if _has_drapa_in_hand and _has_drameshiya_field:
+                discard_score -= 9000.0  # 即進化可能 → 絶対捨てない
+            else:
+                discard_score -= 3000.0
+        # ドラパルトexデッキ: メイのはげまし/アカマツはエネ加速の生命線 → 捨てない
+        if _is_drapa_hb_discard and is_support(c):
+            c_id_hb = (getattr(c, "id", "") or "").strip()
+            if c_id_hb == "meinohagemashi":
+                discard_score -= 4000.0  # メイのはげまし: Stage2にエネ2枚付ける唯一の手段
+            elif c_id_hb == "akamatsu":
+                discard_score -= 15000.0  # アカマツ: FDの生命線（炎+超を確実に確保）
+        # アンフェアスタンプは終盤の逆転カード → 基本的に捨てない（全デッキ共通）
+        if is_goods(c) and (getattr(c, "id", "") or "") == "anfeasutanpu":
+            discard_score -= 15000.0
+        # リーリエの決心は最重要ドローサポート → 手札に2枚ある時のみ捨てOK
+        if is_support(c) and (getattr(c, "id", "") or "") == "riirienokesshin":
+            _lillie_count = sum(
+                1 for _, hc in hand_without_haipaboru
+                if is_support(hc) and (getattr(hc, "id", "") or "") == "riirienokesshin"
+            )
+            if _lillie_count < 2:
+                discard_score -= 15000.0  # 1枚しかない → 絶対捨てない
+        # 闘エネは捨てにくくする。ルナサイクルのコスト+手張りに必要。
+        # ただし手札全捨てサポート（ゼイユ等）があるなら、どうせ捨てるのでペナルティ不要。
+        _has_trash_support = any(
+            is_support(hc) and (getattr(hc, "id", "") or "") in ("zeiyu", "hakasenokenkyuu", "hakasenokenkyuufutouhakase")
+            for _, hc in hand_without_haipaboru
+        )
+        # エネは常に少し捨てにくい。手札全捨てサポートがある場合のみ免除。
+        if is_energy(c) and getattr(c, "energy_type", None) == "fighting" and not _has_trash_support:
+            discard_score -= 800.0
+            # 手札にエネが2枚しかなく、他にエネ回収手段がない場合は
+            # 両方捨てるとエネ枯渇で攻撃不能になる → 超大ペナルティ
+            if energy_count_in_hand <= 2:
+                _has_tanka = any(
+                    (getattr(hc, "id", "") or "") == "yorunotanka"
+                    for _, hc in hand_without_haipaboru
+                )
+                _has_luna_cycle = (
+                    _field_has_pokemon(p, "ルナトーン", "runaton")
+                    and _field_has_pokemon(p, "ソルロック", "sorurokku-mc-372", "sorurokku")
+                )
+                if not _has_tanka and not _has_luna_cycle:
+                    discard_score -= 3000.0
+        # ポケモンいれかえは攻撃可能なアタッカーに交代できる重要カード。捨てにくくする。
+        if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
+            discard_score -= 1000.0
+            # Fix J: メガルカリオexが場or手札にある場合、メガブレイブリセットトリックに必要なので追加保護
+            _mega_present = any(
+                "メガルカリオ" in (getattr(hc, "name", "") or "")
+                for _, hc in hand_without_haipaboru
+            ) or (
+                p.active and "メガルカリオ" in (getattr(p.active.card, "name", "") or "")
+            ) or any(
+                "メガルカリオ" in (getattr(bp.card, "name", "") or "")
+                for bp in (p.bench or [])
+            )
+            if _mega_present:
+                discard_score -= 500.0
+        # ドローサポート（ゼイユ、リーリエ等）: ルナサイクル不成立時は貴重なドロー源
+        _DRAW_SUPPORT_IDS = ("zeiyu", "riirienokesshin", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "nemo")
+        if is_support(c) and (getattr(c, "id", "") or "") in _DRAW_SUPPORT_IDS:
+            _luna_engine_ok = (
+                _field_has_pokemon(p, "ルナトーン", "runaton")
+                and _field_has_pokemon(p, "ソルロック", "sorurokku-mc-372", "sorurokku")
+            )
+            if not _luna_engine_ok:
+                discard_score -= 1000.0  # エンジン不成立 → ドロサポは唯一のドロー源
+            else:
+                discard_score -= 300.0  # エンジン成立でも一応保護
+        # 夜のタンカはトラッシュからエネ/ポケモンを回収できる重要カード。捨てにくくする。
+        if getattr(c, "id", "") == "yorunotanka":
+            discard_score -= 2000.0
+        # 場のポケモンに進化できるカードは捨てない(メガルカリオexを捨ててまた取るのは無駄)
+        if _is_evolution_for_field(c):
+            discard_score -= 5000.0
+        # ex/メガポケモンは進化先でなくても重要（将来の切り札）
+        elif is_pokemon(c) and (getattr(c, "is_ex", False) or getattr(c, "is_mega", False)):
+            discard_score -= 3000.0
+        c_name_for_count = getattr(c, "name", "") or getattr(c, "id", "") or ""
+        c_count_in_hand = name_counts.get(c_name_for_count, 0)
+        if c_count_in_hand >= 2:
+            # 同名2枚以上は捨てやすい。ただしメガルカリオex等の重要進化カードは
+            # 2枚捨てるとデッキに残り1枚以下になり、サイド落ちで詰むリスクがある。
+            if _is_evolution_for_field(c):
+                discard_score += 100  # 控えめにしか捨てやすくしない
+            else:
+                discard_score += 500
+        if (not small_hand) and is_support(c) and support_count >= 2:
+            discard_score += 300
+        # --- データ分析から判明したカード別の調整 ---
+        _cid = getattr(c, "id", "") or ""
+        # スペシャルレッドカードは妨害手段として捨てにくい（統計: -7.1%）
+        if _cid == "supeshiyarureddokado":
+            discard_score -= 700.0
+        # ロケット団の監視塔: 相手に無色ポケモンがいなければ不要 → 捨てやすい
+        if _cid == "rokettodannokanshitou":
+            opp = state.players[state.opponent()]
+            opp_has_colorless = any(
+                getattr(getattr(bp, "card", None), "pokemon_type", "") == "colorless"
+                for bp in [opp.active] + opp.bench if bp is not None
+            ) or any(
+                getattr(dc, "pokemon_type", "") == "colorless"
+                for dc in opp.deck if is_pokemon(dc)
+            )
+            if not opp_has_colorless:
+                discard_score += 500.0
+        # ふうせんは逃げるコスト0にする重要カード（統計: -5.3%）
+        if _cid == "fuusen":
+            discard_score -= 500.0
+        # Pattern 5: ボスの指令はターン0（先行1ターン目）のみ捨ててOK、それ以降は保護
+        if _cid == "bosunoshirei":
+            if state.turn_count == 0:
+                discard_score += 500.0
+            else:
+                discard_score -= 500.0
+        # ミツルの思いやり/ポケパッドは捨てても勝率に影響しない（統計: +4.0%, +4.4%）
+        if _cid in ("mitsurunoomoiyari", "pokepaddo"):
+            discard_score += 400.0
+        # 余剰ハイパーボール: メガルカリオexが手札/場にない場合はサーチ手段として保護
+        if _cid == "haipaboru":
+            _has_mega_anywhere = any(
+                "メガルカリオ" in (getattr(hc, "name", "") or "")
+                for hc in p.hand if is_pokemon(hc)
+            ) or any(
+                "メガルカリオ" in (getattr(bp.card, "name", "") or "")
+                for bp in ([p.active] if p.active else []) + list(p.bench)
+            )
+            if _has_mega_anywhere:
+                discard_score += 200.0  # メガルカリオ確保済み → HB捨ててOK
+            else:
+                discard_score -= 300.0  # メガルカリオ未確保 → HBでサーチが必要
+        # Pattern 4: パワープロテイン基本保護（+30は常に貴重、エネルギー並みに保護）
+        if _cid == "pawaapurotein":
+            discard_score -= 800.0
+        # パワープロテイン: 使えば相手を倒せる場合は捨てない
+        if _cid == "pawaapurotein" and p.active and getattr(p.active.card, "pokemon_type", None) == "fighting":
+            opp_hb = state.defending_player_state()
+            if opp_hb.active and opp_hb.active.hp and opp_hb.active.hp > 0:
+                # 手札の全パワプロ使用時のダメージを試算
+                _pp_count = sum(1 for _, hc in hand_without_haipaboru if getattr(hc, "id", "") == "pawaapurotein")
+                _n_now = getattr(state, "fighting_damage_plus_30_count_this_turn", 0)
+                state.fighting_damage_plus_30_count_this_turn = _n_now + _pp_count
+                try:
+                    _dmg_with_pp = _max_effective_damage_for_attacker(state, p.active, opp_hb.active, state.current_player)
+                finally:
+                    state.fighting_damage_plus_30_count_this_turn = _n_now
+                if _dmg_with_pp >= opp_hb.active.hp:
+                    discard_score -= 5000.0  # 全パワプロ使えばKO可能 → 捨てない
+        discard_score += _haipaboru_lunatone_discard_bonus(p, hand_without_haipaboru, c)
+        discard_score += _haipaboru_judge_vs_lillie_adjustment(state, hand_without_haipaboru, c)
+        scored.append((i, discard_score))
+
+    scored.sort(key=lambda x: -x[1])
+    score_by_index = {i: s for i, s in scored}
+    to_discard_idx = [scored[0][0], scored[1][0]]
+    i0, i1 = to_discard_idx
+    # 同名の重要カード（進化ポケモン等）を2枚とも捨てない。
+    # デッキに残り1枚以下になるとサイド落ちで詰むリスクがある。
+    c0_name = (getattr(p.hand[i0], "name", "") or "").strip()
+    c1_name = (getattr(p.hand[i1], "name", "") or "").strip()
+    if c0_name == c1_name and c0_name and is_pokemon(p.hand[i0]) and getattr(p.hand[i0], "evolves_from", None):
+        replacement = next(
+            (idx for idx, _s in scored if idx != i0 and idx != i1),
+            None,
+        )
+        if replacement is not None:
+            to_discard_idx = [i0, replacement]
+            i0, i1 = to_discard_idx
+    # サポートを 2 枚とも捨てると次ターンのドロー源が枯れやすい → 可能なら 1 枚はサポート以外に差し替え
+    if is_support(p.hand[i0]) and is_support(p.hand[i1]):
+        ns_scored = [(idx, s) for idx, s in scored if not is_support(p.hand[idx])]
+        if ns_scored:
+            best_ns_i, _best_ns_s = max(ns_scored, key=lambda x: x[1])
+            s0, s1 = score_by_index[i0], score_by_index[i1]
+            i_hi = i0 if s0 >= s1 else i1
+            to_discard_idx = [i_hi, best_ns_i]
+    # 「手札の最後の一枚のサポートカードを捨てない」方針:
+    # support_count==1 のとき、唯一のサポートがトラッシュ候補に入っていたら、
+    # 代わりに非サポートを 1 枚選び直す。
+    _protect_last_support = support_count == 1 and only_support_idx is not None and only_support_idx in to_discard_idx
+    # 序盤のボスの指令は使えないので保護不要（捨ててOK��
+    if _protect_last_support:
+        _last_sup_id = getattr(p.hand[only_support_idx], "id", "") or ""
+        if _last_sup_id == "bosunoshirei" and state.turn_count == 0:
+            _protect_last_support = False
+    if _protect_last_support:
+        replacement = next(
+            (idx for idx, _score in scored if idx != only_support_idx and idx not in to_discard_idx),
+            None,
+        )
+        if replacement is not None:
+            other_idx = to_discard_idx[0] if to_discard_idx[1] == only_support_idx else to_discard_idx[1]
+            to_discard_idx = [other_idx, replacement]
+    cards_to_log = [p.hand[i] for i in to_discard_idx]
+    discard_names = ", ".join(_card_label(c) for c in cards_to_log)
+    for i in sorted(to_discard_idx, reverse=True):
+        p.discard.append(p.hand.pop(i))
+    for c in cards_to_log:
+        _log_choice(state, "haipaboru_discard", card_id=getattr(c, "id", None) or getattr(c, "name", ""))
+    new_hi = p.hand.index(card)
+
+    pokemon_found = _find_pokemon_for_haipaboru(p, state)
+
+    if pokemon_found:
+        i, c = pokemon_found
+        p.deck.pop(i)
+        p.hand.append(c)
+        state.drawn_this_turn.append(c)
+        random.shuffle(p.deck)
+        mark_own_deck_shuffled(state)
+        mark_deck_searched(state)
+    p.discard.append(p.hand.pop(new_hi))
+    add_label = f" → {_card_label(pokemon_found[1])}" if pokemon_found else ""
+    state.log(
+        f"{state.player_name(state.current_player)}: ハイパーボール → {discard_names} 捨て → {_card_label(pokemon_found[1])} を手札に"
+        if pokemon_found
+        else f"{state.player_name(state.current_player)}: ハイパーボール → {discard_names} 捨て（山札にポケモンなし）"
+    )
+    return True
+
 def use_trainer_goods(
     state: GameState,
     hand_index: int,
@@ -708,394 +1102,8 @@ def use_trainer_goods(
         return True
 
     if cid == "haipaboru" and len(p.hand) >= 3 and p.deck:
-        weights = state.get_weights_for_player(state.current_player)
-        # 手札が少ないのにハイパーボールを打つと（実質 -2 枚前後になりやすく）ゲームのリソースが枯れやすい。
-        # その場合、学習/重みが無いと「サポートを捨てる」確率が上がるため、サポートを強めに減点する。
-        small_hand = len(p.hand) <= 4
-        hand_without_haipaboru = [(i, p.hand[i]) for i in range(len(p.hand)) if i != hand_index]
-        name_counts = {}
-        for _i, c in hand_without_haipaboru:
-            n = getattr(c, "name", "") or getattr(c, "id", "") or ""
-            name_counts[n] = name_counts.get(n, 0) + 1
-        support_count = sum(1 for _i, c in hand_without_haipaboru if is_support(c))
-        support_indices = [i for i, c in hand_without_haipaboru if is_support(c)]
-        only_support_idx = support_indices[0] if len(support_indices) == 1 else None
-        # 「最後のサポートを捨てない」ための強めの禁止:
-        # ハイパーボールは 2 枚トラッシュが必須。
-        # 候補が「サポート1 + 非サポート1」だと、必ずサポートを捨てるため使わない。
-        non_support_count = len(hand_without_haipaboru) - support_count
-        if support_count == 1 and non_support_count == 1:
-            return False
-        # 持ってくるカードが手札に既にあるもの(同名)しかない場合、使う意味がない
-        found = _find_pokemon_for_haipaboru(p, state)
-        if found is None:
-            return False
-        _fetch_name = (getattr(found[1], "name", "") or "").strip()
-        # 取得先と同名カードが手札にある場合、同名カードをトラッシュに選ぶと無意味
-        # （捨てて同じものを持ってくるだけ）→ その場合はHBを使わない
-        _fetch_in_hand = any(
-            is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() == _fetch_name
-            for _, hc in hand_without_haipaboru
-        )
-        if _fetch_in_hand:
-            # 手札に同名がある → 2枚目が本当に必要か確認
-            # ドロンチは複数必要なので除外
-            if _fetch_name != "ドロンチ":
-                return False  # 同名を捨てて同名を取る意味なし
-        # 場のポケモンの進化先（メガルカリオex等）は捨てたくない
-        field_cards = ([p.active.card] if p.active else []) + [bp.card for bp in p.bench]
+        return _use_hyper_ball(state, hand_index)
 
-        def _is_evolution_for_field(c) -> bool:
-            if not is_pokemon(c) or not getattr(c, "evolves_from", None):
-                return False
-            # 場のカード＋手札のたねポケモンも対象（今後ベンチに出して進化できる）
-            all_potential = list(field_cards) + [hc for hc in p.hand if is_pokemon(hc) and not getattr(hc, "evolves_from", None)]
-            return any(_can_evolve_onto(fc, c) for fc in all_potential)
-
-        # 手札に進化先（メガルカリオex等）があるなら、それを捨てるリスクがあるので
-        # 取りたいカードが進化先と同等以上に重要でなければハイパーボールを使わない
-        evo_in_hand = [c for _, c in hand_without_haipaboru if _is_evolution_for_field(c)]
-        if evo_in_hand:
-            found = _find_pokemon_for_haipaboru(p, state)
-            if found:
-                found_name = getattr(found[1], "name", "")
-                # 取ろうとしているのがリオル等のたね → メガルカリオexを捨てるリスクに見合わない
-                if not getattr(found[1], "evolves_from", None):
-                    # 非進化カードが2枚未満なら進化先を捨てることになる → 使わない
-                    safe = [c for _, c in hand_without_haipaboru if not _is_evolution_for_field(c) and not is_support(c)]
-                    if len(safe) < 2:
-                        return False
-
-        # 進化先を2枚とも捨てなければいけない場合、ハイパーボールを使わない
-        non_evo_non_support = [
-            (i, c) for i, c in hand_without_haipaboru
-            if not _is_evolution_for_field(c) and not is_support(c)
-        ]
-        evo_cards_in_hand = [(i, c) for i, c in hand_without_haipaboru if _is_evolution_for_field(c)]
-        # 捨てられる非進化カードが1枚以下 かつ 進化先がある → 進化先を捨てることになるので使わない
-        if evo_cards_in_hand and len(non_evo_non_support) < 2:
-            # サポートも含めて2枚捨てられるか確認
-            safe_discards = len(non_evo_non_support) + max(0, support_count - 1)  # サポート1枚は残す
-            if safe_discards < 2:
-                return False
-
-        # 手札の闘エネ枚数をカウント（全部捨てない保護用）
-        energy_count_in_hand = sum(
-            1 for _, c in hand_without_haipaboru
-            if is_energy(c) and getattr(c, "energy_type", None) == "fighting"
-        )
-
-        scored = []
-        for i, c in hand_without_haipaboru:
-            discard_score = get_haipaboru_discard_weight(weights, c)
-            if small_hand and is_support(c):
-                # 「手札が少ない局面では、サポートを残した方が負けにくい」経験則をソフトに適用。
-                # ただし、候補がサポートしかない場合にゼロ除外で詰まないよう "絶対禁止" ではなく強めの減点に留める。
-                discard_score -= 2000.0
-            # ドラパルトexデッキ: 炎・超エネルギーは絶対に捨てない（ファントムダイブの必須コスト）
-            _drapa_deck_check_names = {"ドラメシヤ", "ドロンチ", "ドラパルトex"}
-            _is_drapa_hb_discard = any(
-                is_pokemon(hc) and (getattr(hc, "name", "") or "").strip() in _drapa_deck_check_names
-                for _, hc in hand_without_haipaboru
-            ) or any(
-                is_pokemon(dc) and (getattr(dc, "name", "") or "").strip() in _drapa_deck_check_names
-                for dc in p.deck
-            )
-            if _is_drapa_hb_discard and is_energy(c):
-                etype_hb = getattr(c, "energy_type", None)
-                if etype_hb in ("fire", "psychic"):
-                    # 手札にこのタイプのエネが何枚あるか
-                    _same_type_count = sum(
-                        1 for _, hc in hand_without_haipaboru
-                        if is_energy(hc) and getattr(hc, "energy_type", None) == etype_hb
-                    )
-                    # 場のドラパルトexラインでこのタイプのエネがまだ付いていないポケモン
-                    _drapa_needing = 0
-                    _drapa_line_names_hb = DRAPA_LINE_NAMES
-                    for _bp in ([p.active] if p.active else []) + list(p.bench):
-                        _bp_name_hb = (getattr(_bp.card, "name", "") or "").strip()
-                        if _bp_name_hb in _drapa_line_names_hb:
-                            _bp_types_hb = list(getattr(_bp, "attached_energy_types", []) or [])
-                            if etype_hb not in _bp_types_hb:
-                                _drapa_needing += 1
-                    # このエネを付ければ次ターンFD完成するか
-                    _completes_fd = False
-                    for _bp in ([p.active] if p.active else []) + list(p.bench):
-                        _bp_name_hb2 = (getattr(_bp.card, "name", "") or "").strip()
-                        if _bp_name_hb2 in DRAPA_LINE_NAMES:
-                            _bp_types_hb2 = list(getattr(_bp, "attached_energy_types", []) or [])
-                            _bp_en_hb2 = getattr(_bp, "attached_energy", 0) or 0
-                            _other_type = "psychic" if etype_hb == "fire" else "fire"
-                            if _bp_en_hb2 >= 1 and _other_type in _bp_types_hb2 and etype_hb not in _bp_types_hb2:
-                                _completes_fd = True
-                                break
-                    # 夜のタンカがデッキ+手札にあるか（エネルギーをトラッシュから回収可能）
-                    _has_tanka = any(
-                        (getattr(hc, "id", "") or "") == "yorunotanka"
-                        for _, hc in hand_without_haipaboru
-                    ) or any(
-                        (getattr(dc, "id", "") or "") == "yorunotanka"
-                        for dc in p.deck
-                    )
-                    if _completes_fd:
-                        discard_score -= 9000.0  # このエネでFD完成 → 絶対捨てない
-                    elif _same_type_count <= _drapa_needing:
-                        discard_score -= 9000.0  # 必要数以下 → 捨てると攻撃不能
-                    elif _same_type_count <= 1 and not _has_tanka:
-                        discard_score -= 9000.0  # 最後の1枚+タンカなし → 生命線
-                    elif _same_type_count <= 1 and _has_tanka:
-                        discard_score += 300.0  # 最後の1枚だがタンカあり → 捨ててOK（回収可能）
-                    elif _same_type_count >= 2:
-                        discard_score += 500.0  # 2枚以上 → 1枚は捨ててOK
-                    else:
-                        discard_score -= 4000.0  # その他 → 慎重に
-                elif etype_hb == "darkness":
-                    # ニャースexがバトル場で逃げ用に必要な場合は保護
-                    _nyarth_active = (
-                        p.active and (getattr(p.active.card, "name", "") or "").strip() == "ニャースex"
-                        and (getattr(p.active, "attached_energy", 0) or 0) == 0
-                    )
-                    if _nyarth_active:
-                        discard_score -= 3000.0  # 逃げ用に温存
-                    else:
-                        discard_score += 200.0  # 悪はファントムダイブに不要、むしろ捨てやすい
-            # ドラパルトexデッキ: ドラパルトex/ドロンチ/ふしぎなアメは捨てない
-            if _is_drapa_hb_discard and is_pokemon(c):
-                c_name_hb = (getattr(c, "name", "") or "").strip()
-                if c_name_hb == "ドラパルトex":
-                    discard_score -= 8000.0  # メインアタッカー
-                elif c_name_hb == "ドロンチ":
-                    discard_score -= 7000.0  # 進化の要（ていさつしれい）
-            if _is_drapa_hb_discard and is_goods(c) and (getattr(c, "id", "") or "") == "fushiginaame":
-                # ドラパルトexが手札にあり場にドラメシヤがいれば即進化可能 → 超重要
-                _has_drapa_in_hand = any(
-                    (getattr(hc, "name", "") or "").strip() == "ドラパルトex"
-                    for _, hc in hand_without_haipaboru
-                )
-                _has_drameshiya_field = any(
-                    (getattr(bp.card, "name", "") or "").strip() == "ドラメシヤ"
-                    for bp in ([p.active] if p.active else []) + list(p.bench or [])
-                )
-                if _has_drapa_in_hand and _has_drameshiya_field:
-                    discard_score -= 9000.0  # 即進化可能 → 絶対捨てない
-                else:
-                    discard_score -= 3000.0
-            # ドラパルトexデッキ: メイのはげまし/アカマツはエネ加速の生命線 → 捨てない
-            if _is_drapa_hb_discard and is_support(c):
-                c_id_hb = (getattr(c, "id", "") or "").strip()
-                if c_id_hb == "meinohagemashi":
-                    discard_score -= 4000.0  # メイのはげまし: Stage2にエネ2枚付ける唯一の手段
-                elif c_id_hb == "akamatsu":
-                    discard_score -= 15000.0  # アカマツ: FDの生命線（炎+超を確実に確保）
-            # アンフェアスタンプは終盤の逆転カード → 基本的に捨てない（全デッキ共通）
-            if is_goods(c) and (getattr(c, "id", "") or "") == "anfeasutanpu":
-                discard_score -= 15000.0
-            # リーリエの決心は最重要ドローサポート → 手札に2枚ある時のみ捨てOK
-            if is_support(c) and (getattr(c, "id", "") or "") == "riirienokesshin":
-                _lillie_count = sum(
-                    1 for _, hc in hand_without_haipaboru
-                    if is_support(hc) and (getattr(hc, "id", "") or "") == "riirienokesshin"
-                )
-                if _lillie_count < 2:
-                    discard_score -= 15000.0  # 1枚しかない → 絶対捨てない
-            # 闘エネは捨てにくくする。ルナサイクルのコスト+手張りに必要。
-            # ただし手札全捨てサポート（ゼイユ等）があるなら、どうせ捨てるのでペナルティ不要。
-            _has_trash_support = any(
-                is_support(hc) and (getattr(hc, "id", "") or "") in ("zeiyu", "hakasenokenkyuu", "hakasenokenkyuufutouhakase")
-                for _, hc in hand_without_haipaboru
-            )
-            # エネは常に少し捨てにくい。手札全捨てサポートがある場合のみ免除。
-            if is_energy(c) and getattr(c, "energy_type", None) == "fighting" and not _has_trash_support:
-                discard_score -= 800.0
-                # 手札にエネが2枚しかなく、他にエネ回収手段がない場合は
-                # 両方捨てるとエネ枯渇で攻撃不能になる → 超大ペナルティ
-                if energy_count_in_hand <= 2:
-                    _has_tanka = any(
-                        (getattr(hc, "id", "") or "") == "yorunotanka"
-                        for _, hc in hand_without_haipaboru
-                    )
-                    _has_luna_cycle = (
-                        _field_has_pokemon(p, "ルナトーン", "runaton")
-                        and _field_has_pokemon(p, "ソルロック", "sorurokku-mc-372", "sorurokku")
-                    )
-                    if not _has_tanka and not _has_luna_cycle:
-                        discard_score -= 3000.0
-            # ポケモンいれかえは攻撃可能なアタッカーに交代できる重要カード。捨てにくくする。
-            if is_goods(c) and (getattr(c, "effect", None) == "swap_active" or getattr(c, "id", "") in ("pokemon_irekae", "pokemonirekae")):
-                discard_score -= 1000.0
-                # Fix J: メガルカリオexが場or手札にある場合、メガブレイブリセットトリックに必要なので追加保護
-                _mega_present = any(
-                    "メガルカリオ" in (getattr(hc, "name", "") or "")
-                    for _, hc in hand_without_haipaboru
-                ) or (
-                    p.active and "メガルカリオ" in (getattr(p.active.card, "name", "") or "")
-                ) or any(
-                    "メガルカリオ" in (getattr(bp.card, "name", "") or "")
-                    for bp in (p.bench or [])
-                )
-                if _mega_present:
-                    discard_score -= 500.0
-            # ドローサポート（ゼイユ、リーリエ等）: ルナサイクル不成立時は貴重なドロー源
-            _DRAW_SUPPORT_IDS = ("zeiyu", "riirienokesshin", "hakasenokenkyuu", "hakasenokenkyuufutouhakase", "jixyajjiman", "nemo")
-            if is_support(c) and (getattr(c, "id", "") or "") in _DRAW_SUPPORT_IDS:
-                _luna_engine_ok = (
-                    _field_has_pokemon(p, "ルナトーン", "runaton")
-                    and _field_has_pokemon(p, "ソルロック", "sorurokku-mc-372", "sorurokku")
-                )
-                if not _luna_engine_ok:
-                    discard_score -= 1000.0  # エンジン不成立 → ドロサポは唯一のドロー源
-                else:
-                    discard_score -= 300.0  # エンジン成立でも一応保護
-            # 夜のタンカはトラッシュからエネ/ポケモンを回収できる重要カード。捨てにくくする。
-            if getattr(c, "id", "") == "yorunotanka":
-                discard_score -= 2000.0
-            # 場のポケモンに進化できるカードは捨てない(メガルカリオexを捨ててまた取るのは無駄)
-            if _is_evolution_for_field(c):
-                discard_score -= 5000.0
-            # ex/メガポケモンは進化先でなくても重要（将来の切り札）
-            elif is_pokemon(c) and (getattr(c, "is_ex", False) or getattr(c, "is_mega", False)):
-                discard_score -= 3000.0
-            c_name_for_count = getattr(c, "name", "") or getattr(c, "id", "") or ""
-            c_count_in_hand = name_counts.get(c_name_for_count, 0)
-            if c_count_in_hand >= 2:
-                # 同名2枚以上は捨てやすい。ただしメガルカリオex等の重要進化カードは
-                # 2枚捨てるとデッキに残り1枚以下になり、サイド落ちで詰むリスクがある。
-                if _is_evolution_for_field(c):
-                    discard_score += 100  # 控えめにしか捨てやすくしない
-                else:
-                    discard_score += 500
-            if (not small_hand) and is_support(c) and support_count >= 2:
-                discard_score += 300
-            # --- データ分析から判明したカード別の調整 ---
-            _cid = getattr(c, "id", "") or ""
-            # スペシャルレッドカードは妨害手段として捨てにくい（統計: -7.1%）
-            if _cid == "supeshiyarureddokado":
-                discard_score -= 700.0
-            # ロケット団の監視塔: 相手に無色ポケモンがいなければ不要 → 捨てやすい
-            if _cid == "rokettodannokanshitou":
-                opp = state.players[state.opponent()]
-                opp_has_colorless = any(
-                    getattr(getattr(bp, "card", None), "pokemon_type", "") == "colorless"
-                    for bp in [opp.active] + opp.bench if bp is not None
-                ) or any(
-                    getattr(dc, "pokemon_type", "") == "colorless"
-                    for dc in opp.deck if is_pokemon(dc)
-                )
-                if not opp_has_colorless:
-                    discard_score += 500.0
-            # ふうせんは逃げるコスト0にする重要カード（統計: -5.3%）
-            if _cid == "fuusen":
-                discard_score -= 500.0
-            # Pattern 5: ボスの指令はターン0（先行1ターン目）のみ捨ててOK、それ以降は保護
-            if _cid == "bosunoshirei":
-                if state.turn_count == 0:
-                    discard_score += 500.0
-                else:
-                    discard_score -= 500.0
-            # ミツルの思いやり/ポケパッドは捨てても勝率に影響しない（統計: +4.0%, +4.4%）
-            if _cid in ("mitsurunoomoiyari", "pokepaddo"):
-                discard_score += 400.0
-            # 余剰ハイパーボール: メガルカリオexが手札/場にない場合はサーチ手段として保護
-            if _cid == "haipaboru":
-                _has_mega_anywhere = any(
-                    "メガルカリオ" in (getattr(hc, "name", "") or "")
-                    for hc in p.hand if is_pokemon(hc)
-                ) or any(
-                    "メガルカリオ" in (getattr(bp.card, "name", "") or "")
-                    for bp in ([p.active] if p.active else []) + list(p.bench)
-                )
-                if _has_mega_anywhere:
-                    discard_score += 200.0  # メガルカリオ確保済み → HB捨ててOK
-                else:
-                    discard_score -= 300.0  # メガルカリオ未確保 → HBでサーチが必要
-            # Pattern 4: パワープロテイン基本保護（+30は常に貴重、エネルギー並みに保護）
-            if _cid == "pawaapurotein":
-                discard_score -= 800.0
-            # パワープロテイン: 使えば相手を倒せる場合は捨てない
-            if _cid == "pawaapurotein" and p.active and getattr(p.active.card, "pokemon_type", None) == "fighting":
-                opp_hb = state.defending_player_state()
-                if opp_hb.active and opp_hb.active.hp and opp_hb.active.hp > 0:
-                    # 手札の全パワプロ使用時のダメージを試算
-                    _pp_count = sum(1 for _, hc in hand_without_haipaboru if getattr(hc, "id", "") == "pawaapurotein")
-                    _n_now = getattr(state, "fighting_damage_plus_30_count_this_turn", 0)
-                    state.fighting_damage_plus_30_count_this_turn = _n_now + _pp_count
-                    try:
-                        _dmg_with_pp = _max_effective_damage_for_attacker(state, p.active, opp_hb.active, state.current_player)
-                    finally:
-                        state.fighting_damage_plus_30_count_this_turn = _n_now
-                    if _dmg_with_pp >= opp_hb.active.hp:
-                        discard_score -= 5000.0  # 全パワプロ使えばKO可能 → 捨てない
-            discard_score += _haipaboru_lunatone_discard_bonus(p, hand_without_haipaboru, c)
-            discard_score += _haipaboru_judge_vs_lillie_adjustment(state, hand_without_haipaboru, c)
-            scored.append((i, discard_score))
-
-        scored.sort(key=lambda x: -x[1])
-        score_by_index = {i: s for i, s in scored}
-        to_discard_idx = [scored[0][0], scored[1][0]]
-        i0, i1 = to_discard_idx
-        # 同名の重要カード（進化ポケモン等）を2枚とも捨てない。
-        # デッキに残り1枚以下になるとサイド落ちで詰むリスクがある。
-        c0_name = (getattr(p.hand[i0], "name", "") or "").strip()
-        c1_name = (getattr(p.hand[i1], "name", "") or "").strip()
-        if c0_name == c1_name and c0_name and is_pokemon(p.hand[i0]) and getattr(p.hand[i0], "evolves_from", None):
-            replacement = next(
-                (idx for idx, _s in scored if idx != i0 and idx != i1),
-                None,
-            )
-            if replacement is not None:
-                to_discard_idx = [i0, replacement]
-                i0, i1 = to_discard_idx
-        # サポートを 2 枚とも捨てると次ターンのドロー源が枯れやすい → 可能なら 1 枚はサポート以外に差し替え
-        if is_support(p.hand[i0]) and is_support(p.hand[i1]):
-            ns_scored = [(idx, s) for idx, s in scored if not is_support(p.hand[idx])]
-            if ns_scored:
-                best_ns_i, _best_ns_s = max(ns_scored, key=lambda x: x[1])
-                s0, s1 = score_by_index[i0], score_by_index[i1]
-                i_hi = i0 if s0 >= s1 else i1
-                to_discard_idx = [i_hi, best_ns_i]
-        # 「手札の最後の一枚のサポートカードを捨てない」方針:
-        # support_count==1 のとき、唯一のサポートがトラッシュ候補に入っていたら、
-        # 代わりに非サポートを 1 枚選び直す。
-        _protect_last_support = support_count == 1 and only_support_idx is not None and only_support_idx in to_discard_idx
-        # 序盤のボスの指令は使えないので保護不要（捨ててOK��
-        if _protect_last_support:
-            _last_sup_id = getattr(p.hand[only_support_idx], "id", "") or ""
-            if _last_sup_id == "bosunoshirei" and state.turn_count == 0:
-                _protect_last_support = False
-        if _protect_last_support:
-            replacement = next(
-                (idx for idx, _score in scored if idx != only_support_idx and idx not in to_discard_idx),
-                None,
-            )
-            if replacement is not None:
-                other_idx = to_discard_idx[0] if to_discard_idx[1] == only_support_idx else to_discard_idx[1]
-                to_discard_idx = [other_idx, replacement]
-        cards_to_log = [p.hand[i] for i in to_discard_idx]
-        discard_names = ", ".join(_card_label(c) for c in cards_to_log)
-        for i in sorted(to_discard_idx, reverse=True):
-            p.discard.append(p.hand.pop(i))
-        for c in cards_to_log:
-            _log_choice(state, "haipaboru_discard", card_id=getattr(c, "id", None) or getattr(c, "name", ""))
-        new_hi = p.hand.index(card)
-
-        pokemon_found = _find_pokemon_for_haipaboru(p, state)
-
-        if pokemon_found:
-            i, c = pokemon_found
-            p.deck.pop(i)
-            p.hand.append(c)
-            state.drawn_this_turn.append(c)
-            random.shuffle(p.deck)
-            mark_own_deck_shuffled(state)
-            mark_deck_searched(state)
-        p.discard.append(p.hand.pop(new_hi))
-        add_label = f" → {_card_label(pokemon_found[1])}" if pokemon_found else ""
-        state.log(
-            f"{state.player_name(state.current_player)}: ハイパーボール → {discard_names} 捨て → {_card_label(pokemon_found[1])} を手札に"
-            if pokemon_found
-            else f"{state.player_name(state.current_player)}: ハイパーボール → {discard_names} 捨て（山札にポケモンなし）"
-        )
-        return True
 
     if cid == "anfeasutanpu":
         # 前の相手の番に自分のポケモンがきぜつしていたら使える（タイプ不問）
