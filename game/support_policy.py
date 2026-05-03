@@ -215,7 +215,17 @@ def heuristic_logits_support(state: GameState) -> list[float]:
                     our_dmg = _max_effective_damage_for_attacker(state, p.active, opp.active, state.current_player)
                     can_ko_active = our_dmg >= opp.active.hp
                 if can_ko_active:
-                    score += -5.0  # バトル場を倒せるのにボスは無駄遣い
+                    # サイド残り2以下でベンチにKO可能なポケモンがいる → ボスで取り切り
+                    our_prizes_boss = len(p.prize_pile) if hasattr(p, "prize_pile") else 99
+                    if our_prizes_boss <= 2:
+                        if ko_bench is None:
+                            ko_bench = _can_ko_any_bench(state)
+                        if ko_bench:
+                            score += 15.0  # サイド取り切り → 最優先
+                        else:
+                            score += -5.0
+                    else:
+                        score += -5.0  # バトル場を倒せるのにボスは無駄遣い
                 else:
                     # ベンチに倒せるポケモンがいるなら高スコア
                     if ko_bench is None:

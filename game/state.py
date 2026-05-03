@@ -1083,7 +1083,11 @@ def _put_one_pokemon_on_bench(
         )
     _drapa_skip_nyarth = False
     if is_dragapult_deck_for_player(state, player_index):
-        if state.support_used_this_turn:
+        # サイド残り2枚以下: ボスの指令で勝てる可能性 → ニャースex常に出す
+        _our_prizes_nyarth = len(player.prize_pile)
+        if _our_prizes_nyarth <= 2:
+            pass  # スキップしない
+        elif state.support_used_this_turn:
             _drapa_skip_nyarth = True
         else:
             _has_draw_support_hand = any(
@@ -1093,14 +1097,18 @@ def _put_one_pokemon_on_bench(
                 for c in player.hand
             )
             if _has_draw_support_hand:
-                # ドラパルトexが場にいてエネ不足 → ニャースexを出してアカマツを取りに行く
-                # リーリエでドローしてもエネが来る保証はないが、アカマツなら確実
+                # ドローサポートが手札にある → おくのてキャッチで取ったサポートを使えるか？
+                # リーリエを使うと取ったサポートが山札に戻るので、取ったサポートを
+                # リーリエの代わりに使う場合のみニャースexを出す意味がある。
+                # 条件: ドラパルトexが場にいてエネ不足 → アカマツを取って即使用（リーリエより優先）
                 _drapa_ex_needs_energy_nyarth = any(
                     (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
                     and (getattr(bp, "attached_energy", 0) or 0) < 2
                     for bp in ([player.active] if player.active else []) + list(player.bench or [])
                 )
-                if not _drapa_ex_needs_energy_nyarth:
+                # サイド残り少ない場合はボスの指令で勝てる可能性があるのでスキップしない
+                _our_prizes = len(player.prize_pile)
+                if not _drapa_ex_needs_energy_nyarth and _our_prizes > 2:
                     _drapa_skip_nyarth = True
             if _opp_has_dosukoi:
                 _drapa_skip_nyarth = True  # どすこいで引っ張られるリスク
@@ -1122,7 +1130,14 @@ def _put_one_pokemon_on_bench(
             # ドラパルトデッキ: サポート使用済みターンはニャースexを温存
             # ただしベンチ0体なら種切れ防止で必ず出す
             if _drapa_skip_nyarth and c_name == "ニャースex":
-                if len(player.bench) >= 1:
+                # 種切れ防止: ベンチ0体+手札に他のたねがない場合のみ出す
+                _has_other_basic = any(
+                    is_pokemon(hc) and not getattr(hc, "evolves_from", None)
+                    and (getattr(hc, "name", "") or "") != "ニャースex"
+                    and hi != i
+                    for hi, hc in enumerate(player.hand)
+                )
+                if len(player.bench) >= 1 or _has_other_basic:
                     continue
             # ドラパルトデッキ: キチキギスexは必要になるまで出さない
             # さかてにとるは前ターンに自分のポケモンがきぜつしていないと使えない
@@ -1168,6 +1183,55 @@ def _put_one_pokemon_on_bench(
                 cands_priority.append((i, c))
             else:
                 cands_other.append((i, c))
+    # ドラパルトデッキ: ポイント制でベンチ出し優先度を決定
+    if is_dragapult_deck_for_player(state, player_index):
+        _all_cands = cands_priority + cands_other
+        _all_bp = ([player.active] if player.active else []) + list(player.bench or [])
+        _drapa_line_count = sum(
+            1 for bp in _all_bp if (getattr(bp.card, "name", "") or "").strip() in DRAPA_LINE_NAMES
+        )
+        _drapa_line_needs_energy = any(
+            (getattr(bp.card, "name", "") or "").strip() in ("ドラパルトex", "ドロンチ")
+            and (getattr(bp, "attached_energy", 0) or 0) < 2
+            for bp in _all_bp
+        )
+        _remaining_slots = BENCH_SIZE - len(player.bench)
+
+        def _bench_score(item):
+            _, c = item
+            c_name = (getattr(c, "name", "") or "").strip()
+            score = 0
+            if c_name == "ドラメシヤ":
+                if _drapa_line_count < 2:
+                    score = 3000  # ライン不足 → 最優先で展開
+                else:
+                    score = 1000
+            elif c_name == "スボミー":
+                score = 2500  # むずむずかふん（グッズロック）
+            elif c_name == "ヨマワル":
+                score = 2000  # カースドボム準備
+            elif c_name == "ニャースex":
+                if _drapa_skip_nyarth:
+                    score = -1000  # 出すべきでない
+                elif not state.support_used_this_turn and _drapa_line_needs_energy:
+                    score = 3500  # おくのてキャッチ→アカマツでエネ加速確定
+                elif not state.support_used_this_turn and not any(
+                    is_support(c2) for _, c2 in _all_cands if (getattr(c2, "name", "") or "") != "ニャースex"
+                ):
+                    score = 1500  # サポートなし→おくのてキャッチで取る価値あり
+                else:
+                    score = 500  # サポート使用済み→今ターンは活かせない
+            elif c_name == "キチキギスex":
+                score = 800
+            elif c_name == "マシマシラ":
+                score = 200
+            else:
+                score = 100
+            return score
+
+        _all_cands.sort(key=_bench_score, reverse=True)
+        cands_priority = _all_cands
+        cands_other = []
     for i, c in cands_priority + cands_other:
         p = c.copy()
         bp = BattlePokemon(card=p)

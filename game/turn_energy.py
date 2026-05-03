@@ -1,4 +1,5 @@
 """ターン実行用：エネルギー付与・進化の試行。"""
+from math import comb
 from card import is_energy, is_goods, is_pokemon, is_support
 
 from .damage import _max_effective_damage_if_attach
@@ -28,8 +29,116 @@ from .card_ids import (
     FIGHT_GONG,
     FUSHIGI_NA_AME,
     FUUSEN,
+    HAKASE_NO_KENKYU,
+    JUDGE,
     POKEPAD,
+    RIRIE_NO_KESSHIN,
+    UNFAIR_STAMP,
+    ZEIYU,
 )
+
+
+def _calc_draw_probability(deck_size: int, target_count: int, cards_to_see: int) -> float:
+    """デッキN枚中K枚のターゲットカードがある時、M枚見て少なくとも1枚引ける確率。
+    超幾何分布: P = 1 - C(N-K, M) / C(N, M)"""
+    if target_count <= 0 or deck_size <= 0 or cards_to_see <= 0:
+        return 0.0
+    if target_count >= deck_size or cards_to_see >= deck_size:
+        return 1.0
+    if cards_to_see > deck_size:
+        cards_to_see = deck_size
+    try:
+        p_none = comb(deck_size - target_count, cards_to_see) / comb(deck_size, cards_to_see)
+        return 1.0 - p_none
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def _count_energy_in_deck(p, energy_type: str) -> int:
+    """山札に残っている指定タイプのエネルギー枚数を数える。"""
+    return sum(
+        1 for c in (p.deck or [])
+        if is_energy(c) and getattr(c, "energy_type", None) == energy_type
+    )
+
+
+def _count_upcoming_card_views(state, p) -> int:
+    """このターン中にあと何枚デッキの上から見れるか（リーリエ+ていさつしれい）を推定。"""
+    cards_to_see = 0
+
+    # 手札刷新サポート（リーリエ等）による引き枚数
+    if not state.support_used_this_turn:
+        for c in p.hand:
+            if not is_support(c):
+                continue
+            cid = (getattr(c, "id", "") or "").strip()
+            if cid == RIRIE_NO_KESSHIN:
+                cards_to_see += 8
+                break
+            elif cid == HAKASE_NO_KENKYU:
+                cards_to_see += 7
+                break
+            elif cid == ZEIYU:
+                cards_to_see += max(0, 5 - len(p.hand))
+                break
+
+    # 未使用のていさつしれい（ドロンチ）による閲覧枚数
+    _used_ids = getattr(state, "_teisatsushirei_used_ids_this_turn", set())
+    for bp in ([p.active] if p.active else []) + list(p.bench or []):
+        if (getattr(bp.card, "name", "") or "").strip() == "ドロンチ":
+            if id(bp) not in _used_ids:
+                cards_to_see += 2
+
+    return cards_to_see
+
+
+def _should_skip_energy_for_fd_probability(state, p) -> bool:
+    """FD完成のために、エネ付与をスキップしてサポートに賭けるべきか判定。
+    ドラパルトexがFDにあと1エネ不足で、手札に不足タイプがないが
+    リーリエ+ていさつしれいで引ける確率が高い場合にTrue。"""
+    _all_bp = ([p.active] if p.active else []) + list(p.bench or [])
+
+    for bp in _all_bp:
+        if (getattr(bp.card, "name", "") or "").strip() not in ("ドラパルトex", "ドロンチ"):
+            continue
+        _types = list(getattr(bp, "attached_energy_types", []) or [])
+        _en = getattr(bp, "attached_energy", 0) or 0
+        if _en < 1:
+            continue
+        # FDにあと1エネ不足（炎or超のどちらかだけ付いている）
+        _has_fire = "fire" in _types
+        _has_psychic = "psychic" in _types
+        if _has_fire == _has_psychic:
+            continue  # 両方ある or 両方ない → 対象外
+        _need_type = "psychic" if _has_fire else "fire"
+
+        # 不足タイプが手札にある → スキップ不要（FD完成即時パスで付与される）
+        _has_in_hand = any(
+            is_energy(c) and getattr(c, "energy_type", None) == _need_type
+            for c in p.hand
+        )
+        if _has_in_hand:
+            return False  # スキップ不要
+
+        # 山札に不足タイプが何枚あるか
+        _in_deck = _count_energy_in_deck(p, _need_type)
+        if _in_deck == 0:
+            return False  # 山札にもない → スキップしても意味なし
+
+        # このターンで見れるカード枚数を計算
+        _cards_to_see = _count_upcoming_card_views(state, p)
+        if _cards_to_see == 0:
+            return False  # 見れるカードがない → スキップしても意味なし
+
+        # 確率計算
+        _deck_size = len(p.deck)
+        _prob = _calc_draw_probability(_deck_size, _in_deck, _cards_to_see)
+
+        # 確率が30%以上ならスキップして賭ける
+        if _prob >= 0.30:
+            return True
+
+    return False
 
 
 def _should_attach_for_evolution(p: PlayerState) -> bool:
@@ -91,9 +200,16 @@ def _try_evolve_once(state: GameState) -> bool:
         if not is_pokemon(c) or not getattr(c, "evolves_from", None):
             continue
         if p.active and _can_evolve_onto(p.active.card, c):
-            candidates.append((hand_idx, None, p.active.card))
+            # 今ターン進化/配置したポケモンは進化不可（ゲームルール）
+            if not (getattr(p.active.card, "evolves_from", None) is not None and getattr(p.active, "evolved_this_turn", False)):
+                if not getattr(p.active, "put_on_bench_this_turn", False):
+                    candidates.append((hand_idx, None, p.active.card))
         for bench_idx, bench_poke in enumerate(p.bench):
             if _can_evolve_onto(bench_poke.card, c):
+                if getattr(bench_poke.card, "evolves_from", None) is not None and getattr(bench_poke, "evolved_this_turn", False):
+                    continue  # 今ターン進化済み → 再進化不可
+                if getattr(bench_poke, "put_on_bench_this_turn", False):
+                    continue  # 今ターン配置 → 進化不可
                 candidates.append((hand_idx, bench_idx, bench_poke.card))
     if not candidates:
         return False
@@ -234,23 +350,38 @@ def _try_evolve_once(state: GameState) -> bool:
                     1 for bp in ([p.active] if p.active else []) + list(p.bench or [])
                     if (getattr(bp.card, "name", "") or "").strip() == "ドラパルトex"
                 )
-                # 進化対象のドロンチがていさつしれい未使用なら進化を待つ
+                # 場のどのドロンチでもていさつしれい未使用なら進化を待つ
+                # （全てのていさつしれいを使い切ってからドラパルトexに進化すべき）
                 _used_ids = getattr(state, "_teisatsushirei_used_ids_this_turn", set())
-                _target_bp = p.active if bench_idx_ is None else p.bench[bench_idx_]
-                _target_name = (getattr(_target_bp.card, "name", "") or "").strip()
-                _teisatsu_unused = (
-                    _target_name == "ドロンチ"
-                    and id(_target_bp) not in _used_ids
+                _all_field = ([p.active] if p.active else []) + list(p.bench or [])
+                _teisatsu_unused = any(
+                    (getattr(bp.card, "name", "") or "").strip() == "ドロンチ"
+                    and id(bp) not in _used_ids
+                    for bp in _all_field
                 )
                 # 進化後に攻撃できるか（エネルギーが足りるか）
+                _target_bp = p.active if bench_idx_ is None else p.bench[bench_idx_]
                 _target_energy = getattr(_target_bp, "attached_energy", 0) or 0
                 _can_attack_after_evo = _target_energy >= 1  # ジェットヘッドはエネ1
                 if _has_more_doronchi_evo:
                     w += 1000.0  # ドロンチ進化を先にさせる
                 elif _teisatsu_unused:
-                    w -= 10000.0  # ていさつしれい未使用 → 絶対に進化しない（先にていさつしれいを使う）
+                    w -= 10000.0  # 場にていさつしれい未使用のドロンチがいる → 進化を待つ
                 elif not _can_attack_after_evo:
-                    w -= 500.0  # エネ不足で攻撃できない → ていさつしれいを次ターンも使いたいので進化しない
+                    # エネ不足で攻撃できない → ていさつしれいを次ターンも使いたいので進化抑制
+                    # ただし手札刷新カード（アンフェアスタンプ等）が手札にある場合は
+                    # 進化しないと手札ごとドラパルトexが山札に戻るので進化すべき
+                    _has_hand_shuffle = any(
+                        (getattr(hc, "id", "") or "") in (UNFAIR_STAMP,)
+                        or (is_support(hc) and (getattr(hc, "id", "") or "") in (
+                            RIRIE_NO_KESSHIN, HAKASE_NO_KENKYU, ZEIYU, JUDGE,
+                        ))
+                        for hc in p.hand
+                    )
+                    if _has_hand_shuffle:
+                        w += 2000.0  # 手札刷新前に進化しておく（場に残る方が山札に戻るよりマシ）
+                    else:
+                        w -= 500.0
                 elif _hand_size <= 4 and _doronchi_on_field <= 1 and _drapa_on_field == 0:
                     w += 500.0  # 手札少なく唯一のドロンチ → ていさつしれい温存、進化抑制
                 else:
@@ -269,6 +400,9 @@ def _try_evolve_once(state: GameState) -> bool:
         return (w, on_active)
 
     best = max(candidates, key=_evolve_score)
+    best_score = _evolve_score(best)
+    if best_score[0] < 0:
+        return False  # 全候補がマイナススコア → 進化しない（ていさつしれい等を先に使う）
     hand_idx, bench_idx, target_card = best
     evolve_pokemon(state, hand_idx, bench_index=bench_idx)
     tid = getattr(target_card, "id", None) or getattr(target_card, "name", "")
@@ -577,6 +711,15 @@ def _try_attach_energy_auto(state: GameState) -> bool:
     """
     p = state.active_player_state()
     can_evolve_this_turn = not _is_first_player_first_turn(state)
+
+    # ドラパルトexデッキ: FD完成確率に基づくエネ付与判断
+    # ドラパルトexがFDにあと1エネ不足の場合、手札刷新+ていさつしれいで
+    # 不足エネを引ける確率を計算し、高ければエネ付与をスキップしてサポートに賭ける
+    if is_dragapult_deck_for_player(state, state.current_player) and not state.energy_attached_this_turn:
+        if not state.support_used_this_turn:
+            _should_skip = _should_skip_energy_for_fd_probability(state, p)
+            if _should_skip:
+                return False
 
     # ドラパルトexデッキ: ファントムダイブ完成即時パス（最優先、他の全パスより先）
     # 手札にfire/psychicがあり、ドラパルトexに不足タイプを付ければファントムダイブが撃てる

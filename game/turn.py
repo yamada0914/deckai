@@ -1236,6 +1236,12 @@ def _try_joint_q_decision(state: GameState) -> bool:
                     state._record_frame()
                 break
 
+    # --- サポート使用後の進化チェック ---
+    # リーリエの決心等で手札が入れ替わった場合、新しい手札で進化を試みる
+    if acted:
+        _try_evolve_rounds_after_hand_change(state)
+        p = state.active_player_state()
+
     # --- エネルギー実行 ---
     if not state.energy_attached_this_turn:
         from .trainers import attach_energy
@@ -1419,6 +1425,120 @@ def _try_attach_energy_with_attack_lookahead(state: GameState) -> bool:
 
 
 
+def _try_fd_win_with_boss(state) -> bool:
+    """ドラパルトデッキ: FD+ボスの指令で今ターン勝ち確なら、ボスを使用する。
+
+    勝ち条件（サイド≤2, FD ready）:
+    - ボスでHP≤200のベンチを引っ張り → FD200で倒す
+    - FDベンチ60でHP≤60の別ポケモンも倒す
+    - 合計2枚以上のサイドを取って勝ち
+
+    ニャースexが手札にある場合は先にベンチに出しておくのてキャッチでボスを取得。
+    """
+    if not is_dragapult_deck_for_player(state, state.current_player):
+        return False
+
+    p = state.active_player_state()
+    opp = state.defending_player_state()
+    if not p.active or not opp.active:
+        return False
+
+    prizes_left = len(p.prize_pile)
+    if prizes_left > 2:
+        return False
+
+    # FDが撃てるか
+    active_name = (getattr(p.active.card, "name", "") or "").strip()
+    if active_name != "ドラパルトex":
+        return False
+    en_types = list(getattr(p.active, "attached_energy_types", []) or [])
+    if "fire" not in en_types or "psychic" not in en_types:
+        return False
+
+    # 相手ベンチにHP≤200のポケモンがいるか（ボスで引っ張ってFD200で倒せる）
+    boss_targets = [bp for bp in (opp.bench or []) if bp.hp is not None and bp.hp <= 200]
+    if not boss_targets:
+        return False
+
+    # 相手ベンチにHP≤60のポケモンがいるか（FDベンチ60で倒せる）
+    bench_60_targets = [bp for bp in (opp.bench or []) if bp.hp is not None and bp.hp <= 60]
+
+    # バトル場がHP≤200か（ボス不要で倒せる）
+    active_ko = opp.active.hp is not None and opp.active.hp <= 200
+
+    # 勝ち確判定
+    can_win = False
+    need_boss = False
+    if prizes_left <= 1:
+        # サイド1枚: ボスで何か倒せれば勝ち
+        can_win = True
+        need_boss = not active_ko
+    elif prizes_left <= 2:
+        if active_ko and bench_60_targets:
+            can_win = True  # ボス不要
+            need_boss = False
+        elif boss_targets and bench_60_targets:
+            # ボスでHP≤200を引っ張り + ベンチ60でHP≤60を倒す = 2枚
+            # ただしボスターゲットとベンチ60ターゲットが別ポケモンであること
+            for bt in boss_targets:
+                other_60 = [t for t in bench_60_targets if t is not bt]
+                if other_60:
+                    can_win = True
+                    need_boss = True
+                    break
+            # ボスで引っ張ったポケモン自体がHP≤60でもOK（バトル場200で倒す+元バトル場もベンチ60で）
+            if not can_win and active_ko:
+                # バトル場も倒せる+ボスで引っ張って別の1体 → いや、これはバトル場交換なので...
+                pass
+        elif boss_targets and prizes_left <= 1:
+            can_win = True
+            need_boss = True
+
+    if not can_win:
+        return False
+    if not need_boss:
+        return False  # ボス不要 → 通常攻撃で勝てるので介入不要
+
+    # ボスの指令が手札にあるか
+    has_boss = any((getattr(c, "id", "") or "") == BOSS_NO_SHIREI for c in p.hand)
+
+    # ニャースexでボスを取れるか
+    if not has_boss:
+        can_get_via_nyarth = (
+            len(p.bench) < 5
+            and any(
+                is_pokemon(c) and (getattr(c, "name", "") or "").strip() == "ニャースex"
+                for c in p.hand
+            )
+        )
+        if can_get_via_nyarth:
+            # ニャースexをベンチに出す → おくのてキャッチ
+            for ni, nc in enumerate(p.hand):
+                if is_pokemon(nc) and (getattr(nc, "name", "") or "").strip() == "ニャースex":
+                    from .state import BattlePokemon as _BPW
+                    nyarth_card = p.hand.pop(ni)
+                    nbp = _BPW(card=nyarth_card.copy())
+                    nbp.put_on_bench_this_turn = True
+                    p.bench.append(nbp)
+                    state.log(f"{state.player_name(state.current_player)}: ベンチに ニャースex を出す（ベンチ {len(p.bench)} 体）")
+                    state._record_frame()
+                    _try_use_ability_okunote_catch(state)
+                    p = state.active_player_state()
+                    has_boss = any((getattr(c, "id", "") or "") == BOSS_NO_SHIREI for c in p.hand)
+                    break
+
+    if not has_boss:
+        return False
+
+    # ボスの指令を使用
+    for bi, bc in enumerate(p.hand):
+        if (getattr(bc, "id", "") or "") == BOSS_NO_SHIREI:
+            use_support(state, bi)
+            return True
+
+    return False
+
+
 def _execute_ko_plan(state):
     """KOプラン探索と実行。確定行動の組み合わせでこのターンKOできる手順があれば実行する。"""
     # KOプラン探索: 確定行動の組み合わせでこのターンKOできる手順があるか
@@ -1510,13 +1630,23 @@ def _execute_ko_plan(state):
                         evo_name = step.target.split("→")[-1]
                         hi = next((i for i, c in enumerate(p_plan.hand) if is_pokemon(c) and getattr(c, "name", "") == evo_name), None)
                         if hi is not None:
-                            if step.target.startswith("active"):
-                                evolve_pokemon(state, hi)
-                            else:
-                                old_name = step.target.split(":")[1].split("→")[0]
-                                bi = next((i for i, bp in enumerate(p_plan.bench) if bp.card.name == old_name), None)
-                                if bi is not None:
-                                    evolve_pokemon(state, hi, bench_index=bi)
+                            # ドラパルトex進化前にていさつしれいを使い切る
+                            if evo_name == "ドラパルトex":
+                                while _try_use_ability_teisatsushirei(state):
+                                    p_plan = state.active_player_state()
+                                    state._record_frame()
+                                    # hand index が変わる可能性
+                                    hi = next((i for i, c in enumerate(p_plan.hand) if is_pokemon(c) and getattr(c, "name", "") == evo_name), None)
+                                    if hi is None:
+                                        break
+                            if hi is not None:
+                                if step.target.startswith("active"):
+                                    evolve_pokemon(state, hi)
+                                else:
+                                    old_name = step.target.split(":")[1].split("→")[0]
+                                    bi = next((i for i, bp in enumerate(p_plan.bench) if bp.card.name == old_name), None)
+                                    if bi is not None:
+                                        evolve_pokemon(state, hi, bench_index=bi)
                 elif step.action == "retreat":
                     target_name = step.target.lstrip("→")
                     bi = next((i for i, bp in enumerate(p_plan.bench) if bp.card.name == target_name), None)
@@ -1689,6 +1819,8 @@ def run_turn_auto(state: GameState) -> bool:
     if not _can_win_now:
         _try_put_bench_until_full()
 
+    # TODO: FD+ボスで勝ち確判定（未完成、次回修正）
+
     # キチキギスex: さかてにとる（前の相手の番にきぜつしていれば 3 枚ドロー）
     if _try_use_ability_sakatenitori(state):
         acted = True
@@ -1747,8 +1879,11 @@ def run_turn_auto(state: GameState) -> bool:
                 )
                 for c in p.hand
             ) and not state.support_used_this_turn
-            # ドラパルトex進化が控えている → リーリエ延期を無視してていさつしれいを先に使う
-            if not _has_hr_pre_evo or _drapa_evo_pending:
+            # リーリエが手札にある → ていさつしれいはリーリエの後に回す
+            # （リーリエでシャッフル後にていさつしれいを使う方が重複なしで見れるカードが増える）
+            # ただしドラパルトex進化が控えていて、進化前にていさつしれいを使うべきドロンチがいる場合は
+            # そのドロンチのていさつしれいだけ先に使う（進化すると使えなくなるため）
+            if not _has_hr_pre_evo:
                 while _try_use_ability_teisatsushirei(state):
                     acted = True
                     p = state.active_player_state()
@@ -1761,7 +1896,8 @@ def run_turn_auto(state: GameState) -> bool:
                 acted = True
                 state._record_frame()
                 # ドロンチ進化後にていさつしれいを即使用
-                # ただしリーリエの決心等が手札にある場合はリーリエを先に使う
+                # ただしリーリエ等が手札にある場合はリーリエを先に使う
+                # （リーリエ後にていさつしれいを使う方が重複なしで見れるカードが増える）
                 _has_hand_refresh_for_teisatsu = any(
                     is_support(c) and (getattr(c, "id", "") or "") in (
                         RIRIE_NO_KESSHIN, ZEIYU, HAKASE_NO_KENKYU,
@@ -1796,6 +1932,10 @@ def run_turn_auto(state: GameState) -> bool:
                 p = state.active_player_state()
                 state._record_frame()
                 _try_put_bench_until_full()
+                if _try_evolve_rounds_after_hand_change(state):
+                    acted = True
+                    p = state.active_player_state()
+                    state._record_frame()
                 continue
 
         opp_max_effective = _opponent_max_effective_damage(state)
@@ -1994,12 +2134,23 @@ def run_turn_auto(state: GameState) -> bool:
 
         # 特性（ていさつしれい、さかてにとる、ルナサイクル、カースドボム）
         _did_ability = False
-        while _try_use_ability_teisatsushirei(state):
-            _did_ability = True
-            acted = True
-            p = state.active_player_state()
-            state._record_frame()
-            _try_put_bench_until_full()
+        # リーリエ等の手札刷新サポートがある場合、ていさつしれいはリーリエの後に回す
+        # （リーリエでシャッフル後にていさつしれいを使う方が重複なしで見れるカードが増える）
+        _delay_teisatsu = False
+        if is_dragapult_deck_for_player(state, state.current_player) and not state.support_used_this_turn:
+            _delay_teisatsu = any(
+                is_support(c) and (getattr(c, "id", "") or "") in (
+                    RIRIE_NO_KESSHIN, HAKASE_NO_KENKYU, ZEIYU,
+                )
+                for c in p.hand
+            )
+        if not _delay_teisatsu:
+            while _try_use_ability_teisatsushirei(state):
+                _did_ability = True
+                acted = True
+                p = state.active_player_state()
+                state._record_frame()
+                _try_put_bench_until_full()
         if _try_use_ability_sakatenitori(state):
             _did_ability = True
             acted = True
@@ -2023,6 +2174,8 @@ def run_turn_auto(state: GameState) -> bool:
                 _try_put_bench_until_full()
         if _did_ability:
             continue
+
+        # TODO: FD取り切り判定（未完成、次回修正）
 
         # Joint Q: サポート+エネルギーを同時決定（有効なプレイヤーのみ）
         if not state.support_used_this_turn and not state.energy_attached_this_turn:
@@ -2112,6 +2265,18 @@ def run_turn_auto(state: GameState) -> bool:
             is_support(c) and getattr(c, "id", "") in _SUPPORT_IDS_HAND_REFRESH_FIRST for c in p.hand
         )
         if not _is_first_player_first_turn(state) and has_hand_refresh_support and not state.support_used_this_turn:
+            # 手札刷新の前に進化・エネ付与を済ませる（手札がデッキに戻る前にFD準備）
+            if _try_evolve_once(state):
+                acted = True
+                p = state.active_player_state()
+                state._record_frame()
+                _try_put_bench_until_full()
+                continue
+            if not state.energy_attached_this_turn and _try_attach_energy_with_attack_lookahead(state):
+                acted = True
+                p = state.active_player_state()
+                state._record_frame()
+                continue
             if _try_goods_before_hand_refresh(state):
                 acted = True
                 p = state.active_player_state()

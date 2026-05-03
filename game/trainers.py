@@ -2464,11 +2464,14 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
             sid = (getattr(sc, "id", "") or "").strip()
             # アカマツ: ドラパルトexが場にいてエネ不足なら最優先（FD直結）
             # リーリエでドローしてもエネが来る保証はないが、アカマツなら確実にエネ2枚
+            # 手札にドローサポートがある場合はさらに優先（ドローは既に確保済み、エネ加速が必要）
             if _is_drapa_oku and sid == AKAMATSU:
                 if _drapa_has_ex_on_field_oku and _drapa_needs_energy_oku:
                     return 7000  # FD直結 → 最優先
                 elif _drapa_line_on_field_oku and _drapa_needs_energy_oku:
                     return 4000
+                elif _has_support_in_hand:
+                    return 3000  # ドローサポート確保済み → エネ加速を取る
                 elif _drapa_line_on_field_oku:
                     return 1500
                 else:
@@ -2481,8 +2484,15 @@ def _try_use_ability_okunote_catch(state: GameState) -> bool:
                     return 1800
                 else:
                     return 800
-            # ボスの指令: ベンチ狙いに必要
+            # ボスの指令: サイド残り少ない時は最優先（勝ち確の可能性）
             if sid == BOSS_NO_SHIREI:
+                _our_prizes_oku = len(p.prize_pile) if hasattr(p, "prize_pile") else 99
+                if _our_prizes_oku <= 2:
+                    return 8000  # サイド残り少ない → ボスで勝ち確の可能性
+                if state.turn_count <= 3:
+                    return 200  # 序盤は低価値
+                if _has_support_in_hand:
+                    return 600
                 return 1500
             # メイのはげまし: きぜつ後のエネ加速（Stage2対象）
             # ドラパルトexがエネ不足でファントムダイブに繋がるなら最優先

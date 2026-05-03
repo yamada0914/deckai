@@ -32,11 +32,12 @@ python scripts/quick_battle.py --seed 0 --deck0-code 'V5FbkV-oWBGx8-kFFkkV' --de
 
 ## git
 - **pushは勝手にしない**。必ずユーザーの許可を得る
-- commitは自動でOK
+- **commitも勝手にしない**。必ずユーザーの許可を得る
 
 ## 動画生成
 - IDはデフォルトの日付形式（カスタム名にしない）
 - 生成後は`open`で開く
+- **修正が効いていない場合は動画を見せない**（確認してから見せる）
 
 ## ドラパルトexデッキの戦略ルール
 

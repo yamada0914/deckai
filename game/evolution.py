@@ -333,6 +333,23 @@ def evolve_pokemon(state: GameState, hand_index: int, bench_index: int | None = 
     if not is_pokemon(evolution_card) or not evolution_card.evolves_from:
         return False
 
+    # ドラパルトex進化前にていさつしれいを使い切るガード
+    # 場にていさつしれい未使用のドロンチがいればドラパルトex進化をブロック
+    evo_name = (getattr(evolution_card, "name", "") or "").strip()
+    if evo_name == "ドラパルトex":
+        from .deck_strategies import is_dragapult_deck_for_player
+        if is_dragapult_deck_for_player(state, state.current_player):
+            _used_ids = getattr(state, "_teisatsushirei_used_ids_this_turn", set())
+            _all_field = ([p.active] if p.active else []) + list(p.bench or [])
+            _any_doronchi_unused = any(
+                (getattr(bp.card, "name", "") or "").strip() == "ドロンチ"
+                and id(bp) not in _used_ids
+                for bp in _all_field
+            )
+            # デッキ10枚以下は除外（デッキ切れリスク）
+            if _any_doronchi_unused and len(p.deck) > 10:
+                return False
+
     if bench_index is None:
         if not p.active or not _can_evolve_onto(p.active.card, evolution_card):
             return False
